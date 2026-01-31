@@ -52,6 +52,13 @@ CREATE TABLE IF NOT EXISTS `users` (
   CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
+CREATE TABLE IF NOT EXISTS `app_settings` (
+  `k` VARCHAR(80) NOT NULL,
+  `v` TEXT NULL,
+  `updated_at` DATETIME NOT NULL,
+  PRIMARY KEY (`k`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
 CREATE TABLE IF NOT EXISTS `items` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,

@@ -15,14 +15,24 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 </head>
 <body>
   <div class="container py-4">
-    <div class="d-flex align-items-center justify-content-between mb-3">
-      <div>
-        <h1 class="h5 m-0"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h1>
+    <div class="d-flex flex-column gap-2 mb-3">
+      <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
+        <div class="d-flex flex-column">
+          <h1 class="h5 m-0"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h1>
+          <div id="kelasehOffice" class="small text-secondary d-none"></div>
+        </div>
+        <div class="d-flex align-items-center gap-2">
+          <div id="headerDateTime" class="small text-secondary d-none"></div>
+          <span id="currentRole" class="badge text-bg-light d-none"></span>
+          <button id="btnLogout" type="button" class="btn btn-outline-danger btn-sm d-none">خروج</button>
+        </div>
       </div>
-      <div class="d-flex gap-2">
-        <span id="currentRole" class="badge text-bg-light d-none"></span>
-        <button id="btnLogout" type="button" class="btn btn-outline-danger btn-sm d-none">خروج</button>
-      </div>
+
+      <ul id="headerNav" class="nav nav-pills d-none">
+        <li class="nav-item"><a class="nav-link" href="#dashboard" data-page="dashboard">پنل کاربری</a></li>
+        <li class="nav-item"><a class="nav-link" href="#profile" data-page="profile">پروفایل</a></li>
+        <li class="nav-item"><a class="nav-link" href="#create" data-page="create">ایجاد شماره کلاسه</a></li>
+      </ul>
     </div>
 
     <div id="toastHost" class="toast-container position-fixed top-0 start-0 p-3"></div>
@@ -57,9 +67,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     </div>
 
     <div id="viewApp" class="d-none">
-      <div class="row g-3">
-        <div class="col-12 col-lg-4">
-          <div class="card">
+      <div class="row g-3" id="appRow">
+        <div class="col-12 col-lg-4" id="colLeft">
+          <div class="card" id="cardProfile">
             <div class="card-header">پروفایل</div>
             <div class="card-body">
               <div class="mb-2">
@@ -74,7 +84,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <div class="text-secondary small">نقش</div>
                 <div id="profileRole" class="fw-semibold"></div>
               </div>
-              <div class="text-secondary small">تاریخ و ساعت نمایش: شمسی (تهران)</div>
+              <div class="text-secondary small">تقویم نمایش: شمسی (تهران)</div>
             </div>
           </div>
 
@@ -96,6 +106,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 </li>
                 <li class="nav-item" role="presentation">
                   <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminStats" type="button" role="tab">آمار</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminSms" type="button" role="tab">پیامک</button>
                 </li>
               </ul>
               <div class="tab-content">
@@ -318,21 +331,55 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     </div>
                   </div>
                 </div>
+
+                <div class="tab-pane fade" id="adminSms" role="tabpanel">
+                  <form id="formAdminSmsSettings" class="border rounded p-2">
+                    <div class="row g-2">
+                      <div class="col-12">
+                        <div class="form-check">
+                          <input id="adminSmsEnabled" name="enabled" class="form-check-input" type="checkbox" />
+                          <label class="form-check-label" for="adminSmsEnabled">ارسال پیامک فعال باشد</label>
+                        </div>
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">کلید API کاوه‌نگار</label>
+                        <input id="adminSmsApiKey" name="api_key" type="password" class="form-control form-control-sm" autocomplete="off" placeholder="برای تغییر وارد کنید" />
+                        <div id="adminSmsApiKeyHint" class="form-text">اگر خالی بماند، مقدار قبلی حفظ می‌شود.</div>
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">شماره/نام فرستنده (اختیاری)</label>
+                        <input id="adminSmsSender" name="sender" type="text" class="form-control form-control-sm" placeholder="مثلاً 1000xxx" />
+                      </div>
+                      <div class="col-12 col-lg-6">
+                        <label class="form-label form-label-sm">متن پیامک خواهان</label>
+                        <textarea id="adminSmsTplPlaintiff" name="tpl_plaintiff" class="form-control form-control-sm" rows="4"></textarea>
+                      </div>
+                      <div class="col-12 col-lg-6">
+                        <label class="form-label form-label-sm">متن پیامک خوانده</label>
+                        <textarea id="adminSmsTplDefendant" name="tpl_defendant" class="form-control form-control-sm" rows="4"></textarea>
+                      </div>
+                      <div class="col-12">
+                        <div class="small text-secondary">متغیرها: {code} ، {plaintiff_name} ، {defendant_name}</div>
+                      </div>
+                      <div class="col-12 col-md-4 d-grid">
+                        <button class="btn btn-primary btn-sm" type="submit">ذخیره تنظیمات پیامک</button>
+                      </div>
+                    </div>
+                  </form>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div class="col-12 col-lg-8">
-          <div class="card">
+        <div class="col-12 col-lg-8" id="colRight">
+          <div class="card" id="cardKelaseh">
             <div class="card-header d-flex align-items-center justify-content-between">
-              <div class="d-flex flex-column">
-                <div>ایجاد شماره کلاسه جدید</div>
-                <div id="kelasehOffice" class="small text-secondary"></div>
-              </div>
+              <div id="kelasehCardTitle" class="fw-semibold">پنل کاربری</div>
               <button id="btnKelasehRefresh" type="button" class="btn btn-outline-secondary btn-sm">تازه‌سازی</button>
             </div>
             <div class="card-body">
+              <div id="kelasehCreateSection">
               <form id="formKelasehCreate" class="border rounded p-2 mb-3">
                 <div class="row g-2">
                   <div class="col-12 col-md-6">
@@ -361,10 +408,24 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   </div>
                   <div class="col-12 d-flex gap-2 align-items-center">
                     <button id="btnKelasehCreate" class="btn btn-primary" type="submit">ثبت و ایجاد شناسه پرونده</button>
-                    <div class="small text-secondary">فرمت: `شعبه(۲رقم)+تاریخ(۶رقم)+ردیف(۲رقم)` (شمسی/تهران)</div>
+                    <div class="d-flex flex-wrap gap-3 align-items-center">
+                      <div class="form-check m-0">
+                        <input id="kelasehSmsPlaintiff" class="form-check-input" type="checkbox" checked />
+                        <label class="form-check-label" for="kelasehSmsPlaintiff">ارسال پیامک به خواهان</label>
+                      </div>
+                      <div class="form-check m-0">
+                        <input id="kelasehSmsDefendant" class="form-check-input" type="checkbox" />
+                        <label class="form-check-label" for="kelasehSmsDefendant">ارسال پیامک به خوانده</label>
+                      </div>
+                      <button id="btnKelasehCreateAndSms" class="btn btn-outline-success" type="submit">ثبت و ارسال پیامک</button>
+                    </div>
                   </div>
                 </div>
               </form>
+
+              </div>
+
+              <div id="kelasehListSection">
 
               <div class="row g-2 mb-2">
                 <div class="col-12 col-md-4">
@@ -399,6 +460,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
+                      <th style="width: 50px;"></th>
                       <th style="width: 70px;">ردیف</th>
                       <th>کلاسه</th>
                       <th style="width: 90px;">شعبه</th>
@@ -411,6 +473,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   </thead>
                   <tbody id="kelasehTbody"></tbody>
                 </table>
+              </div>
+
               </div>
             </div>
           </div>

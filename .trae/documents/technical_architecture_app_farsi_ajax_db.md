@@ -1,112 +1,86 @@
 ## 1.Architecture design
 ```mermaid
 graph TD
-  A["مرورگر کاربر"] --> B["UI (Bootstrap RTL + jQuery)"]
-  B --> C["AJAX Requests"]
-  C --> D["PHP 8.2 (core.php)"]
-  D --> E["MySQL"]
+  A["مرورگر کاربر"] --> B["اپلیکیشن PHP (Server-Rendered صفحات)"]
+  B --> C["پایگاه‌داده MySQL"]
+  B --> D["کتابخانه تاریخ جلالی (morilog/jalali)"]
 
-  subgraph "Frontend"
-    B
-    C
+  subgraph "Frontend Layer"
+    A
   end
 
-  subgraph "Backend"
+  subgraph "Backend Layer"
+    B
     D
   end
 
-  subgraph "Database"
-    E
+  subgraph "Data Layer"
+    C
   end
 ```
 
 ## 2.Technology Description
-- Frontend: Bootstrap 5 (RTL) + jQuery (AJAX) + Vazirmatn (Local)
-- Backend: PHP 8.2 (یک فایل منطق: core.php) + Session-based Auth
-- Database: MySQL (utf8mb4)
-- Package manager: Composer (vendor/autoload.php)
-- Jalali Date: morilog/jalali
-- Iranian Validation: persian-validator/national-code + persian-validator/mobile
+- Frontend: HTML + CSS + JavaScript (حداقلی برای به‌روزرسانی ساعت)
+- Backend: PHP@8.2
+- Database: MySQL
+- Date/Locale: morilog/jalali (نمایش تاریخ شمسی)
 
 ## 3.Route definitions
 | Route | Purpose |
-|-------|---------|
-| /index.php | UI اصلی (نمایش صفحه ورود یا داشبورد بر اساس session) |
-| /core.php | Endpoint واحد برای همه عملیات AJAX (JSON) |
+|---|---|
+| /dashboard | صفحه پنل کاربری + منو + هدر مشترک |
+| /profile | صفحه پروفایل به‌صورت مستقل از منو |
+| /class-number/create | صفحه ایجاد شماره کلاسه (فرم) |
+| /class-number (POST) | ثبت ایجاد شماره کلاسه و برگشت نتیجه |
 
 ## 6.Data model(if applicable)
-
 ### 6.1 Data model definition
 ```mermaid
 erDiagram
-  USERS ||--o{ ITEMS : owns
-  USERS ||--o{ AUDIT_LOGS : acts
+  OFFICE ||--o{ USER : "has"
+  USER ||--o{ CLASS_NUMBER : "creates"
 
-  USERS {
+  OFFICE {
     int id
-    string email
-    string password_hash
-    string role
+    string city
     string display_name
-    string mobile
-    string national_code
-    boolean is_active
-    datetime created_at
-    datetime last_login_at
   }
-
-  ITEMS {
+  USER {
     int id
-    int owner_id
-    string title
-    string content
-    datetime created_at
-    datetime updated_at
+    int office_id
+    string name
   }
-
-  AUDIT_LOGS {
+  CLASS_NUMBER {
     int id
-    int actor_id
-    string action
-    string entity
-    int entity_id
-    int target_user_id
+    int user_id
+    string class_number
     datetime created_at
-    string ip
-    string user_agent
   }
 ```
 
 ### 6.2 Data Definition Language
-Users (users)
+OFFICE
 ```
-CREATE TABLE items (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  owner_id INT UNSIGNED NOT NULL,
-  title VARCHAR(200) NOT NULL,
-  content TEXT,
-  created_at DATETIME NOT NULL,
-  updated_at DATETIME NOT NULL
+CREATE TABLE office (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  city VARCHAR(80) NOT NULL,
+  display_name VARCHAR(120) NOT NULL
 );
-
-CREATE INDEX idx_items_owner_id ON items(owner_id);
-CREATE INDEX idx_items_created_at ON items(created_at DESC);
-
-CREATE TABLE audit_logs (
-  id INT UNSIGNED AUTO_INCREMENT PRIMARY KEY,
-  actor_id INT UNSIGNED NOT NULL,
-  action VARCHAR(30) NOT NULL,
-  entity VARCHAR(30) NOT NULL,
-  entity_id INT UNSIGNED,
-  target_user_id INT UNSIGNED,
-  ip VARCHAR(45),
-  user_agent VARCHAR(255),
-  created_at DATETIME NOT NULL
+```
+USER
+```
+CREATE TABLE user (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  office_id INT NULL,
+  name VARCHAR(120) NOT NULL
 );
-
-CREATE INDEX idx_audit_logs_actor_id ON audit_logs(actor_id);
-CREATE INDEX idx_audit_logs_created_at ON audit_logs(created_at DESC);
-
--- دسترسی‌ها در این معماری از طریق MySQL User/Permission + منطق PHP اعمال می‌شود.
--- (RLS نداریم؛ کنترل دسترسی در core.php انجام می‌شود.)
+```
+CLASS_NUMBER
+```
+CREATE TABLE class_number (
+  id INT AUTO_INCREMENT PRIMARY KEY,
+  user_id INT NOT NULL,
+  class_number VARCHAR(60) NOT NULL,
+  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
 ```

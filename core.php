@@ -81,6 +81,97 @@ function db(): PDO
     return $pdo;
 }
 
+function ensure_app_settings_table(): void
+{
+    db()->exec("CREATE TABLE IF NOT EXISTS `app_settings` ( `k` VARCHAR(80) NOT NULL, `v` TEXT NULL, `updated_at` DATETIME NOT NULL, PRIMARY KEY (`k`) ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci");
+}
+
+function get_app_setting(string $key, ?string $default = null): ?string
+{
+    try {
+        ensure_app_settings_table();
+        $stmt = db()->prepare('SELECT v FROM app_settings WHERE k = ? LIMIT 1');
+        $stmt->execute([$key]);
+        $row = $stmt->fetch();
+        return $row ? (string)$row['v'] : $default;
+    } catch (Throwable $e) {
+        return $default;
+    }
+}
+
+function set_app_setting(string $key, ?string $value): void
+{
+    ensure_app_settings_table();
+    $now = now_mysql();
+    db()->prepare('INSERT INTO app_settings (k,v,updated_at) VALUES (?,?,?) ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = VALUES(updated_at)')
+        ->execute([$key, $value, $now]);
+}
+
+function render_sms_template(string $template, array $vars): string
+{
+    $map = [];
+    foreach ($vars as $k => $v) {
+        $map['{' . $k . '}'] = (string)$v;
+    }
+    return strtr($template, $map);
+}
+
+function kavenegar_send(string $apiKey, string $receptor, string $message, ?string $sender = null): array
+{
+    $url = 'https://api.kavenegar.com/v1/' . rawurlencode($apiKey) . '/sms/send.json';
+    $fields = [
+        'receptor' => $receptor,
+        'message' => $message,
+    ];
+    if ($sender !== null && trim($sender) !== '') {
+        $fields['sender'] = trim($sender);
+    }
+
+    $body = http_build_query($fields);
+    $raw = null;
+    $status = 0;
+
+    if (function_exists('curl_init')) {
+        $ch = curl_init($url);
+        curl_setopt($ch, CURLOPT_RETURNTRANSFER, true);
+        curl_setopt($ch, CURLOPT_POST, true);
+        curl_setopt($ch, CURLOPT_POSTFIELDS, $body);
+        curl_setopt($ch, CURLOPT_TIMEOUT, 20);
+        curl_setopt($ch, CURLOPT_HTTPHEADER, ['Content-Type: application/x-www-form-urlencoded']);
+        $raw = curl_exec($ch);
+        $status = (int)curl_getinfo($ch, CURLINFO_HTTP_CODE);
+        if ($raw === false) {
+            $err = curl_error($ch);
+            curl_close($ch);
+            return ['ok' => false, 'status' => $status, 'error' => $err];
+        }
+        curl_close($ch);
+    } else {
+        $ctx = stream_context_create([
+            'http' => [
+                'method' => 'POST',
+                'header' => "Content-Type: application/x-www-form-urlencoded\r\n",
+                'content' => $body,
+                'timeout' => 20,
+            ],
+        ]);
+        $raw = @file_get_contents($url, false, $ctx);
+        $status = 0;
+    }
+
+    $decoded = json_decode((string)$raw, true);
+    if (!is_array($decoded)) {
+        return ['ok' => false, 'status' => $status, 'error' => 'پاسخ نامعتبر از سرویس پیامک'];
+    }
+
+    $ret = $decoded['return']['status'] ?? null;
+    if ((int)$ret === 200) {
+        return ['ok' => true, 'status' => 200, 'data' => $decoded];
+    }
+    $msg = $decoded['return']['message'] ?? 'خطا در ارسال پیامک';
+    return ['ok' => false, 'status' => (int)$ret, 'error' => (string)$msg, 'data' => $decoded];
+}
+
 // [RESPONSE] خروجی JSON استاندارد
 function json_response(bool $ok, array $payload = [], int $status = 200): void
 {
@@ -336,6 +427,23 @@ function format_jalali_datetime(string $mysqlDatetime): string
     }
 
     return date('Y/m/d H:i', $ts);
+}
+
+function jalali_now_string(): string
+{
+    if (class_exists('Morilog\\Jalali\\Jalalian')) {
+        $j = \Morilog\Jalali\Jalalian::now(new DateTimeZone('Asia/Tehran'));
+        return $j->format('Y/m/d H:i');
+    }
+
+    $dt = new DateTime('now', new DateTimeZone('Asia/Tehran'));
+    $gy = (int)$dt->format('Y');
+    $gm = (int)$dt->format('m');
+    $gd = (int)$dt->format('d');
+    [$jy, $jm, $jd] = gregorian_to_jalali($gy, $gm, $gd);
+    $h = $dt->format('H');
+    $i = $dt->format('i');
+    return sprintf('%04d/%02d/%02d %s:%s', $jy, $jm, $jd, $h, $i);
 }
 
 function jalali_now_parts(): array
@@ -627,6 +735,12 @@ function action_session(): void
     }
 
     json_response(true, ['data' => ['csrf_token' => csrf_token(), 'user' => $user]]);
+}
+
+function action_time_now(): void
+{
+    csrf_require_valid();
+    json_response(true, ['data' => ['now_jalali' => jalali_now_string()]]);
 }
 
 // [HANDLER] لیست آیتم‌ها
@@ -1031,6 +1145,80 @@ function action_kelaseh_print(): void
     echo '<div class="line">خوانده: ' . $dHtml . '</div>';
     echo '<div class="muted">تاریخ ثبت: ' . $dtHtml . '</div>';
     echo '</div>';
+    echo '</body></html>';
+    exit;
+}
+
+function action_kelaseh_label(): void
+{
+    $user = auth_require_login();
+    $code = trim((string)($_REQUEST['code'] ?? ''));
+    $codesRaw = trim((string)($_REQUEST['codes'] ?? ''));
+
+    $codes = [];
+    if ($code !== '') {
+        $codes = [$code];
+    } elseif ($codesRaw !== '') {
+        $parts = preg_split('/\s*,\s*/', $codesRaw);
+        if (is_array($parts)) {
+            foreach ($parts as $p) {
+                $p = trim((string)$p);
+                if ($p !== '') {
+                    $codes[] = $p;
+                }
+            }
+        }
+    }
+
+    $clean = [];
+    foreach ($codes as $c) {
+        if (preg_match('/^\d{10}$/', $c) === 1) {
+            $clean[] = $c;
+        }
+        if (count($clean) >= 50) {
+            break;
+        }
+    }
+    if (!$clean) {
+        json_response(false, ['message' => 'شناسه پرونده نامعتبر است.'], 422);
+    }
+
+    $placeholders = implode(',', array_fill(0, count($clean), '?'));
+    $params = array_merge([(int)$user['id']], $clean);
+    $stmt = db()->prepare("SELECT code,plaintiff_name,defendant_name FROM kelaseh_numbers WHERE owner_id = ? AND code IN ($placeholders)");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    if (!$rows) {
+        json_response(false, ['message' => 'یافت نشد.'], 404);
+    }
+
+    $byCode = [];
+    foreach ($rows as $r) {
+        $byCode[(string)$r['code']] = $r;
+    }
+
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8" />';
+    echo '<meta name="viewport" content="width=device-width,initial-scale=1" />';
+    echo '<title>چاپ لیبل پوشه</title>';
+    echo '<style>body{font-family:Tahoma,Arial,sans-serif;margin:18px} .label{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;padding:12px} .code{font-size:28px;font-weight:800;letter-spacing:1px} .names{font-size:18px;font-weight:700;text-align:center} @media print{button{display:none} .label{page-break-after:always}}</style>';
+    echo '</head><body>';
+    echo '<button onclick="window.print()">چاپ لیبل پوشه</button>';
+
+    foreach ($clean as $c) {
+        if (!isset($byCode[$c])) {
+            continue;
+        }
+        $row = $byCode[$c];
+        $codeHtml = htmlspecialchars((string)$row['code'], ENT_QUOTES, 'UTF-8');
+        $pHtml = htmlspecialchars((string)$row['plaintiff_name'], ENT_QUOTES, 'UTF-8');
+        $dHtml = htmlspecialchars((string)$row['defendant_name'], ENT_QUOTES, 'UTF-8');
+        echo '<div class="label">';
+        echo '<div class="code">' . $codeHtml . '</div>';
+        echo '<div class="names">خواهان: ' . $pHtml . ' — خوانده: ' . $dHtml . '</div>';
+        echo '</div>';
+    }
+
     echo '</body></html>';
     exit;
 }
@@ -1477,6 +1665,147 @@ function action_admin_kelaseh_stats(array $data): void
     json_response(true, ['data' => ['totals' => $totals, 'cities' => $cities, 'users' => $users]]);
 }
 
+function action_admin_sms_settings_get(): void
+{
+    $user = auth_require_login();
+    auth_require_admin($user);
+    csrf_require_valid();
+
+    $enabled = (int)(get_app_setting('sms_enabled', '0') ?? '0');
+    $sender = (string)(get_app_setting('sms_sender', '') ?? '');
+    $tplPlaintiff = (string)(get_app_setting('sms_tpl_plaintiff', 'پرونده شما با شماره {code} ثبت شد. خواهان: {plaintiff_name} خوانده: {defendant_name}') ?? '');
+    $tplDefendant = (string)(get_app_setting('sms_tpl_defendant', 'پرونده شما با شماره {code} ثبت شد. خواهان: {plaintiff_name} خوانده: {defendant_name}') ?? '');
+    $apiKey = (string)(get_app_setting('sms_api_key', '') ?? '');
+
+    json_response(true, [
+        'data' => [
+            'settings' => [
+                'enabled' => $enabled ? 1 : 0,
+                'sender' => $sender,
+                'tpl_plaintiff' => $tplPlaintiff,
+                'tpl_defendant' => $tplDefendant,
+                'api_key_present' => $apiKey !== '' ? 1 : 0,
+            ],
+        ],
+    ]);
+}
+
+function action_admin_sms_settings_set(array $data): void
+{
+    $user = auth_require_login();
+    auth_require_admin($user);
+    csrf_require_valid();
+
+    $enabled = (int)($data['enabled'] ?? 0);
+    $sender = trim((string)($data['sender'] ?? ''));
+    $apiKey = trim((string)($data['api_key'] ?? ''));
+    $tplPlaintiff = trim((string)($data['tpl_plaintiff'] ?? ''));
+    $tplDefendant = trim((string)($data['tpl_defendant'] ?? ''));
+
+    if ($tplPlaintiff === '' || $tplDefendant === '') {
+        json_response(false, ['message' => 'متن پیامک خواهان و خوانده الزامی است.'], 422);
+    }
+    if (mb_strlen($tplPlaintiff) > 1000 || mb_strlen($tplDefendant) > 1000) {
+        json_response(false, ['message' => 'متن پیامک بیش از حد طولانی است.'], 422);
+    }
+
+    set_app_setting('sms_enabled', $enabled ? '1' : '0');
+    set_app_setting('sms_sender', $sender);
+    set_app_setting('sms_tpl_plaintiff', $tplPlaintiff);
+    set_app_setting('sms_tpl_defendant', $tplDefendant);
+    if ($apiKey !== '') {
+        set_app_setting('sms_api_key', $apiKey);
+    }
+
+    audit_log((int)$user['id'], 'sms_settings_update', 'app_settings', null, null);
+    json_response(true, ['message' => 'تنظیمات پیامک ذخیره شد.']);
+}
+
+function action_kelaseh_sms_send(array $data): void
+{
+    $user = auth_require_login();
+    csrf_require_valid();
+
+    $enabled = (int)(get_app_setting('sms_enabled', '0') ?? '0');
+    if ($enabled !== 1) {
+        json_response(false, ['message' => 'ارسال پیامک غیرفعال است.'], 409);
+    }
+    $apiKey = trim((string)(get_app_setting('sms_api_key', '') ?? ''));
+    if ($apiKey === '') {
+        json_response(false, ['message' => 'کلید API پیامک تنظیم نشده است.'], 422);
+    }
+
+    $code = trim((string)($data['code'] ?? ''));
+    if (preg_match('/^\d{10}$/', $code) !== 1) {
+        json_response(false, ['message' => 'شناسه پرونده نامعتبر است.'], 422);
+    }
+
+    $toPlaintiff = (int)($data['to_plaintiff'] ?? 0) === 1;
+    $toDefendant = (int)($data['to_defendant'] ?? 0) === 1;
+    if (!$toPlaintiff && !$toDefendant) {
+        json_response(false, ['message' => 'حداقل یک گیرنده را انتخاب کنید.'], 422);
+    }
+
+    $stmt = db()->prepare('SELECT code,plaintiff_name,defendant_name,plaintiff_mobile,defendant_mobile FROM kelaseh_numbers WHERE owner_id = ? AND code = ? LIMIT 1');
+    $stmt->execute([(int)$user['id'], $code]);
+    $row = $stmt->fetch();
+    if (!$row) {
+        json_response(false, ['message' => 'یافت نشد.'], 404);
+    }
+
+    $sender = trim((string)(get_app_setting('sms_sender', '') ?? ''));
+    $tplPlaintiff = (string)(get_app_setting('sms_tpl_plaintiff', '') ?? '');
+    $tplDefendant = (string)(get_app_setting('sms_tpl_defendant', '') ?? '');
+
+    $vars = [
+        'code' => (string)$row['code'],
+        'plaintiff_name' => (string)$row['plaintiff_name'],
+        'defendant_name' => (string)$row['defendant_name'],
+    ];
+
+    $sent = [];
+    $errors = [];
+
+    if ($toPlaintiff) {
+        $m = validate_ir_mobile((string)$row['plaintiff_mobile']);
+        if ($m === null) {
+            $errors[] = 'شماره تماس خواهان نامعتبر است.';
+        } else {
+            $msg = render_sms_template($tplPlaintiff, $vars);
+            $res = kavenegar_send($apiKey, $m, $msg, $sender);
+            if ($res['ok'] ?? false) {
+                $sent[] = 'خواهان';
+            } else {
+                $errors[] = 'ارسال به خواهان ناموفق بود: ' . (string)($res['error'] ?? '');
+            }
+        }
+    }
+    if ($toDefendant) {
+        $m = validate_ir_mobile((string)$row['defendant_mobile']);
+        if ($m === null) {
+            $errors[] = 'شماره تماس خوانده نامعتبر است.';
+        } else {
+            $msg = render_sms_template($tplDefendant, $vars);
+            $res = kavenegar_send($apiKey, $m, $msg, $sender);
+            if ($res['ok'] ?? false) {
+                $sent[] = 'خوانده';
+            } else {
+                $errors[] = 'ارسال به خوانده ناموفق بود: ' . (string)($res['error'] ?? '');
+            }
+        }
+    }
+
+    if ($sent) {
+        audit_log((int)$user['id'], 'sms_send', 'kelaseh_number', null, null);
+    }
+
+    if ($errors) {
+        json_response(false, ['message' => implode(' ', $errors), 'data' => ['sent' => $sent]], $sent ? 207 : 422);
+    }
+
+    json_response(true, ['message' => 'پیامک ارسال شد: ' . implode(' و ', $sent) . '.', 'data' => ['sent' => $sent]]);
+}
+
 // [HANDLER] لیست همه آیتم‌ها (مدیر)
 function action_admin_items_list(array $data): void
 {
@@ -1542,6 +1871,9 @@ function handle_request(): void
             case 'session':
                 action_session();
                 break;
+            case 'time.now':
+                action_time_now();
+                break;
             case 'register':
                 $cfg = app_config();
                 $allowed = (bool)($cfg['security']['allow_register'] ?? false);
@@ -1583,11 +1915,17 @@ function handle_request(): void
             case 'kelaseh.print':
                 action_kelaseh_print();
                 break;
+            case 'kelaseh.label':
+                action_kelaseh_label();
+                break;
             case 'kelaseh.export.print':
                 action_kelaseh_export_print($_REQUEST);
                 break;
             case 'kelaseh.export.csv':
                 action_kelaseh_export_csv($_REQUEST);
+                break;
+            case 'kelaseh.sms.send':
+                action_kelaseh_sms_send($data);
                 break;
             case 'admin.users.list':
                 action_admin_users_list($data);
@@ -1618,6 +1956,12 @@ function handle_request(): void
                 break;
             case 'admin.kelaseh.stats':
                 action_admin_kelaseh_stats($data);
+                break;
+            case 'admin.sms.settings.get':
+                action_admin_sms_settings_get();
+                break;
+            case 'admin.sms.settings.set':
+                action_admin_sms_settings_set($data);
                 break;
             case 'admin.items.list':
                 action_admin_items_list($data);

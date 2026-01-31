@@ -1,6 +1,7 @@
 let csrfToken = '';
 let currentUser = null;
 let adminCitiesLoaded = false;
+let headerClockTimer = null;
 
 function showToast(message, type) {
   const id = `t_${Date.now()}`;
@@ -96,7 +97,14 @@ function renderUser() {
   const loggedIn = !!currentUser;
   $('#btnLogout').toggleClass('d-none', !loggedIn);
   $('#currentRole').toggleClass('d-none', !loggedIn);
+  $('#headerNav').toggleClass('d-none', !loggedIn);
+  $('#headerDateTime').toggleClass('d-none', !loggedIn);
+  $('#kelasehOffice').toggleClass('d-none', !loggedIn);
   if (!loggedIn) {
+    if (headerClockTimer) {
+      clearInterval(headerClockTimer);
+      headerClockTimer = null;
+    }
     return;
   }
 
@@ -107,9 +115,79 @@ function renderUser() {
   $('#profileRole').text(roleFa);
 
   const cityName = currentUser.city_name || '';
-  $('#kelasehOffice').text(cityName ? `اداره ${cityName}` : '');
+  $('#kelasehOffice').text(cityName ? `اداره ${cityName}` : '').toggleClass('d-none', !cityName);
 
   $('#adminPanel').toggleClass('d-none', currentUser.role !== 'admin');
+}
+
+function refreshHeaderDateTime() {
+  if (!csrfToken) {
+    return;
+  }
+  api('time.now', {})
+    .done((res) => {
+      const s = (res.data && res.data.now_jalali) || '';
+      $('#headerDateTime').text(s);
+    })
+    .fail(() => {});
+}
+
+function startHeaderClock() {
+  if (headerClockTimer) {
+    clearInterval(headerClockTimer);
+  }
+  refreshHeaderDateTime();
+  headerClockTimer = setInterval(refreshHeaderDateTime, 60000);
+}
+
+function getPageFromHash() {
+  const raw = (window.location.hash || '').replace('#', '').trim();
+  if (raw === 'profile' || raw === 'create' || raw === 'dashboard') {
+    return raw;
+  }
+  return 'dashboard';
+}
+
+function renderPage(page) {
+  const $links = $('#headerNav a');
+  $links.removeClass('active');
+  $links.filter(`[data-page="${page}"]`).addClass('active');
+
+  const isAdmin = currentUser && currentUser.role === 'admin';
+
+  if (page === 'profile') {
+    $('#cardProfile').removeClass('d-none');
+    $('#adminPanel').addClass('d-none');
+    $('#colLeft').removeClass('d-none').addClass('col-12').removeClass('col-lg-4');
+    $('#colRight').addClass('d-none');
+    return;
+  }
+
+  if (page === 'create') {
+    $('#colLeft').addClass('d-none');
+    $('#colRight').removeClass('d-none').removeClass('col-lg-8').addClass('col-12');
+
+    $('#kelasehCreateSection').removeClass('d-none');
+    $('#kelasehListSection').addClass('d-none');
+    $('#btnKelasehRefresh').addClass('d-none');
+    $('#kelasehCardTitle').text('ایجاد شماره کلاسه');
+    return;
+  }
+
+  $('#cardProfile').addClass('d-none');
+  $('#kelasehCreateSection').addClass('d-none');
+  $('#kelasehListSection').removeClass('d-none');
+  $('#btnKelasehRefresh').removeClass('d-none');
+  $('#kelasehCardTitle').text('پنل کاربری');
+
+  if (isAdmin) {
+    $('#colLeft').removeClass('d-none').addClass('col-lg-4');
+    $('#adminPanel').removeClass('d-none');
+    $('#colRight').removeClass('d-none').addClass('col-lg-8');
+  } else {
+    $('#colLeft').addClass('d-none');
+    $('#colRight').removeClass('d-none').removeClass('col-lg-8').addClass('col-12');
+  }
 }
 
 function renderKelaseh(rows) {
@@ -137,6 +215,7 @@ function renderKelaseh(rows) {
     );
     return `
       <tr data-json="${json}">
+        <td><input class="form-check-input kelaseh-label-check" type="checkbox" /></td>
         <td class="text-secondary">${rowNo}</td>
         <td><div class="fw-semibold">${code}</div></td>
         <td class="text-secondary">${branchNo}</td>
@@ -147,15 +226,27 @@ function renderKelaseh(rows) {
         <td class="text-end">
           <div class="btn-group btn-group-sm" role="group">
             <button class="btn btn-outline-dark btn-kelaseh-print" type="button">چاپ</button>
+            <button class="btn btn-outline-secondary btn-kelaseh-label" type="button">چاپ لیبل پوشه</button>
             <button class="btn btn-outline-primary btn-kelaseh-edit" type="button">ویرایش</button>
             <button class="btn btn-outline-warning btn-kelaseh-toggle" type="button">فعال/غیرفعال</button>
             <button class="btn btn-outline-danger btn-kelaseh-void" type="button">ابطال</button>
+          </div>
+          <div class="d-flex justify-content-end gap-2 align-items-center mt-1">
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input kelaseh-sms-plaintiff" type="checkbox" checked />
+              <label class="form-check-label small">خواهان</label>
+            </div>
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input kelaseh-sms-defendant" type="checkbox" />
+              <label class="form-check-label small">خوانده</label>
+            </div>
+            <button class="btn btn-outline-success btn-sm btn-kelaseh-sms" type="button">ارسال پیامک</button>
           </div>
         </td>
       </tr>
     `;
   });
-  $('#kelasehTbody').html(trs.join('') || `<tr><td colspan="8" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  $('#kelasehTbody').html(trs.join('') || `<tr><td colspan="9" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
 }
 
 function refreshKelaseh() {
@@ -241,12 +332,15 @@ function refreshAdminLogs() {
         activate: 'فعال‌سازی',
         deactivate: 'غیرفعال‌سازی',
         admin_delete: 'حذف (مدیر)',
+        sms_settings_update: 'ویرایش تنظیمات پیامک',
+        sms_send: 'ارسال پیامک',
       };
       const entityMap = {
         user: 'کاربر',
         item: 'داده',
         kelaseh_number: 'پرونده',
         isfahan_city: 'شهر',
+        app_settings: 'تنظیمات',
       };
 
       const rows = logs.map((l) => {
@@ -292,6 +386,25 @@ function refreshAdminStats() {
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت آمار.';
+      showToast(msg, 'error');
+    });
+}
+
+function refreshAdminSmsSettings() {
+  return api('admin.sms.settings.get', {})
+    .done((res) => {
+      const s = (res.data && res.data.settings) || {};
+      $('#adminSmsEnabled').prop('checked', Number(s.enabled) === 1);
+      $('#adminSmsSender').val(s.sender || '');
+      $('#adminSmsTplPlaintiff').val(s.tpl_plaintiff || '');
+      $('#adminSmsTplDefendant').val(s.tpl_defendant || '');
+
+      const hasKey = Number(s.api_key_present) === 1;
+      $('#adminSmsApiKey').val('');
+      $('#adminSmsApiKeyHint').text(hasKey ? 'کلید API ذخیره شده است. برای تغییر، مقدار جدید وارد کنید.' : 'کلید API تنظیم نشده است.');
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت تنظیمات پیامک.';
       showToast(msg, 'error');
     });
 }
@@ -345,6 +458,11 @@ function boot() {
       }
       renderUser();
       setView('app');
+      if (!window.location.hash) {
+        window.location.hash = '#dashboard';
+      }
+      renderPage(getPageFromHash());
+      startHeaderClock();
       refreshKelaseh();
       if (currentUser.role === 'admin') {
         loadAdminCities();
@@ -353,6 +471,7 @@ function boot() {
         refreshAdminItems();
         refreshAdminLogs();
         refreshAdminStats();
+        refreshAdminSmsSettings();
       }
     })
     .fail((xhr) => {
@@ -372,6 +491,11 @@ $(document).on('submit', '#formLogin', function (e) {
       showToast(res.message || 'ورود انجام شد.', 'success');
       renderUser();
       setView('app');
+      if (!window.location.hash) {
+        window.location.hash = '#dashboard';
+      }
+      renderPage(getPageFromHash());
+      startHeaderClock();
       refreshKelaseh();
       if (currentUser && currentUser.role === 'admin') {
         loadAdminCities();
@@ -380,6 +504,7 @@ $(document).on('submit', '#formLogin', function (e) {
         refreshAdminItems();
         refreshAdminLogs();
         refreshAdminStats();
+        refreshAdminSmsSettings();
       }
     })
     .fail((xhr) => {
@@ -394,11 +519,19 @@ $(document).on('click', '#btnLogout', function () {
       csrfToken = (res.data && res.data.csrf_token) || '';
       currentUser = null;
       showToast(res.message || 'خارج شدید.', 'success');
+      renderUser();
       setView('auth');
     })
     .fail(() => {
       showToast('خروج ناموفق بود.', 'error');
     });
+});
+
+$(window).on('hashchange', function () {
+  if (!currentUser) {
+    return;
+  }
+  renderPage(getPageFromHash());
 });
 
 $(document).on('click', '#btnKelasehRefresh', function () {
@@ -411,6 +544,10 @@ $(document).on('click', '#btnKelasehSearch', function () {
 
 $(document).on('submit', '#formKelasehCreate', function (e) {
   e.preventDefault();
+  const submitter = (e.originalEvent && e.originalEvent.submitter) || null;
+  const shouldSendSms = submitter && submitter.id === 'btnKelasehCreateAndSms';
+  const to_plaintiff = $('#kelasehSmsPlaintiff').is(':checked') ? 1 : 0;
+  const to_defendant = $('#kelasehSmsDefendant').is(':checked') ? 1 : 0;
   const data = Object.fromEntries(new FormData(this));
   api('kelaseh.create', data)
     .done((res) => {
@@ -420,6 +557,21 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
       refreshKelaseh();
       if (code) {
         window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
+      }
+
+      if (shouldSendSms && code) {
+        if (!to_plaintiff && !to_defendant) {
+          showToast('برای ارسال پیامک، خواهان یا خوانده را انتخاب کنید.', 'error');
+          return;
+        }
+        api('kelaseh.sms.send', { code, to_plaintiff, to_defendant })
+          .done((r2) => {
+            showToast(r2.message || 'پیامک ارسال شد.', 'success');
+          })
+          .fail((xhr) => {
+            const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ارسال پیامک ناموفق بود.';
+            showToast(msg, 'error');
+          });
       }
     })
     .fail((xhr) => {
@@ -453,6 +605,56 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-print', function () {
   const payload = JSON.parse(decodeURIComponent(raw));
   const code = payload.code;
   window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
+});
+
+$(document).on('click', '#kelasehTbody .btn-kelaseh-label', function () {
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
+});
+
+$(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
+  if (!this.checked) {
+    return;
+  }
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
+  this.checked = false;
+});
+
+$(document).on('click', '#kelasehTbody .btn-kelaseh-sms', function () {
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  const to_plaintiff = tr.find('.kelaseh-sms-plaintiff').is(':checked') ? 1 : 0;
+  const to_defendant = tr.find('.kelaseh-sms-defendant').is(':checked') ? 1 : 0;
+  if (!to_plaintiff && !to_defendant) {
+    showToast('حداقل یک گیرنده را انتخاب کنید.', 'error');
+    return;
+  }
+  api('kelaseh.sms.send', { code, to_plaintiff, to_defendant })
+    .done((res) => {
+      showToast(res.message || 'ارسال انجام شد.', 'success');
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ارسال پیامک ناموفق بود.';
+      showToast(msg, 'error');
+    });
 });
 
 $(document).on('click', '#kelasehTbody .btn-kelaseh-edit', function () {
@@ -659,6 +861,25 @@ $(document).on('click', '#btnAdminLogsRefresh', function () {
 
 $(document).on('click', '#btnAdminStatsRefresh', function () {
   refreshAdminStats();
+});
+
+$(document).on('submit', '#formAdminSmsSettings', function (e) {
+  e.preventDefault();
+  const enabled = $('#adminSmsEnabled').is(':checked') ? 1 : 0;
+  const api_key = $('#adminSmsApiKey').val() || '';
+  const sender = $('#adminSmsSender').val() || '';
+  const tpl_plaintiff = $('#adminSmsTplPlaintiff').val() || '';
+  const tpl_defendant = $('#adminSmsTplDefendant').val() || '';
+
+  api('admin.sms.settings.set', { enabled, api_key, sender, tpl_plaintiff, tpl_defendant })
+    .done((res) => {
+      showToast(res.message || 'ذخیره شد.', 'success');
+      refreshAdminSmsSettings();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ذخیره تنظیمات پیامک ناموفق بود.';
+      showToast(msg, 'error');
+    });
 });
 
 $(boot);
