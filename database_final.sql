@@ -1,13 +1,14 @@
-CREATE DATABASE IF NOT EXISTS `kelaseh_v2` CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci;
+DROP DATABASE IF EXISTS `kelaseh_v2`;
+CREATE DATABASE `kelaseh_v2` CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci;
 USE `kelaseh_v2`;
 
-CREATE TABLE IF NOT EXISTS `isfahan_cities` (
+CREATE TABLE `isfahan_cities` (
   `code` CHAR(2) NOT NULL,
   `name` VARCHAR(80) NOT NULL,
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-INSERT IGNORE INTO `isfahan_cities` (`code`, `name`) VALUES
+INSERT INTO `isfahan_cities` (`code`, `name`) VALUES
 ('01','اصفهان (اداره کل)'),
 ('02','اصفهان (جنوب)'),
 ('03','اصفهان (شمال)'),
@@ -28,7 +29,7 @@ INSERT IGNORE INTO `isfahan_cities` (`code`, `name`) VALUES
 ('18','چادگان'),
 ('19','خور و بیابانک');
 
-CREATE TABLE IF NOT EXISTS `users` (
+CREATE TABLE `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `email` VARCHAR(255) NULL,
   `username` VARCHAR(50) NOT NULL,
@@ -52,7 +53,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-CREATE TABLE IF NOT EXISTS `items` (
+CREATE TABLE `items` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,
   `title` VARCHAR(200) NOT NULL,
@@ -61,10 +62,11 @@ CREATE TABLE IF NOT EXISTS `items` (
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_items_owner_id` (`owner_id`),
-  KEY `idx_items_updated_at` (`updated_at`)
+  KEY `idx_items_updated_at` (`updated_at`),
+  CONSTRAINT `fk_items_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
+CREATE TABLE `kelaseh_numbers` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,
   `code` CHAR(10) NOT NULL,
@@ -87,19 +89,21 @@ CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   UNIQUE KEY `uniq_kelaseh_plaintiff_date` (`owner_id`, `plaintiff_national_code`, `jalali_full_ymd`),
   KEY `idx_kelaseh_numbers_owner_date` (`owner_id`, `jalali_full_ymd`, `branch_no`, `seq_no`),
   KEY `idx_kelaseh_numbers_created_at` (`created_at`),
-  KEY `idx_kelaseh_numbers_plaintiff` (`plaintiff_national_code`)
+  KEY `idx_kelaseh_numbers_plaintiff` (`plaintiff_national_code`),
+  CONSTRAINT `fk_kelaseh_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-CREATE TABLE IF NOT EXISTS `kelaseh_daily_counters` (
+CREATE TABLE `kelaseh_daily_counters` (
   `owner_id` INT UNSIGNED NOT NULL,
   `jalali_ymd` CHAR(6) NOT NULL,
   `branch_no` TINYINT UNSIGNED NOT NULL,
   `seq_no` TINYINT UNSIGNED NOT NULL,
   `updated_at` DATETIME NOT NULL,
-  PRIMARY KEY (`owner_id`, `jalali_ymd`)
+  PRIMARY KEY (`owner_id`, `jalali_ymd`),
+  CONSTRAINT `fk_kelaseh_counter_owner` FOREIGN KEY (`owner_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-CREATE TABLE IF NOT EXISTS `audit_logs` (
+CREATE TABLE `audit_logs` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `actor_id` INT UNSIGNED NULL,
   `action` VARCHAR(30) NOT NULL,
@@ -111,5 +115,7 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   `created_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`),
   KEY `idx_audit_logs_actor_id` (`actor_id`),
-  KEY `idx_audit_logs_created_at` (`created_at`)
+  KEY `idx_audit_logs_created_at` (`created_at`),
+  CONSTRAINT `fk_audit_actor` FOREIGN KEY (`actor_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE,
+  CONSTRAINT `fk_audit_target_user` FOREIGN KEY (`target_user_id`) REFERENCES `users` (`id`) ON DELETE SET NULL ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;

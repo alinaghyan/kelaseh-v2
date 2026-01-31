@@ -1,13 +1,28 @@
-CREATE DATABASE IF NOT EXISTS `kelaseh_v2` CHARACTER SET utf8mb4 COLLATE utf8mb4_persian_ci;
-USE `kelaseh_v2`;
-
 CREATE TABLE IF NOT EXISTS `isfahan_cities` (
   `code` CHAR(2) NOT NULL,
   `name` VARCHAR(80) NOT NULL,
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-INSERT IGNORE INTO `isfahan_cities` (`code`, `name`) VALUES
+ALTER TABLE `users`
+  ADD COLUMN `username` VARCHAR(50) NULL AFTER `email`,
+  ADD COLUMN `first_name` VARCHAR(60) NULL AFTER `display_name`,
+  ADD COLUMN `last_name` VARCHAR(60) NULL AFTER `first_name`,
+  ADD COLUMN `city_code` CHAR(2) NULL AFTER `national_code`,
+  ADD COLUMN `branch_count` TINYINT UNSIGNED NULL AFTER `city_code`;
+
+ALTER TABLE `users`
+  ADD COLUMN `branch_start_no` TINYINT UNSIGNED NOT NULL DEFAULT 1 AFTER `branch_count`;
+
+UPDATE `users`
+SET `city_code` = NULL
+WHERE `city_code` IS NOT NULL
+  AND `city_code` NOT IN ('01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19');
+
+DELETE FROM `isfahan_cities`
+WHERE `code` NOT IN ('01','02','03','04','05','06','07','08','09','10','11','12','13','14','15','16','17','18','19');
+
+INSERT INTO `isfahan_cities` (`code`, `name`) VALUES
 ('01','اصفهان (اداره کل)'),
 ('02','اصفهان (جنوب)'),
 ('03','اصفهان (شمال)'),
@@ -26,43 +41,20 @@ INSERT IGNORE INTO `isfahan_cities` (`code`, `name`) VALUES
 ('16','فریدن (داران)'),
 ('17','فریدون‌شهر'),
 ('18','چادگان'),
-('19','خور و بیابانک');
+('19','خور و بیابانک')
+ON DUPLICATE KEY UPDATE `name` = VALUES(`name`);
 
-CREATE TABLE IF NOT EXISTS `users` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `email` VARCHAR(255) NULL,
-  `username` VARCHAR(50) NOT NULL,
-  `password_hash` VARCHAR(255) NOT NULL,
-  `role` ENUM('admin','user') NOT NULL DEFAULT 'user',
-  `display_name` VARCHAR(100) NULL,
-  `first_name` VARCHAR(60) NULL,
-  `last_name` VARCHAR(60) NULL,
-  `mobile` VARCHAR(20) NULL,
-  `national_code` VARCHAR(20) NULL,
-  `city_code` CHAR(2) NULL,
-  `branch_count` TINYINT UNSIGNED NULL,
-  `branch_start_no` TINYINT UNSIGNED NOT NULL DEFAULT 1,
-  `is_active` TINYINT(1) NOT NULL DEFAULT 1,
-  `created_at` DATETIME NOT NULL,
-  `last_login_at` DATETIME NULL,
-  PRIMARY KEY (`id`),
-  UNIQUE KEY `uniq_users_email` (`email`),
-  UNIQUE KEY `uniq_users_username` (`username`),
-  KEY `idx_users_city_code` (`city_code`),
-  CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+UPDATE `users`
+SET `username` = CONCAT('user', `id`)
+WHERE `username` IS NULL OR `username` = '';
 
-CREATE TABLE IF NOT EXISTS `items` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `owner_id` INT UNSIGNED NOT NULL,
-  `title` VARCHAR(200) NOT NULL,
-  `content` TEXT NULL,
-  `created_at` DATETIME NOT NULL,
-  `updated_at` DATETIME NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_items_owner_id` (`owner_id`),
-  KEY `idx_items_updated_at` (`updated_at`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+ALTER TABLE `users`
+  MODIFY COLUMN `username` VARCHAR(50) NOT NULL,
+  ADD UNIQUE KEY `uniq_users_username` (`username`),
+  ADD KEY `idx_users_city_code` (`city_code`);
+
+ALTER TABLE `users`
+  ADD CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE;
 
 CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
@@ -97,19 +89,4 @@ CREATE TABLE IF NOT EXISTS `kelaseh_daily_counters` (
   `seq_no` TINYINT UNSIGNED NOT NULL,
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`owner_id`, `jalali_ymd`)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
-
-CREATE TABLE IF NOT EXISTS `audit_logs` (
-  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
-  `actor_id` INT UNSIGNED NULL,
-  `action` VARCHAR(30) NOT NULL,
-  `entity` VARCHAR(30) NOT NULL,
-  `entity_id` INT UNSIGNED NULL,
-  `target_user_id` INT UNSIGNED NULL,
-  `ip` VARCHAR(45) NULL,
-  `user_agent` VARCHAR(255) NULL,
-  `created_at` DATETIME NOT NULL,
-  PRIMARY KEY (`id`),
-  KEY `idx_audit_logs_actor_id` (`actor_id`),
-  KEY `idx_audit_logs_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;

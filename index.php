@@ -42,8 +42,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
           <div class="card-body">
             <form id="formLogin" class="vstack gap-2">
               <div>
-                <label class="form-label">ایمیل</label>
-                <input name="email" type="email" class="form-control" autocomplete="email" required />
+                <label class="form-label">نام کاربری یا ایمیل</label>
+                <input name="login" type="text" class="form-control" autocomplete="username" required />
               </div>
               <div>
                 <label class="form-label">رمز عبور</label>
@@ -63,7 +63,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
             <div class="card-header">پروفایل</div>
             <div class="card-body">
               <div class="mb-2">
-                <div class="text-secondary small">ایمیل</div>
+                <div class="text-secondary small">نام کاربری</div>
                 <div id="profileEmail" class="fw-semibold"></div>
               </div>
               <div class="mb-2">
@@ -74,7 +74,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <div class="text-secondary small">نقش</div>
                 <div id="profileRole" class="fw-semibold"></div>
               </div>
-              <div class="text-secondary small">تقویم نمایش: شمسی (تهران)</div>
+              <div class="text-secondary small">تاریخ و ساعت نمایش: شمسی (تهران)</div>
             </div>
           </div>
 
@@ -86,24 +86,99 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#adminUsers" type="button" role="tab">کاربران</button>
                 </li>
                 <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminCities" type="button" role="tab">شهرها</button>
+                </li>
+                <li class="nav-item" role="presentation">
                   <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminItems" type="button" role="tab">داده‌ها</button>
                 </li>
                 <li class="nav-item" role="presentation">
                   <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminLogs" type="button" role="tab">گزارش</button>
                 </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminStats" type="button" role="tab">آمار</button>
+                </li>
               </ul>
               <div class="tab-content">
                 <div class="tab-pane fade show active" id="adminUsers" role="tabpanel">
+                  <form id="formAdminCreateUser" class="border rounded p-2 mb-2">
+                    <div class="row g-2">
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">نام</label>
+                        <input name="first_name" type="text" class="form-control form-control-sm" required />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">نام خانوادگی</label>
+                        <input name="last_name" type="text" class="form-control form-control-sm" required />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">نام کاربری</label>
+                        <input name="username" type="text" class="form-control form-control-sm" placeholder="مثلاً کاربر123" required />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">شماره تماس</label>
+                        <input name="mobile" type="text" class="form-control form-control-sm" placeholder="09123456789" required />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">رمز عبور</label>
+                        <input name="password" type="password" class="form-control form-control-sm" autocomplete="new-password" required />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">شهر (استان اصفهان)</label>
+                        <select name="city_code" id="adminCitySelect" class="form-select form-select-sm" required>
+                          <option value="">انتخاب کنید…</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">تعداد شعبه</label>
+                        <select name="branch_count" class="form-select form-select-sm" required>
+                          <option value="">انتخاب کنید…</option>
+                          <option value="1">1</option>
+                          <option value="2">2</option>
+                          <option value="3">3</option>
+                          <option value="4">4</option>
+                          <option value="5">5</option>
+                          <option value="6">6</option>
+                          <option value="7">7</option>
+                          <option value="8">8</option>
+                          <option value="9">9</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">شناسه شعبه (شروع)</label>
+                        <select name="branch_start_no" class="form-select form-select-sm" required>
+                          <option value="1" selected>01</option>
+                          <option value="2">02</option>
+                          <option value="3">03</option>
+                          <option value="4">04</option>
+                          <option value="5">05</option>
+                          <option value="6">06</option>
+                          <option value="7">07</option>
+                          <option value="8">08</option>
+                          <option value="9">09</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">نقش</label>
+                        <select name="role" class="form-select form-select-sm">
+                          <option value="user" selected>کاربر</option>
+                          <option value="admin">ادمین</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-3 d-flex align-items-end">
+                        <button class="btn btn-primary btn-sm w-100" type="submit">ایجاد کاربر</button>
+                      </div>
+                    </div>
+                  </form>
                   <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">جستجو</span>
-                    <input id="adminUsersQuery" type="text" class="form-control" placeholder="ایمیل یا نام" />
+                    <input id="adminUsersQuery" type="text" class="form-control" placeholder="نام کاربری/نام/موبایل" />
                     <button id="btnAdminUsersRefresh" class="btn btn-outline-secondary" type="button">تازه‌سازی</button>
                   </div>
                   <div class="table-responsive">
                     <table class="table table-sm align-middle">
                       <thead>
                         <tr>
-                          <th>ایمیل</th>
+                          <th>کاربر</th>
                           <th>نقش</th>
                           <th>فعال</th>
                           <th>عملیات</th>
@@ -113,10 +188,46 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     </table>
                   </div>
                 </div>
+
+                <div class="tab-pane fade" id="adminCities" role="tabpanel">
+                  <form id="formAdminCityCreate" class="border rounded p-2 mb-2">
+                    <div class="row g-2 align-items-end">
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">کد</label>
+                        <input name="code" type="text" class="form-control form-control-sm" placeholder="مثلاً 01" maxlength="2" required />
+                      </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">نام شهر</label>
+                        <input name="name" type="text" class="form-control form-control-sm" required />
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <button class="btn btn-primary btn-sm w-100" type="submit">افزودن</button>
+                      </div>
+                    </div>
+                  </form>
+
+                  <div class="d-flex align-items-center justify-content-between mb-2">
+                    <div class="text-secondary small">برای ویرایش، نام را تغییر دهید و «ذخیره» را بزنید.</div>
+                    <button id="btnAdminCitiesRefresh" class="btn btn-outline-secondary btn-sm" type="button">تازه‌سازی</button>
+                  </div>
+
+                  <div class="table-responsive">
+                    <table class="table table-sm align-middle">
+                      <thead>
+                        <tr>
+                          <th style="width: 90px;">کد</th>
+                          <th>نام</th>
+                          <th class="text-end" style="width: 220px;">عملیات</th>
+                        </tr>
+                      </thead>
+                      <tbody id="adminCitiesTbody"></tbody>
+                    </table>
+                  </div>
+                </div>
                 <div class="tab-pane fade" id="adminItems" role="tabpanel">
                   <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">جستجو</span>
-                    <input id="adminItemsQuery" type="text" class="form-control" placeholder="ایمیل/عنوان/توضیح" />
+                    <input id="adminItemsQuery" type="text" class="form-control" placeholder="کاربر/عنوان/توضیح" />
                     <button id="btnAdminItemsRefresh" class="btn btn-outline-secondary" type="button">تازه‌سازی</button>
                   </div>
                   <div class="table-responsive">
@@ -140,13 +251,71 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <thead>
                         <tr>
                           <th>زمان</th>
-                          <th>Actor</th>
-                          <th>Action</th>
-                          <th>Entity</th>
+                          <th>کاربر</th>
+                          <th>عملیات</th>
+                          <th>بخش</th>
                         </tr>
                       </thead>
                       <tbody id="adminLogsTbody"></tbody>
                     </table>
+                  </div>
+                </div>
+
+                <div class="tab-pane fade" id="adminStats" role="tabpanel">
+                  <div class="row g-2 align-items-end mb-2">
+                    <div class="col-6 col-md-4">
+                      <label class="form-label form-label-sm">از تاریخ</label>
+                      <input id="adminStatsFrom" type="text" class="form-control form-control-sm" placeholder="1404/11/12" />
+                    </div>
+                    <div class="col-6 col-md-4">
+                      <label class="form-label form-label-sm">تا تاریخ</label>
+                      <input id="adminStatsTo" type="text" class="form-control form-control-sm" placeholder="1404/11/12" />
+                    </div>
+                    <div class="col-12 col-md-4 d-grid">
+                      <button id="btnAdminStatsRefresh" class="btn btn-outline-secondary btn-sm" type="button">دریافت آمار</button>
+                    </div>
+                  </div>
+
+                  <div class="small text-secondary mb-2">
+                    مجموع: <span id="adminStatsTotal">0</span> | فعال: <span id="adminStatsActive">0</span> | غیرفعال: <span id="adminStatsInactive">0</span> | ابطال: <span id="adminStatsVoided">0</span>
+                  </div>
+
+                  <div class="row g-3">
+                    <div class="col-12 col-lg-6">
+                      <div class="fw-semibold mb-1">به تفکیک شهر</div>
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                          <thead>
+                            <tr>
+                              <th>شهر</th>
+                              <th>کل</th>
+                              <th>فعال</th>
+                              <th>غیرفعال</th>
+                              <th>ابطال</th>
+                            </tr>
+                          </thead>
+                          <tbody id="adminStatsCitiesTbody"></tbody>
+                        </table>
+                      </div>
+                    </div>
+                    <div class="col-12 col-lg-6">
+                      <div class="fw-semibold mb-1">به تفکیک کاربر</div>
+                      <div class="table-responsive">
+                        <table class="table table-sm align-middle">
+                          <thead>
+                            <tr>
+                              <th>کاربر</th>
+                              <th>شهر</th>
+                              <th>کل</th>
+                              <th>فعال</th>
+                              <th>غیرفعال</th>
+                              <th>ابطال</th>
+                            </tr>
+                          </thead>
+                          <tbody id="adminStatsUsersTbody"></tbody>
+                        </table>
+                      </div>
+                    </div>
                   </div>
                 </div>
               </div>
@@ -157,47 +326,141 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
         <div class="col-12 col-lg-8">
           <div class="card">
             <div class="card-header d-flex align-items-center justify-content-between">
-              <div>مدیریت داده‌ها</div>
-              <button id="btnItemsRefresh" type="button" class="btn btn-outline-secondary btn-sm">تازه‌سازی</button>
+              <div class="d-flex flex-column">
+                <div>ایجاد شماره کلاسه جدید</div>
+                <div id="kelasehOffice" class="small text-secondary"></div>
+              </div>
+              <button id="btnKelasehRefresh" type="button" class="btn btn-outline-secondary btn-sm">تازه‌سازی</button>
             </div>
             <div class="card-body">
-              <form id="formItem" class="row g-2 align-items-end mb-3">
-                <input type="hidden" name="id" value="" />
-                <div class="col-12 col-md-5">
-                  <label class="form-label">عنوان</label>
-                  <input name="title" type="text" class="form-control" required />
-                </div>
-                <div class="col-12 col-md-5">
-                  <label class="form-label">توضیح</label>
-                  <input name="content" type="text" class="form-control" />
-                </div>
-                <div class="col-12 col-md-2 d-flex gap-2">
-                  <button id="btnItemSubmit" class="btn btn-primary w-100" type="submit">ثبت</button>
-                  <button id="btnItemCancel" class="btn btn-outline-secondary w-100 d-none" type="button">لغو</button>
+              <form id="formKelasehCreate" class="border rounded p-2 mb-3">
+                <div class="row g-2">
+                  <div class="col-12 col-md-6">
+                    <label class="form-label form-label-sm">نام و نام خانوادگی خواهان</label>
+                    <input name="plaintiff_name" type="text" class="form-control form-control-sm" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label form-label-sm">نام و نام خانوادگی خوانده</label>
+                    <input name="defendant_name" type="text" class="form-control form-control-sm" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label form-label-sm">کدملی/ شناسه ملی خواهان</label>
+                    <input name="plaintiff_national_code" type="text" class="form-control form-control-sm" placeholder="مثلاً 10 یا 11 رقم" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label form-label-sm">کدملی/ شناسه ملی خوانده</label>
+                    <input name="defendant_national_code" type="text" class="form-control form-control-sm" placeholder="مثلاً 10 یا 11 رقم" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label form-label-sm">شماره تماس خواهان</label>
+                    <input name="plaintiff_mobile" type="text" class="form-control form-control-sm" placeholder="09123456789" required />
+                  </div>
+                  <div class="col-12 col-md-6">
+                    <label class="form-label form-label-sm">شماره تماس خوانده</label>
+                    <input name="defendant_mobile" type="text" class="form-control form-control-sm" placeholder="09123456789" required />
+                  </div>
+                  <div class="col-12 d-flex gap-2 align-items-center">
+                    <button id="btnKelasehCreate" class="btn btn-primary" type="submit">ثبت و ایجاد شناسه پرونده</button>
+                    <div class="small text-secondary">فرمت: `شعبه(۲رقم)+تاریخ(۶رقم)+ردیف(۲رقم)` (شمسی/تهران)</div>
+                  </div>
                 </div>
               </form>
 
-              <div class="input-group input-group-sm mb-2">
-                <span class="input-group-text">جستجو</span>
-                <input id="itemsQuery" type="text" class="form-control" placeholder="عنوان یا توضیح" />
-                <button id="btnItemsSearch" class="btn btn-outline-secondary" type="button">اعمال</button>
+              <div class="row g-2 mb-2">
+                <div class="col-12 col-md-4">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">کدملی/ شناسه ملی</span>
+                    <input id="kelasehNational" type="text" class="form-control" placeholder="کدملی/شناسه ملی خواهان/خوانده" />
+                  </div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">از</span>
+                    <input id="kelasehFrom" type="text" class="form-control" placeholder="1404/11/12" />
+                  </div>
+                </div>
+                <div class="col-6 col-md-3">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">تا</span>
+                    <input id="kelasehTo" type="text" class="form-control" placeholder="1404/11/12" />
+                  </div>
+                </div>
+                <div class="col-12 col-md-2 d-grid">
+                  <button id="btnKelasehSearch" class="btn btn-outline-secondary btn-sm" type="button">جستجو</button>
+                </div>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mb-2">
+                <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
+                <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
               </div>
 
               <div class="table-responsive">
                 <table class="table table-hover align-middle">
                   <thead>
                     <tr>
-                      <th>عنوان</th>
+                      <th style="width: 70px;">ردیف</th>
+                      <th>کلاسه</th>
+                      <th style="width: 90px;">شعبه</th>
+                      <th>خواهان</th>
+                      <th>خوانده</th>
                       <th>تاریخ</th>
+                      <th>وضعیت</th>
                       <th class="text-end">عملیات</th>
                     </tr>
                   </thead>
-                  <tbody id="itemsTbody"></tbody>
+                  <tbody id="kelasehTbody"></tbody>
                 </table>
               </div>
             </div>
           </div>
         </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalKelasehEdit" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title">ویرایش پرونده</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <form id="formKelasehEdit">
+          <div class="modal-body">
+            <input type="hidden" name="code" value="" />
+            <div class="row g-2">
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">نام و نام خانوادگی خواهان</label>
+                <input name="plaintiff_name" type="text" class="form-control form-control-sm" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">نام و نام خانوادگی خوانده</label>
+                <input name="defendant_name" type="text" class="form-control form-control-sm" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">کدملی/ شناسه ملی خواهان</label>
+                <input name="plaintiff_national_code" type="text" class="form-control form-control-sm" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">کدملی/ شناسه ملی خوانده</label>
+                <input name="defendant_national_code" type="text" class="form-control form-control-sm" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">شماره تماس خواهان</label>
+                <input name="plaintiff_mobile" type="text" class="form-control form-control-sm" required />
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">شماره تماس خوانده</label>
+                <input name="defendant_mobile" type="text" class="form-control form-control-sm" required />
+              </div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">بستن</button>
+            <button type="submit" class="btn btn-primary">ذخیره</button>
+          </div>
+        </form>
       </div>
     </div>
   </div>

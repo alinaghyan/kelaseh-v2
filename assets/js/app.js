@@ -1,5 +1,6 @@
 let csrfToken = '';
 let currentUser = null;
+let adminCitiesLoaded = false;
 
 function showToast(message, type) {
   const id = `t_${Date.now()}`;
@@ -29,6 +30,62 @@ function api(action, data) {
   });
 }
 
+function loadAdminCities() {
+  if (adminCitiesLoaded) {
+    return $.Deferred().resolve().promise();
+  }
+  return api('admin.cities.list', {})
+    .done((res) => {
+      const cities = (res.data && res.data.cities) || [];
+      const opts = ['<option value="">انتخاب کنید…</option>']
+        .concat(
+          cities.map((c) => {
+            const code = $('<div/>').text(c.code || '').html();
+            const name = $('<div/>').text(c.name || '').html();
+            return `<option value="${code}">${name}</option>`;
+          })
+        )
+        .join('');
+      $('#adminCitySelect').html(opts);
+      adminCitiesLoaded = true;
+    })
+    .fail(() => {
+      showToast('خطا در دریافت لیست شهرها.', 'error');
+    });
+}
+
+function refreshAdminCities() {
+  return api('admin.cities.list', {})
+    .done((res) => {
+      const cities = (res.data && res.data.cities) || [];
+      const rows = cities
+        .map((c) => {
+          const code = $('<div/>').text(c.code || '').html();
+          const name = $('<div/>').text(c.name || '').html();
+          return `
+            <tr data-code="${code}">
+              <td class="text-secondary">${code}</td>
+              <td>
+                <input class="form-control form-control-sm city-name" type="text" value="${name}" />
+              </td>
+              <td class="text-end">
+                <div class="btn-group btn-group-sm" role="group">
+                  <button class="btn btn-outline-primary btn-city-save" type="button">ذخیره</button>
+                  <button class="btn btn-outline-danger btn-city-del" type="button">حذف</button>
+                </div>
+              </td>
+            </tr>
+          `;
+        })
+        .join('');
+      $('#adminCitiesTbody').html(rows || `<tr><td colspan="3" class="text-center text-secondary py-3">شهری ثبت نشده است.</td></tr>`);
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت شهرها.';
+      showToast(msg, 'error');
+    });
+}
+
 function setView(mode) {
   $('#viewLoading').toggleClass('d-none', mode !== 'loading');
   $('#viewAuth').toggleClass('d-none', mode !== 'auth');
@@ -45,53 +102,72 @@ function renderUser() {
 
   const roleFa = currentUser.role === 'admin' ? 'مدیر کل' : 'کاربر';
   $('#currentRole').text(roleFa);
-  $('#profileEmail').text(currentUser.email);
+  $('#profileEmail').text(currentUser.username || currentUser.email || '');
   $('#profileName').text(currentUser.display_name || '');
   $('#profileRole').text(roleFa);
+
+  const cityName = currentUser.city_name || '';
+  $('#kelasehOffice').text(cityName ? `اداره ${cityName}` : '');
 
   $('#adminPanel').toggleClass('d-none', currentUser.role !== 'admin');
 }
 
-function resetItemForm() {
-  $('#formItem [name=id]').val('');
-  $('#formItem [name=title]').val('');
-  $('#formItem [name=content]').val('');
-  $('#btnItemSubmit').text('ثبت').removeClass('btn-success').addClass('btn-primary');
-  $('#btnItemCancel').addClass('d-none');
-}
-
-function renderItems(items) {
-  const rows = items.map((it) => {
-    const title = $('<div/>').text(it.title).html();
-    const date = $('<div/>').text(it.updated_at_jalali || it.updated_at || '').html();
-    const content = $('<div/>').text(it.content || '').html();
+function renderKelaseh(rows) {
+  const trs = rows.map((r, idx) => {
+    const rowNo = idx + 1;
+    const code = $('<div/>').text(r.code || '').html();
+    const branchNo = String(r.branch_no || '').padStart(2, '0');
+    const plaintiff = $('<div/>').text(r.plaintiff_name || '').html();
+    const defendant = $('<div/>').text(r.defendant_name || '').html();
+    const date = $('<div/>').text(r.created_at_jalali || r.created_at || '').html();
+    const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
+    const statusHtml = $('<div/>').text(status).html();
+    const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
+    const json = encodeURIComponent(
+      JSON.stringify({
+        code: r.code || '',
+        status: r.status || 'active',
+        plaintiff_name: r.plaintiff_name || '',
+        defendant_name: r.defendant_name || '',
+        plaintiff_national_code: r.plaintiff_national_code || '',
+        defendant_national_code: r.defendant_national_code || '',
+        plaintiff_mobile: r.plaintiff_mobile || '',
+        defendant_mobile: r.defendant_mobile || '',
+      })
+    );
     return `
-      <tr data-id="${it.id}" data-title="${title}" data-content="${content}">
-        <td>
-          <div class="fw-semibold">${title}</div>
-          ${content ? `<div class="text-secondary small">${content}</div>` : ''}
-        </td>
+      <tr data-json="${json}">
+        <td class="text-secondary">${rowNo}</td>
+        <td><div class="fw-semibold">${code}</div></td>
+        <td class="text-secondary">${branchNo}</td>
+        <td>${plaintiff}</td>
+        <td>${defendant}</td>
         <td class="text-secondary">${date}</td>
+        <td class="${statusClass}">${statusHtml}</td>
         <td class="text-end">
           <div class="btn-group btn-group-sm" role="group">
-            <button class="btn btn-outline-primary btn-edit" type="button">ویرایش</button>
-            <button class="btn btn-outline-danger btn-del" type="button">حذف</button>
+            <button class="btn btn-outline-dark btn-kelaseh-print" type="button">چاپ</button>
+            <button class="btn btn-outline-primary btn-kelaseh-edit" type="button">ویرایش</button>
+            <button class="btn btn-outline-warning btn-kelaseh-toggle" type="button">فعال/غیرفعال</button>
+            <button class="btn btn-outline-danger btn-kelaseh-void" type="button">ابطال</button>
           </div>
         </td>
       </tr>
     `;
   });
-  $('#itemsTbody').html(rows.join('') || `<tr><td colspan="3" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  $('#kelasehTbody').html(trs.join('') || `<tr><td colspan="8" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
 }
 
-function refreshItems() {
-  const q = $('#itemsQuery').val() || '';
-  return api('items.list', { q })
+function refreshKelaseh() {
+  const national_code = $('#kelasehNational').val() || '';
+  const from = $('#kelasehFrom').val() || '';
+  const to = $('#kelasehTo').val() || '';
+  return api('kelaseh.list', { national_code, from, to })
     .done((res) => {
-      renderItems((res.data && res.data.items) || []);
+      renderKelaseh((res.data && res.data.kelaseh) || []);
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت داده‌ها.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت کلاسه‌ها.';
       showToast(msg, 'error');
     });
 }
@@ -102,15 +178,20 @@ function refreshAdminUsers() {
     .done((res) => {
       const users = (res.data && res.data.users) || [];
       const rows = users.map((u) => {
-        const email = $('<div/>').text(u.email).html();
-        const name = $('<div/>').text(u.display_name || '').html();
+        const username = $('<div/>').text(u.username || '').html();
+        const email = $('<div/>').text(u.email || '').html();
+        const name = $('<div/>').text(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim()).html();
+        const mobile = $('<div/>').text(u.mobile || '').html();
+        const city = $('<div/>').text(u.city_name || '').html();
+        const branches = $('<div/>').text((u.branch_start_no && u.branch_count) ? `شعبه: ${String(u.branch_start_no).padStart(2, '0')} تا ${String(u.branch_start_no + u.branch_count - 1).padStart(2, '0')}` : (u.branch_count ? `شعبه: ${u.branch_count}` : '')).html();
         const role = u.role === 'admin' ? 'admin' : 'user';
         const isActive = Number(u.is_active) === 1;
         return `
           <tr data-id="${u.id}">
             <td>
-              <div class="fw-semibold">${email}</div>
+              <div class="fw-semibold">${username || email}</div>
               ${name ? `<div class="text-secondary small">${name}</div>` : ''}
+              ${(mobile || city || branches) ? `<div class="text-secondary small">${[mobile, city, branches].filter(Boolean).join(' | ')}</div>` : ''}
             </td>
             <td>
               <select class="form-select form-select-sm user-role">
@@ -141,11 +222,38 @@ function refreshAdminLogs() {
   return api('admin.audit.list', {})
     .done((res) => {
       const logs = (res.data && res.data.logs) || [];
+
+      const actionMap = {
+        register: 'ثبت‌نام',
+        login: 'ورود',
+        logout: 'خروج',
+        create: 'ایجاد',
+        update: 'ویرایش',
+        delete: 'حذف',
+        kelaseh_create: 'ایجاد کلاسه',
+        kelaseh_update: 'ویرایش کلاسه',
+        kelaseh_set_status: 'تغییر وضعیت کلاسه',
+        admin_city_create: 'افزودن شهر',
+        admin_city_update: 'ویرایش شهر',
+        admin_city_delete: 'حذف شهر',
+        admin_create: 'ایجاد کاربر',
+        set_role: 'تغییر نقش',
+        activate: 'فعال‌سازی',
+        deactivate: 'غیرفعال‌سازی',
+        admin_delete: 'حذف (مدیر)',
+      };
+      const entityMap = {
+        user: 'کاربر',
+        item: 'داده',
+        kelaseh_number: 'پرونده',
+        isfahan_city: 'شهر',
+      };
+
       const rows = logs.map((l) => {
         const dt = $('<div/>').text(l.created_at_jalali || l.created_at || '').html();
-        const actor = $('<div/>').text(l.actor_id || '').html();
-        const act = $('<div/>').text(l.action || '').html();
-        const ent = $('<div/>').text(l.entity || '').html();
+        const actor = $('<div/>').text(l.actor_key || l.actor_id || '').html();
+        const act = $('<div/>').text(actionMap[l.action] || l.action || '').html();
+        const ent = $('<div/>').text(entityMap[l.entity] || l.entity || '').html();
         return `<tr><td class="text-secondary">${dt}</td><td>${actor}</td><td>${act}</td><td>${ent}</td></tr>`;
       });
       $('#adminLogsTbody').html(rows.join('') || `<tr><td colspan="4" class="text-center text-secondary py-3">لاگی یافت نشد.</td></tr>`);
@@ -156,13 +264,45 @@ function refreshAdminLogs() {
     });
 }
 
+function refreshAdminStats() {
+  const from = $('#adminStatsFrom').val() || '';
+  const to = $('#adminStatsTo').val() || '';
+  return api('admin.kelaseh.stats', { from, to })
+    .done((res) => {
+      const totals = (res.data && res.data.totals) || {};
+      $('#adminStatsTotal').text(totals.total || 0);
+      $('#adminStatsActive').text(totals.active || 0);
+      $('#adminStatsInactive').text(totals.inactive || 0);
+      $('#adminStatsVoided').text(totals.voided || 0);
+
+      const cities = (res.data && res.data.cities) || [];
+      const cityRows = cities.map((c) => {
+        const name = $('<div/>').text(c.city_name || c.city_code || '').html();
+        return `<tr><td>${name}</td><td>${c.total || 0}</td><td>${c.active || 0}</td><td>${c.inactive || 0}</td><td>${c.voided || 0}</td></tr>`;
+      });
+      $('#adminStatsCitiesTbody').html(cityRows.join('') || `<tr><td colspan="5" class="text-center text-secondary py-3">داده‌ای یافت نشد.</td></tr>`);
+
+      const users = (res.data && res.data.users) || [];
+      const userRows = users.map((u) => {
+        const uname = $('<div/>').text(u.display_name || u.username || '').html();
+        const city = $('<div/>').text(u.city_name || u.city_code || '').html();
+        return `<tr><td>${uname}</td><td class="text-secondary">${city}</td><td>${u.total || 0}</td><td>${u.active || 0}</td><td>${u.inactive || 0}</td><td>${u.voided || 0}</td></tr>`;
+      });
+      $('#adminStatsUsersTbody').html(userRows.join('') || `<tr><td colspan="6" class="text-center text-secondary py-3">داده‌ای یافت نشد.</td></tr>`);
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت آمار.';
+      showToast(msg, 'error');
+    });
+}
+
 function refreshAdminItems() {
   const q = $('#adminItemsQuery').val() || '';
   return api('admin.items.list', { q })
     .done((res) => {
       const items = (res.data && res.data.items) || [];
       const rows = items.map((it) => {
-        const owner = $('<div/>').text(it.owner_email || '').html();
+        const owner = $('<div/>').text(it.owner_key || '').html();
         const title = $('<div/>').text(it.title || '').html();
         const date = $('<div/>').text(it.updated_at_jalali || it.updated_at || '').html();
         return `
@@ -205,11 +345,14 @@ function boot() {
       }
       renderUser();
       setView('app');
-      refreshItems();
+      refreshKelaseh();
       if (currentUser.role === 'admin') {
+        loadAdminCities();
         refreshAdminUsers();
+        refreshAdminCities();
         refreshAdminItems();
         refreshAdminLogs();
+        refreshAdminStats();
       }
     })
     .fail((xhr) => {
@@ -229,11 +372,14 @@ $(document).on('submit', '#formLogin', function (e) {
       showToast(res.message || 'ورود انجام شد.', 'success');
       renderUser();
       setView('app');
-      refreshItems();
+      refreshKelaseh();
       if (currentUser && currentUser.role === 'admin') {
+        loadAdminCities();
         refreshAdminUsers();
+        refreshAdminCities();
         refreshAdminItems();
         refreshAdminLogs();
+        refreshAdminStats();
       }
     })
     .fail((xhr) => {
@@ -255,58 +401,115 @@ $(document).on('click', '#btnLogout', function () {
     });
 });
 
-$(document).on('click', '#btnItemsRefresh', function () {
-  refreshItems();
+$(document).on('click', '#btnKelasehRefresh', function () {
+  refreshKelaseh();
 });
 
-$(document).on('click', '#btnItemsSearch', function () {
-  refreshItems();
+$(document).on('click', '#btnKelasehSearch', function () {
+  refreshKelaseh();
 });
 
-$(document).on('click', '#itemsTbody .btn-edit', function () {
-  const tr = $(this).closest('tr');
-  const id = tr.data('id');
-  const title = tr.data('title');
-  const content = tr.data('content');
-  $('#formItem [name=id]').val(String(id));
-  $('#formItem [name=title]').val(title);
-  $('#formItem [name=content]').val(content);
-  $('#btnItemSubmit').text('به‌روزرسانی').removeClass('btn-primary').addClass('btn-success');
-  $('#btnItemCancel').removeClass('d-none');
-});
-
-$(document).on('click', '#btnItemCancel', function () {
-  resetItemForm();
-});
-
-$(document).on('click', '#itemsTbody .btn-del', function () {
-  const tr = $(this).closest('tr');
-  const id = tr.data('id');
-  const title = tr.data('title');
-  if (!confirm(`حذف شود؟\n${title}`)) {
-    return;
-  }
-  api('items.delete', { id })
+$(document).on('submit', '#formKelasehCreate', function (e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(this));
+  api('kelaseh.create', data)
     .done((res) => {
-      showToast(res.message || 'حذف شد.', 'success');
-      resetItemForm();
-      refreshItems();
+      const code = (res.data && res.data.code) || '';
+      showToast(code ? `شناسه پرونده ایجاد شد: ${code}` : (res.message || 'ثبت شد.'), 'success');
+      this.reset();
+      refreshKelaseh();
+      if (code) {
+        window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
+      }
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'حذف ناموفق بود.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ثبت پرونده ناموفق بود.';
       showToast(msg, 'error');
     });
 });
 
-$(document).on('submit', '#formItem', function (e) {
+$(document).on('click', '#btnKelasehExportCsv', function () {
+  const national_code = $('#kelasehNational').val() || '';
+  const from = $('#kelasehFrom').val() || '';
+  const to = $('#kelasehTo').val() || '';
+  const qs = new URLSearchParams({ action: 'kelaseh.export.csv', csrf_token: csrfToken, national_code, from, to });
+  window.location.href = `core.php?${qs.toString()}`;
+});
+
+$(document).on('click', '#btnKelasehExportPdf', function () {
+  const national_code = $('#kelasehNational').val() || '';
+  const from = $('#kelasehFrom').val() || '';
+  const to = $('#kelasehTo').val() || '';
+  const qs = new URLSearchParams({ action: 'kelaseh.export.print', csrf_token: csrfToken, national_code, from, to });
+  window.open(`core.php?${qs.toString()}`, '_blank');
+});
+
+$(document).on('click', '#kelasehTbody .btn-kelaseh-print', function () {
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
+});
+
+$(document).on('click', '#kelasehTbody .btn-kelaseh-edit', function () {
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  $('#formKelasehEdit [name=code]').val(payload.code);
+  $('#formKelasehEdit [name=plaintiff_name]').val(payload.plaintiff_name);
+  $('#formKelasehEdit [name=defendant_name]').val(payload.defendant_name);
+  $('#formKelasehEdit [name=plaintiff_national_code]').val(payload.plaintiff_national_code);
+  $('#formKelasehEdit [name=defendant_national_code]').val(payload.defendant_national_code);
+  $('#formKelasehEdit [name=plaintiff_mobile]').val(payload.plaintiff_mobile);
+  $('#formKelasehEdit [name=defendant_mobile]').val(payload.defendant_mobile);
+  const modal = new bootstrap.Modal(document.getElementById('modalKelasehEdit'));
+  modal.show();
+});
+
+$(document).on('submit', '#formKelasehEdit', function (e) {
   e.preventDefault();
   const data = Object.fromEntries(new FormData(this));
-  const isUpdate = !!data.id;
-  api(isUpdate ? 'items.update' : 'items.create', data)
+  api('kelaseh.update', data)
     .done((res) => {
-      showToast(res.message || (isUpdate ? 'به‌روزرسانی شد.' : 'ثبت شد.'), 'success');
-      resetItemForm();
-      refreshItems();
+      showToast(res.message || 'ویرایش شد.', 'success');
+      const modalEl = document.getElementById('modalKelasehEdit');
+      const modal = bootstrap.Modal.getInstance(modalEl);
+      if (modal) {
+        modal.hide();
+      }
+      refreshKelaseh();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ویرایش ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('click', '#kelasehTbody .btn-kelaseh-toggle', function () {
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  const status = payload.status;
+  if (status === 'voided') {
+    showToast('پرونده ابطال شده است.', 'error');
+    return;
+  }
+  const next = status === 'inactive' ? 'active' : 'inactive';
+  api('kelaseh.set_status', { code, status: next })
+    .done((res) => {
+      showToast(res.message || 'وضعیت به‌روزرسانی شد.', 'success');
+      refreshKelaseh();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'عملیات ناموفق بود.';
@@ -314,8 +517,101 @@ $(document).on('submit', '#formItem', function (e) {
     });
 });
 
+$(document).on('click', '#kelasehTbody .btn-kelaseh-void', function () {
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
+    return;
+  }
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  if (!confirm('این پرونده ابطال شود؟')) {
+    return;
+  }
+  api('kelaseh.set_status', { code, status: 'voided' })
+    .done((res) => {
+      showToast(res.message || 'ابطال شد.', 'success');
+      refreshKelaseh();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ابطال ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('submit', '#formAdminCreateUser', function (e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(this));
+  api('admin.users.create', data)
+    .done((res) => {
+      showToast(res.message || 'کاربر ایجاد شد.', 'success');
+      this.reset();
+      refreshAdminUsers();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ایجاد کاربر ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
 $(document).on('click', '#btnAdminUsersRefresh', function () {
   refreshAdminUsers();
+});
+
+$(document).on('click', '#btnAdminCitiesRefresh', function () {
+  refreshAdminCities();
+});
+
+$(document).on('submit', '#formAdminCityCreate', function (e) {
+  e.preventDefault();
+  const data = Object.fromEntries(new FormData(this));
+  api('admin.cities.create', data)
+    .done((res) => {
+      showToast(res.message || 'شهر ایجاد شد.', 'success');
+      this.reset();
+      adminCitiesLoaded = false;
+      $.when(loadAdminCities(), refreshAdminCities()).done(() => {});
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'افزودن شهر ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('click', '#adminCitiesTbody .btn-city-save', function () {
+  const tr = $(this).closest('tr');
+  const code = tr.data('code');
+  const name = tr.find('.city-name').val();
+  api('admin.cities.update', { code, name })
+    .done((res) => {
+      showToast(res.message || 'ذخیره شد.', 'success');
+      adminCitiesLoaded = false;
+      loadAdminCities();
+      refreshAdminCities();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ذخیره ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('click', '#adminCitiesTbody .btn-city-del', function () {
+  const tr = $(this).closest('tr');
+  const code = tr.data('code');
+  if (!confirm('این شهر حذف شود؟')) {
+    return;
+  }
+  api('admin.cities.delete', { code })
+    .done((res) => {
+      showToast(res.message || 'حذف شد.', 'success');
+      adminCitiesLoaded = false;
+      loadAdminCities();
+      refreshAdminCities();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'حذف ناموفق بود.';
+      showToast(msg, 'error');
+    });
 });
 
 $(document).on('click', '#btnAdminItemsRefresh', function () {
@@ -359,6 +655,10 @@ $(document).on('click', '#adminUsersTbody .btn-save-user', function () {
 
 $(document).on('click', '#btnAdminLogsRefresh', function () {
   refreshAdminLogs();
+});
+
+$(document).on('click', '#btnAdminStatsRefresh', function () {
+  refreshAdminStats();
 });
 
 $(boot);

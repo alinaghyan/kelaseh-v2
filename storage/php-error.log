@@ -1,0 +1,23 @@
+[31-Jan-2026 20:07:17 Asia/Tehran] Error: Call to undefined function PersianValidator\NationalCode\collect() in C:\xampp\htdocs\kelaseh-v2\vendor\persian-validator\national-code\src\NationalCode.php:37
+Stack trace:
+#0 C:\xampp\htdocs\kelaseh-v2\vendor\persian-validator\national-code\src\NationalCode.php(69): PersianValidator\NationalCode\NationalCode->validate()
+#1 C:\xampp\htdocs\kelaseh-v2\core.php(322): PersianValidator\NationalCode\NationalCode->isValid()
+#2 C:\xampp\htdocs\kelaseh-v2\core.php(823): validate_national_code('0012345679')
+#3 C:\xampp\htdocs\kelaseh-v2\core.php(1556): action_kelaseh_create(Array)
+#4 C:\xampp\htdocs\kelaseh-v2\core.php(1623): handle_request()
+#5 {main}
+[31-Jan-2026 20:07:31 Asia/Tehran] Error: Call to undefined function PersianValidator\NationalCode\collect() in C:\xampp\htdocs\kelaseh-v2\vendor\persian-validator\national-code\src\NationalCode.php:37
+Stack trace:
+#0 C:\xampp\htdocs\kelaseh-v2\vendor\persian-validator\national-code\src\NationalCode.php(69): PersianValidator\NationalCode\NationalCode->validate()
+#1 C:\xampp\htdocs\kelaseh-v2\core.php(322): PersianValidator\NationalCode\NationalCode->isValid()
+#2 C:\xampp\htdocs\kelaseh-v2\core.php(823): validate_national_code('0012345679')
+#3 C:\xampp\htdocs\kelaseh-v2\core.php(1556): action_kelaseh_create(Array)
+#4 C:\xampp\htdocs\kelaseh-v2\core.php(1623): handle_request()
+#5 {main}
+[31-Jan-2026 20:09:01 Asia/Tehran] TypeError: Morilog\Jalali\Jalalian::now(): Argument #1 ($timeZone) must be of type ?DateTimeZone, string given, called in C:\xampp\htdocs\kelaseh-v2\core.php on line 378 and defined in C:\xampp\htdocs\kelaseh-v2\vendor\morilog\jalali\src\Jalalian.php:81
+Stack trace:
+#0 C:\xampp\htdocs\kelaseh-v2\core.php(378): Morilog\Jalali\Jalalian::now('Asia/Tehran')
+#1 C:\xampp\htdocs\kelaseh-v2\core.php(865): jalali_now_parts()
+#2 C:\xampp\htdocs\kelaseh-v2\core.php(1563): action_kelaseh_create(Array)
+#3 C:\xampp\htdocs\kelaseh-v2\core.php(1630): handle_request()
+#4 {main}
