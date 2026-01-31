@@ -1,0 +1,11 @@
+{
+  "name": "local/kelaseh-simple-php",
+  "description": "کلاسه - پروژه محلی PHP + MySQL",
+  "type": "project",
+  "require": {
+    "php": "^8.2",
+    "morilog/jalali": "^3.5",
+    "persian-validator/national-code": "^1.0",
+    "persian-validator/mobile": "^1.0"
+  }
+}
