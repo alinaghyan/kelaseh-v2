@@ -1,16 +1,8 @@
-
+@ -1,885 +1,134 @@
 let csrfToken = '';
 let currentUser = null;
 let adminCitiesLoaded = false;
 let headerClockTimer = null;
-
-function toPersianDigits(str) {
-  if (str === null || str === undefined) return '';
-  return String(str).replace(/[0-9]/g, function (w) {
-    const persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-    return persian[w];
-  });
-}
 
 function showToast(message, type) {
   const id = `t_${Date.now()}`;
@@ -70,15 +62,13 @@ function refreshAdminCities() {
       const cities = (res.data && res.data.cities) || [];
       const rows = cities
         .map((c) => {
-          const code = toPersianDigits(c.code || '');
-          const name = toPersianDigits(c.name || '');
+          const code = $('<div/>').text(c.code || '').html();
+          const name = $('<div/>').text(c.name || '').html();
           return `
-            <tr data-code="${c.code}">
+            <tr data-code="${code}">
+              <td class="text-secondary">${code}</td>
               <td>
-                <input class="form-control form-control-sm city-code" type="text" value="${c.code}" maxlength="5" dir="ltr" />
-              </td>
-              <td>
-                <input class="form-control form-control-sm city-name" type="text" value="${c.name}" />
+                <input class="form-control form-control-sm city-name" type="text" value="${name}" />
               </td>
               <td class="text-end">
                 <div class="btn-group btn-group-sm" role="group">
@@ -127,20 +117,10 @@ function renderUser() {
 
   const cityName = currentUser.city_name || '';
   $('#kelasehOffice').text(cityName ? `اداره ${cityName}` : '').toggleClass('d-none', !cityName);
+/* ADMIN USER EDIT & DELETE LOGIC */
 
-  const isAdmin = currentUser.role === 'admin';
-  $('#adminPanel').toggleClass('d-none', !isAdmin);
-  // Revert: We want admin panel link to be always visible for admin, 
-  // but handled by click to switch view, not just toggle d-none on panel itself.
-  // Actually, the nav item visibility is controlled here.
-  $('#navItemAdmin').toggleClass('d-none', !isAdmin);
+  $('#adminPanel').toggleClass('d-none', currentUser.role !== 'admin');
 }
-
-// Ensure the click handler is attached
-$(document).on('click', '#navItemAdmin a', function(e) {
-    e.preventDefault();
-    window.location.hash = '#admin';
-});
 
 function refreshHeaderDateTime() {
   if (!csrfToken) {
@@ -149,7 +129,7 @@ function refreshHeaderDateTime() {
   api('time.now', {})
     .done((res) => {
       const s = (res.data && res.data.now_jalali) || '';
-      $('#headerDateTime').text(toPersianDigits(s));
+      $('#headerDateTime').text(s);
     })
     .fail(() => {});
 }
@@ -164,7 +144,7 @@ function startHeaderClock() {
 
 function getPageFromHash() {
   const raw = (window.location.hash || '').replace('#', '').trim();
-  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin') {
+  if (raw === 'profile' || raw === 'create' || raw === 'dashboard') {
     return raw;
   }
   return 'dashboard';
@@ -176,93 +156,66 @@ function renderPage(page) {
   $links.filter(`[data-page="${page}"]`).addClass('active');
 
   const isAdmin = currentUser && currentUser.role === 'admin';
-  const isOfficeAdmin = currentUser && currentUser.role === 'office_admin';
-
-  // Default: Hide all main sections
-  $('#cardProfile').addClass('d-none');
-  $('#adminPanel').addClass('d-none');
-  $('#officePanel').addClass('d-none');
-  $('#cardKelaseh').addClass('d-none');
-  $('#kelasehCreateSection').addClass('d-none');
-  $('#kelasehListSection').addClass('d-none');
-  $('#btnKelasehRefresh').addClass('d-none');
-  $('#colRight').removeClass('d-none');
 
   if (page === 'profile') {
     $('#cardProfile').removeClass('d-none');
-    return;
-  }
-
-  if (page === 'admin') {
-    if (isAdmin) {
-      $('#adminPanel').removeClass('d-none');
-      $('#colRight').removeClass('d-none'); // Show container for admin panel
-      $('#kelasehCreateSection').addClass('d-none'); // Hide create section
-      $('#kelasehListSection').addClass('d-none'); // Hide list section
-      $('#cardKelaseh').addClass('d-none'); // Hide main card
-      $('#officePanel').addClass('d-none');
-    } else {
-      window.location.hash = '#dashboard';
-    }
+    $('#adminPanel').addClass('d-none');
+    $('#colLeft').removeClass('d-none').addClass('col-12').removeClass('col-lg-4');
+    $('#colRight').addClass('d-none');
     return;
   }
 
   if (page === 'create') {
-    $('#cardKelaseh').removeClass('d-none');
+    $('#colLeft').addClass('d-none');
+    $('#colRight').removeClass('d-none').removeClass('col-lg-8').addClass('col-12');
+
     $('#kelasehCreateSection').removeClass('d-none');
+    $('#kelasehListSection').addClass('d-none');
+    $('#btnKelasehRefresh').addClass('d-none');
     $('#kelasehCardTitle').text('ایجاد شماره کلاسه');
     return;
   }
+function updateAdminEditUserFields() {
+  const role = $('#adminEditRoleSelect').val();
+  const branchWrap = $('#adminEditBranchWrap');
+  const officeWrap = $('#adminEditOfficeWrap');
 
-  // Dashboard (default)
-  $('#cardKelaseh').removeClass('d-none');
+  $('#cardProfile').addClass('d-none');
+  $('#kelasehCreateSection').addClass('d-none');
   $('#kelasehListSection').removeClass('d-none');
   $('#btnKelasehRefresh').removeClass('d-none');
   $('#kelasehCardTitle').text('پنل کاربری');
+  branchWrap.addClass('d-none');
+  officeWrap.addClass('d-none');
 
-  if (isOfficeAdmin) {
-    $('#officePanel').removeClass('d-none');
-  }
-  
-  // Branch admin sees capacity management too
-  if (currentUser.role === 'branch_admin') {
-      $('#officePanel').removeClass('d-none');
-      // Hide unrelated tabs for branch admin
-      $('button[data-bs-target="#officeUsers"]').closest('li').addClass('d-none');
-      $('button[data-bs-target="#officeStats"]').closest('li').addClass('d-none');
-      $('button[data-bs-target="#officeKelaseh"]').closest('li').addClass('d-none');
-      
-      // Show capacities tab
-      $('button[data-bs-target="#officeCapacities"]').trigger('click');
-      $('#officePanel .card-header').text('مدیریت ظرفیت شعب');
-  } else if (currentUser.role === 'office_admin') {
-      // Show all tabs for office admin
-      $('button[data-bs-target="#officeUsers"]').closest('li').removeClass('d-none');
-      $('button[data-bs-target="#officeStats"]').closest('li').removeClass('d-none');
-      $('button[data-bs-target="#officeKelaseh"]').closest('li').removeClass('d-none');
-      $('#officePanel .card-header').text('پنل مدیر اداره');
+  if (isAdmin) {
+    $('#colLeft').removeClass('d-none').addClass('col-lg-4');
+    $('#adminPanel').removeClass('d-none');
+    $('#colRight').removeClass('d-none').addClass('col-lg-8');
+  } else {
+    $('#colLeft').addClass('d-none');
+    $('#colRight').removeClass('d-none').removeClass('col-lg-8').addClass('col-12');
+  if (role === 'branch_admin') {
+    branchWrap.removeClass('d-none');
+  } else if (role === 'office_admin') {
+    officeWrap.removeClass('d-none');
   }
 }
 
-function generateKelasehRows(rows) {
-  if (!rows || !rows.length) return '';
-  return rows.map((r, idx) => {
-    const rowNo = toPersianDigits(idx + 1);
-    // Use full_code if available (City-Code), otherwise fallback to code
-    const rawCode = r.full_code || r.code || '';
-    const code = $('<div/>').text(toPersianDigits(rawCode)).html();
-    const branchNo = toPersianDigits(String(r.branch_no || '').padStart(2, '0'));
-    const plaintiff = $('<div/>').text(toPersianDigits(r.plaintiff_name || '')).html();
-    const plaintiffNC = $('<div/>').text(toPersianDigits(r.plaintiff_national_code || '')).html();
-    const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
-    const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
+function renderKelaseh(rows) {
+  const trs = rows.map((r, idx) => {
+    const rowNo = idx + 1;
+    const code = $('<div/>').text(r.code || '').html();
+    const branchNo = String(r.branch_no || '').padStart(2, '0');
+    const plaintiff = $('<div/>').text(r.plaintiff_name || '').html();
+    const defendant = $('<div/>').text(r.defendant_name || '').html();
+    const date = $('<div/>').text(r.created_at_jalali || r.created_at || '').html();
     const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
     const statusHtml = $('<div/>').text(status).html();
     const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
     const json = encodeURIComponent(
       JSON.stringify({
         code: r.code || '',
-        full_code: r.full_code || '',
         status: r.status || 'active',
         plaintiff_name: r.plaintiff_name || '',
         defendant_name: r.defendant_name || '',
@@ -270,70 +223,42 @@ function generateKelasehRows(rows) {
         defendant_national_code: r.defendant_national_code || '',
         plaintiff_mobile: r.plaintiff_mobile || '',
         defendant_mobile: r.defendant_mobile || '',
-        created_at_jalali: r.created_at_jalali || '',
-        city_name: r.city_name || ''
       })
     );
-
-    // Common buttons for both Today and Search tables
-    const actionButtons = `
-        <div class="d-flex flex-column gap-1">
-            <div class="btn-group btn-group-sm" role="group">
-                <button class="btn btn-outline-secondary btn-kelaseh-label" type="button">چاپ لیبل</button>
-                <button class="btn btn-outline-primary btn-kelaseh-edit" type="button">ویرایش</button>
-                <button class="btn btn-outline-warning btn-kelaseh-toggle" type="button">وضعیت</button>
-                <button class="btn btn-outline-danger btn-kelaseh-void" type="button">ابطال</button>
-            </div>
-            <div class="d-flex justify-content-end gap-2 align-items-center">
-                <div class="form-check form-check-inline m-0">
-                    <input class="form-check-input kelaseh-sms-plaintiff" type="checkbox" />
-                    <label class="form-check-label small" style="font-size: 0.7rem;">خواهان</label>
-                </div>
-                <div class="form-check form-check-inline m-0">
-                    <input class="form-check-input kelaseh-sms-defendant" type="checkbox" />
-                    <label class="form-check-label small" style="font-size: 0.7rem;">خوانده</label>
-                </div>
-                <button class="btn btn-outline-success btn-sm py-0 btn-kelaseh-sms" style="font-size: 0.7rem;" type="button">پیامک</button>
-            </div>
-        </div>
-    `;
-
     return `
       <tr data-json="${json}">
-        <td>
-           <div class="form-check d-flex justify-content-center m-0">
-              <input class="form-check-input kelaseh-label-check" type="checkbox" id="chk_lbl_${idx}_${r.code}" />
-           </div>
-        </td>
+        <td><input class="form-check-input kelaseh-label-check" type="checkbox" /></td>
         <td class="text-secondary">${rowNo}</td>
-        <td><div class="fw-semibold" dir="ltr">${code}</div></td>
+        <td><div class="fw-semibold">${code}</div></td>
         <td class="text-secondary">${branchNo}</td>
         <td>${plaintiff}</td>
-        <td>${plaintiffNC}</td>
         <td>${defendant}</td>
         <td class="text-secondary">${date}</td>
         <td class="${statusClass}">${statusHtml}</td>
         <td class="text-end">
-          ${actionButtons}
+          <div class="btn-group btn-group-sm" role="group">
+            <button class="btn btn-outline-dark btn-kelaseh-print" type="button">چاپ</button>
+            <button class="btn btn-outline-secondary btn-kelaseh-label" type="button">چاپ لیبل پوشه</button>
+            <button class="btn btn-outline-primary btn-kelaseh-edit" type="button">ویرایش</button>
+            <button class="btn btn-outline-warning btn-kelaseh-toggle" type="button">فعال/غیرفعال</button>
+            <button class="btn btn-outline-danger btn-kelaseh-void" type="button">ابطال</button>
+          </div>
+          <div class="d-flex justify-content-end gap-2 align-items-center mt-1">
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input kelaseh-sms-plaintiff" type="checkbox" checked />
+              <label class="form-check-label small">خواهان</label>
+            </div>
+            <div class="form-check form-check-inline m-0">
+              <input class="form-check-input kelaseh-sms-defendant" type="checkbox" />
+              <label class="form-check-label small">خوانده</label>
+            </div>
+            <button class="btn btn-outline-success btn-sm btn-kelaseh-sms" type="button">ارسال پیامک</button>
+          </div>
         </td>
       </tr>
     `;
-  }).join('');
-}
-
-function renderKelaseh(rows) {
-  const html = generateKelasehRows(rows);
-  $('#kelasehTbody').html(html || `<tr><td colspan="10" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
-}
-
-function refreshKelasehToday() {
-  api('kelaseh.list.today', {})
-    .done((res) => {
-      const rows = (res.data && res.data.kelaseh) || [];
-      const html = generateKelasehRows(rows);
-      $('#kelasehTodayTbody').html(html || `<tr><td colspan="10" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
-    })
-    .fail(() => {});
+  });
+  $('#kelasehTbody').html(trs.join('') || `<tr><td colspan="9" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
 }
 
 function refreshKelaseh() {
@@ -356,41 +281,39 @@ function refreshAdminUsers() {
     .done((res) => {
       const users = (res.data && res.data.users) || [];
       const rows = users.map((u) => {
-        const username = $('<div/>').text(toPersianDigits(u.username || '')).html();
-        const email = $('<div/>').text(toPersianDigits(u.email || '')).html();
-        const name = $('<div/>').text(toPersianDigits(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim())).html();
-        const mobile = $('<div/>').text(toPersianDigits(u.mobile || '')).html();
-        const city = $('<div/>').text(toPersianDigits(u.city_name || '')).html();
-        const branchesText = (u.branches || '').toString();
-        const branches = $('<div/>').text(branchesText ? `شعبه‌ها: ${toPersianDigits(branchesText.split(',').map((x) => String(x).padStart(2, '0')).join(', '))}` : ((u.branch_start_no && u.branch_count) ? `محدوده شعبه: ${toPersianDigits(String(u.branch_start_no).padStart(2, '0'))} تا ${toPersianDigits(String(u.branch_start_no + u.branch_count - 1).padStart(2, '0'))}` : '')).html();
-        const role = u.role === 'office_admin' ? 'مدیر اداره' : u.role === 'branch_admin' ? 'مدیر شعبه' : 'کاربر عادی';
-        const isActive = Number(u.is_active) === 1 ? 'فعال' : 'غیرفعال';
-        const activeClass = Number(u.is_active) === 1 ? 'text-success' : 'text-danger';
-        
-        const json = encodeURIComponent(JSON.stringify(u));
-
+        const username = $('<div/>').text(u.username || '').html();
+        const email = $('<div/>').text(u.email || '').html();
+        const name = $('<div/>').text(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim()).html();
+        const mobile = $('<div/>').text(u.mobile || '').html();
+        const city = $('<div/>').text(u.city_name || '').html();
+        const branches = $('<div/>').text((u.branch_start_no && u.branch_count) ? `شعبه: ${String(u.branch_start_no).padStart(2, '0')} تا ${String(u.branch_start_no + u.branch_count - 1).padStart(2, '0')}` : (u.branch_count ? `شعبه: ${u.branch_count}` : '')).html();
+        const role = u.role === 'admin' ? 'admin' : 'user';
+        const isActive = Number(u.is_active) === 1;
         return `
-          <tr data-id="${u.id}" data-json="${json}">
+          <tr data-id="${u.id}">
             <td>
               <div class="fw-semibold">${username || email}</div>
               ${name ? `<div class="text-secondary small">${name}</div>` : ''}
               ${(mobile || city || branches) ? `<div class="text-secondary small">${[mobile, city, branches].filter(Boolean).join(' | ')}</div>` : ''}
             </td>
-            <td>${role}</td>
             <td>
-               <span class="${activeClass}">${isActive}</span>
+              <select class="form-select form-select-sm user-role">
+                <option value="user" ${role === 'user' ? 'selected' : ''}>کاربر</option>
+                <option value="admin" ${role === 'admin' ? 'selected' : ''}>مدیر کل</option>
+              </select>
             </td>
             <td>
-               ${u.role === 'branch_admin' ? toPersianDigits(u.branch_count || 1) + ' شعبه' : '-'}
+              <div class="form-check form-switch">
+                <input class="form-check-input user-active" type="checkbox" ${isActive ? 'checked' : ''} />
+              </div>
             </td>
-            <td class="text-end">
-              <button class="btn btn-outline-primary btn-sm btn-admin-edit-user" type="button">ویرایش</button>
-              <button class="btn btn-outline-danger btn-sm btn-admin-delete-user" type="button">حذف</button>
+            <td>
+              <button class="btn btn-outline-secondary btn-sm btn-save-user" type="button">ذخیره</button>
             </td>
           </tr>
         `;
       });
-      $('#adminUsersTbody').html(rows.join('') || `<tr><td colspan="5" class="text-center text-secondary py-3">کاربری یافت نشد.</td></tr>`);
+      $('#adminUsersTbody').html(rows.join('') || `<tr><td colspan="4" class="text-center text-secondary py-3">کاربری یافت نشد.</td></tr>`);
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت کاربران.';
@@ -433,8 +356,8 @@ function refreshAdminLogs() {
       };
 
       const rows = logs.map((l) => {
-        const dt = $('<div/>').text(toPersianDigits(l.created_at_jalali || l.created_at || '')).html();
-        const actor = $('<div/>').text(toPersianDigits(l.actor_key || l.actor_id || '')).html();
+        const dt = $('<div/>').text(l.created_at_jalali || l.created_at || '').html();
+        const actor = $('<div/>').text(l.actor_key || l.actor_id || '').html();
         const act = $('<div/>').text(actionMap[l.action] || l.action || '').html();
         const ent = $('<div/>').text(entityMap[l.entity] || l.entity || '').html();
         return `<tr><td class="text-secondary">${dt}</td><td>${actor}</td><td>${act}</td><td>${ent}</td></tr>`;
@@ -453,23 +376,23 @@ function refreshAdminStats() {
   return api('admin.kelaseh.stats', { from, to })
     .done((res) => {
       const totals = (res.data && res.data.totals) || {};
-      $('#adminStatsTotal').text(toPersianDigits(totals.total || 0));
-      $('#adminStatsActive').text(toPersianDigits(totals.active || 0));
-      $('#adminStatsInactive').text(toPersianDigits(totals.inactive || 0));
-      $('#adminStatsVoided').text(toPersianDigits(totals.voided || 0));
+      $('#adminStatsTotal').text(totals.total || 0);
+      $('#adminStatsActive').text(totals.active || 0);
+      $('#adminStatsInactive').text(totals.inactive || 0);
+      $('#adminStatsVoided').text(totals.voided || 0);
 
       const cities = (res.data && res.data.cities) || [];
       const cityRows = cities.map((c) => {
-        const name = $('<div/>').text(toPersianDigits(c.city_name || c.city_code || '')).html();
-        return `<tr><td>${name}</td><td>${toPersianDigits(c.total || 0)}</td><td>${toPersianDigits(c.active || 0)}</td><td>${toPersianDigits(c.inactive || 0)}</td><td>${toPersianDigits(c.voided || 0)}</td></tr>`;
+        const name = $('<div/>').text(c.city_name || c.city_code || '').html();
+        return `<tr><td>${name}</td><td>${c.total || 0}</td><td>${c.active || 0}</td><td>${c.inactive || 0}</td><td>${c.voided || 0}</td></tr>`;
       });
       $('#adminStatsCitiesTbody').html(cityRows.join('') || `<tr><td colspan="5" class="text-center text-secondary py-3">داده‌ای یافت نشد.</td></tr>`);
 
       const users = (res.data && res.data.users) || [];
       const userRows = users.map((u) => {
-        const uname = $('<div/>').text(toPersianDigits(u.display_name || u.username || '')).html();
-        const city = $('<div/>').text(toPersianDigits(u.city_name || u.city_code || '')).html();
-        return `<tr><td>${uname}</td><td class="text-secondary">${city}</td><td>${toPersianDigits(u.total || 0)}</td><td>${toPersianDigits(u.active || 0)}</td><td>${toPersianDigits(u.inactive || 0)}</td><td>${toPersianDigits(u.voided || 0)}</td></tr>`;
+        const uname = $('<div/>').text(u.display_name || u.username || '').html();
+        const city = $('<div/>').text(u.city_name || u.city_code || '').html();
+        return `<tr><td>${uname}</td><td class="text-secondary">${city}</td><td>${u.total || 0}</td><td>${u.active || 0}</td><td>${u.inactive || 0}</td><td>${u.voided || 0}</td></tr>`;
       });
       $('#adminStatsUsersTbody').html(userRows.join('') || `<tr><td colspan="6" class="text-center text-secondary py-3">داده‌ای یافت نشد.</td></tr>`);
     })
@@ -528,6 +451,7 @@ function refreshAdminItems() {
       showToast(msg, 'error');
     });
 }
+$(document).on('change', '#adminEditRoleSelect', updateAdminEditUserFields);
 
 function boot() {
   setView('loading');
@@ -543,25 +467,34 @@ function boot() {
 
       if (!currentUser) {
         setView('auth');
-      } else {
-        renderUser();
-        setView('app');
-        if (!window.location.hash) {
-          window.location.hash = '#dashboard';
-        }
-        renderPage(getPageFromHash());
-        startHeaderClock();
-        refreshKelaseh();
-        refreshKelasehToday();
-        if (currentUser.role === 'admin') {
-          loadAdminCities();
-          refreshAdminUsers();
-          refreshAdminCities();
-          refreshAdminItems();
-          refreshAdminLogs();
-          refreshAdminStats();
-          refreshAdminSmsSettings();
-        }
+$(document).on('click', '.btn-admin-edit-user', function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (!raw) return;
+    
+    let u;
+    try {
+        u = JSON.parse(decodeURIComponent(raw));
+    } catch(e) {
+        console.error(e);
+        return;
+      }
+      renderUser();
+      setView('app');
+      if (!window.location.hash) {
+        window.location.hash = '#dashboard';
+      }
+      renderPage(getPageFromHash());
+      startHeaderClock();
+      refreshKelaseh();
+      if (currentUser.role === 'admin') {
+        loadAdminCities();
+        refreshAdminUsers();
+        refreshAdminCities();
+        refreshAdminItems();
+        refreshAdminLogs();
+        refreshAdminStats();
+        refreshAdminSmsSettings();
       }
     })
     .fail((xhr) => {
@@ -587,7 +520,6 @@ $(document).on('submit', '#formLogin', function (e) {
       renderPage(getPageFromHash());
       startHeaderClock();
       refreshKelaseh();
-      refreshKelasehToday();
       if (currentUser && currentUser.role === 'admin') {
         loadAdminCities();
         refreshAdminUsers();
@@ -633,83 +565,6 @@ $(document).on('click', '#btnKelasehSearch', function () {
   refreshKelaseh();
 });
 
-function checkKelasehHistory(type) {
-  const inputName = type === 'plaintiff' ? 'plaintiff_national_code' : 'defendant_national_code';
-  const tbodyId = type === 'plaintiff' ? '#historyPlaintiffTbody' : '#historyDefendantTbody';
-  const val = $(`[name="${inputName}"]`).val();
-
-  if (!val || val.length < 10) {
-    $(tbodyId).empty();
-    toggleHistorySection();
-    return;
-  }
-
-  api('kelaseh.history.check', { national_code: val })
-    .done((res) => {
-      const pList = (res.data && res.data.plaintiff) || [];
-      const dList = (res.data && res.data.defendant) || [];
-      const all = [];
-
-      // Combine and format
-      pList.forEach(item => {
-        all.push({
-          code: item.code,
-          date: item.created_at_jalali,
-          opposite: item.defendant_name + ' (خوانده)',
-          raw_date: item.created_at_jalali // simplify sort if needed
-        });
-      });
-      dList.forEach(item => {
-        all.push({
-          code: item.code,
-          date: item.created_at_jalali,
-          opposite: item.plaintiff_name + ' (خواهان)',
-          raw_date: item.created_at_jalali
-        });
-      });
-
-      // Render
-      const rows = all.map(item => {
-        const c = $('<div/>').text(toPersianDigits(item.code)).html();
-        const d = $('<div/>').text(toPersianDigits(item.date)).html();
-        const o = $('<div/>').text(toPersianDigits(item.opposite)).html();
-        return `<tr><td>${c}</td><td>${d}</td><td>${o}</td></tr>`;
-      }).join('');
-
-      $(tbodyId).html(rows || `<tr><td colspan="3" class="text-center text-muted">سابقه‌ای یافت نشد.</td></tr>`);
-      toggleHistorySection();
-    })
-    .fail(() => {
-      // Ignore errors (maybe invalid national code format locally handled)
-      $(tbodyId).empty();
-      toggleHistorySection();
-    });
-}
-
-function toggleHistorySection() {
-  const pHas = $('#historyPlaintiffTbody').children().length > 0;
-  const dHas = $('#historyDefendantTbody').children().length > 0;
-  
-  if (pHas || dHas) {
-    $('#historyCheckSection').removeClass('d-none');
-  } else {
-    $('#historyCheckSection').addClass('d-none');
-  }
-}
-
-$(document).on('change', '.national-check', function() {
-  const name = $(this).attr('name');
-  if (name === 'plaintiff_national_code') checkKelasehHistory('plaintiff');
-  if (name === 'defendant_national_code') checkKelasehHistory('defendant');
-});
-
-$(document).on('input', '.national-check', function() {
-    const val = $(this).val();
-    if (val && val.length === 10) {
-        $(this).trigger('change');
-    }
-});
-
 $(document).on('submit', '#formKelasehCreate', function (e) {
   e.preventDefault();
   const submitter = (e.originalEvent && e.originalEvent.submitter) || null;
@@ -723,7 +578,6 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
       showToast(code ? `شناسه پرونده ایجاد شد: ${code}` : (res.message || 'ثبت شد.'), 'success');
       this.reset();
       refreshKelaseh();
-      refreshKelasehToday();
       if (code) {
         window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
       }
@@ -776,7 +630,7 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-print', function () {
   window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
 });
 
-$(document).on('click', '.btn-kelaseh-label', function () {
+$(document).on('click', '#kelasehTbody .btn-kelaseh-label', function () {
   const tr = $(this).closest('tr');
   const raw = tr.attr('data-json');
   if (!raw) {
@@ -787,119 +641,19 @@ $(document).on('click', '.btn-kelaseh-label', function () {
   window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
 });
 
-$(document).on('click', '#kelasehTodayTbody .btn-kelaseh-edit', function () {
-    const tr = $(this).closest('tr');
-    const raw = tr.attr('data-json');
-    if (!raw) return;
-    const payload = JSON.parse(decodeURIComponent(raw));
-    
-    // Fill the edit form
-    $('#formKelasehEdit [name=code]').val(payload.code);
-    $('#formKelasehEdit [name=plaintiff_name]').val(payload.plaintiff_name);
-    $('#formKelasehEdit [name=defendant_name]').val(payload.defendant_name);
-    $('#formKelasehEdit [name=plaintiff_national_code]').val(payload.plaintiff_national_code);
-    $('#formKelasehEdit [name=defendant_national_code]').val(payload.defendant_national_code);
-    $('#formKelasehEdit [name=plaintiff_mobile]').val(payload.plaintiff_mobile);
-    $('#formKelasehEdit [name=defendant_mobile]').val(payload.defendant_mobile);
-    
-    new bootstrap.Modal(document.getElementById('modalKelasehEdit')).show();
-});
-
-$(document).on('click', '#kelasehTodayTbody .btn-kelaseh-void', function () {
-    const tr = $(this).closest('tr');
-    const raw = tr.attr('data-json');
-    if (!raw) return;
-    const payload = JSON.parse(decodeURIComponent(raw));
-    const code = payload.code;
-    
-    if (!confirm('این پرونده ابطال شود؟')) return;
-    
-    api('kelaseh.set_status', { code, status: 'voided' })
-        .done((res) => {
-            showToast(res.message || 'ابطال شد.', 'success');
-            refreshKelasehToday();
-            refreshKelaseh();
-        })
-        .fail((xhr) => {
-            showToast((xhr.responseJSON && xhr.responseJSON.message) || 'ابطال ناموفق بود.', 'error');
-        });
-});
-
-$(document).on('click', '#kelasehTodayTbody .btn-kelaseh-toggle', function () {
-    const tr = $(this).closest('tr');
-    const raw = tr.attr('data-json');
-    if (!raw) return;
-    const payload = JSON.parse(decodeURIComponent(raw));
-    const code = payload.code;
-    const status = payload.status;
-
-    if (status === 'voided') {
-        showToast('پرونده ابطال شده است.', 'error');
-        return;
-    }
-    const next = status === 'inactive' ? 'active' : 'inactive';
-    api('kelaseh.set_status', { code, status: next })
-        .done((res) => {
-            showToast(res.message || 'وضعیت به‌روزرسانی شد.', 'success');
-            refreshKelasehToday();
-            refreshKelaseh();
-        })
-        .fail((xhr) => {
-            showToast((xhr.responseJSON && xhr.responseJSON.message) || 'عملیات ناموفق بود.', 'error');
-        });
-});
 $(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
-    // Just toggle check, do nothing immediate
-});
-
-$(document).on('click', '#btnKelasehPrintLabels', function () {
-  const codes = [];
-  $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
-    const tr = $(this).closest('tr');
-    const raw = tr.attr('data-json');
-    if (raw) {
-      const payload = JSON.parse(decodeURIComponent(raw));
-      if (payload.code) codes.push(payload.code);
-    }
-  });
-
-  if (codes.length === 0) {
-    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+  if (!this.checked) {
     return;
   }
-  window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
-});
-
-$(document).on('click', '#btnKelasehTodayPrintAllLabels', function () {
-  const codes = [];
-  
-  // First check if any checkbox is checked
-  const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
-  if (checked.length > 0) {
-    checked.each(function () {
-        const tr = $(this).closest('tr');
-        const raw = tr.attr('data-json');
-        if (raw) {
-          const payload = JSON.parse(decodeURIComponent(raw));
-          if (payload.code) codes.push(payload.code);
-        }
-    });
-  } else {
-    // Fallback: collect all rows if nothing selected
-    $('#kelasehTodayTbody tr').each(function () {
-        const raw = $(this).attr('data-json');
-        if (raw) {
-          const payload = JSON.parse(decodeURIComponent(raw));
-          if (payload.code) codes.push(payload.code);
-        }
-    });
-  }
-
-  if (codes.length === 0) {
-    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+  const tr = $(this).closest('tr');
+  const raw = tr.attr('data-json');
+  if (!raw) {
     return;
   }
-  window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
+  const payload = JSON.parse(decodeURIComponent(raw));
+  const code = payload.code;
+  window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
+  this.checked = false;
 });
 
 $(document).on('click', '#kelasehTbody .btn-kelaseh-sms', function () {
@@ -956,7 +710,6 @@ $(document).on('submit', '#formKelasehEdit', function (e) {
         modal.hide();
       }
       refreshKelaseh();
-      refreshKelasehToday();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ویرایش ناموفق بود.';
@@ -982,7 +735,6 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-toggle', function () {
     .done((res) => {
       showToast(res.message || 'وضعیت به‌روزرسانی شد.', 'success');
       refreshKelaseh();
-      refreshKelasehToday();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'عملیات ناموفق بود.';
@@ -1005,7 +757,6 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-void', function () {
     .done((res) => {
       showToast(res.message || 'ابطال شد.', 'success');
       refreshKelaseh();
-      refreshKelasehToday();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ابطال ناموفق بود.';
@@ -1013,92 +764,14 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-void', function () {
     });
 });
 
-function updateAdminCreateUserFields() {
-  const role = $('#adminRoleSelect').val();
-  const branchWrap = $('#adminBranchMultiWrap');
-  const officeWrap = $('#adminOfficeBranchWrap');
-  const userWrap = $('#adminUserBranchesWrap');
-  const citySelect = $('#adminCitySelect');
-
-  branchWrap.addClass('d-none');
-  officeWrap.addClass('d-none');
-  userWrap.addClass('d-none');
-  
-  // Admin doesn't need city, others do
-  if (role === 'admin') {
-      citySelect.prop('required', false).closest('div').addClass('d-none');
-  } else {
-      citySelect.prop('required', true).closest('div').removeClass('d-none');
-  }
-
-  if (role === 'branch_admin') {
-    branchWrap.removeClass('d-none');
-    if ($('#adminCreateBranchList').is(':empty')) {
-      let html = '';
-      for (let i = 1; i <= 15; i++) {
-        html += `
-        <div class="col-6 col-md-4 col-lg-3">
-            <div class="border rounded p-2 h-100">
-                <div class="form-check mb-1">
-                    <input class="form-check-input branch-check" type="checkbox" name="branches_check[]" value="${i}" id="create_br_${i}">
-                    <label class="form-check-label small" for="create_br_${i}">شعبه ${i}</label>
-                </div>
-                <input type="number" class="form-control form-control-sm branch-capacity" data-branch="${i}" value="15" min="1" max="999" placeholder="ظرفیت" disabled>
-            </div>
-        </div>`;
-      }
-      $('#adminCreateBranchList').html(html);
-    }
-  } else if (role === 'office_admin') {
-    officeWrap.removeClass('d-none');
-  } else if (role === 'user') {
-    userWrap.removeClass('d-none');
-  }
-}
-
-$(document).on('change', '#adminRoleSelect', updateAdminCreateUserFields);
-
-$(document).on('change', '#adminCreateBranchList .branch-check', function () {
-  const capInput = $(this).closest('div.border').find('.branch-capacity');
-  capInput.prop('disabled', !this.checked);
-});
-
 $(document).on('submit', '#formAdminCreateUser', function (e) {
   e.preventDefault();
-  const form = $(this);
-  const data = {
-    first_name: form.find('[name="first_name"]').val(),
-    last_name: form.find('[name="last_name"]').val(),
-    username: form.find('[name="username"]').val(),
-    mobile: form.find('[name="mobile"]').val(),
-    password: form.find('[name="password"]').val(),
-    city_code: form.find('[name="city_code"]').val(),
-    role: form.find('[name="role"]').val(),
-    branch_count: form.find('[name="branch_count"]').val(),
-    branch_start_no: form.find('[name="branch_start_no"]').val(),
-    branch_no: form.find('[name="branch_no"]').val(),
-  };
-
-  if (data.role === 'branch_admin') {
-    const branches = [];
-    const branchCaps = {};
-    $('#adminCreateBranchList .branch-check:checked').each(function () {
-      const b = $(this).val();
-      const cap = $(this).closest('div.border').find('.branch-capacity').val();
-      branches.push(b);
-      branchCaps[b] = cap;
-    });
-    data.branches = branches;
-    data.branch_caps = branchCaps;
-  }
-
+  const data = Object.fromEntries(new FormData(this));
   api('admin.users.create', data)
     .done((res) => {
       showToast(res.message || 'کاربر ایجاد شد.', 'success');
-      form[0].reset();
-      $('#adminCreateBranchList input[type="checkbox"]').prop('checked', false).trigger('change');
+      this.reset();
       refreshAdminUsers();
-      updateAdminCreateUserFields();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ایجاد کاربر ناموفق بود.';
@@ -1132,10 +805,9 @@ $(document).on('submit', '#formAdminCityCreate', function (e) {
 
 $(document).on('click', '#adminCitiesTbody .btn-city-save', function () {
   const tr = $(this).closest('tr');
-  const code = tr.data('code'); // Original code
-  const newCode = tr.find('.city-code').val();
+  const code = tr.data('code');
   const name = tr.find('.city-name').val();
-  api('admin.cities.update', { code, new_code: newCode, name })
+  api('admin.cities.update', { code, name })
     .done((res) => {
       showToast(res.message || 'ذخیره شد.', 'success');
       adminCitiesLoaded = false;
@@ -1221,6 +893,7 @@ $(document).on('submit', '#formAdminSmsSettings', function (e) {
   const sender = $('#adminSmsSender').val() || '';
   const tpl_plaintiff = $('#adminSmsTplPlaintiff').val() || '';
   const tpl_defendant = $('#adminSmsTplDefendant').val() || '';
+    }
 
   api('admin.sms.settings.set', { enabled, api_key, sender, tpl_plaintiff, tpl_defendant })
     .done((res) => {
@@ -1231,40 +904,6 @@ $(document).on('submit', '#formAdminSmsSettings', function (e) {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ذخیره تنظیمات پیامک ناموفق بود.';
       showToast(msg, 'error');
     });
-});
-
-/* ADMIN USER EDIT & DELETE LOGIC */
-
-function updateAdminEditUserFields() {
-  const role = $('#adminEditRoleSelect').val();
-  const branchWrap = $('#adminEditBranchWrap');
-  const officeWrap = $('#adminEditOfficeWrap');
-
-  branchWrap.addClass('d-none');
-  officeWrap.addClass('d-none');
-
-  if (role === 'branch_admin') {
-    branchWrap.removeClass('d-none');
-  } else if (role === 'office_admin') {
-    officeWrap.removeClass('d-none');
-  }
-}
-
-$(document).on('change', '#adminEditRoleSelect', updateAdminEditUserFields);
-
-$(document).on('click', '.btn-admin-edit-user', function () {
-    const tr = $(this).closest('tr');
-    const raw = tr.attr('data-json');
-    if (!raw) return;
-    
-    let u;
-    try {
-        u = JSON.parse(decodeURIComponent(raw));
-    } catch(e) {
-        console.error(e);
-        return;
-    }
-
     const form = $('#formAdminEditUser');
     form.find('[name="id"]').val(u.id);
     form.find('[name="first_name"]').val(u.first_name || '');
@@ -1281,8 +920,11 @@ $(document).on('click', '.btn-admin-edit-user', function () {
     const userBranches = (u.branches || []);
     const globalCap = u.branch_capacity || 15;
     
-    for (let i = 1; i <= 15; i++) {
+    for (let i = 1; i <= 99; i++) {
         const isChecked = userBranches.includes(i) ? 'checked' : '';
+        // Note: per-branch capacity is not currently returned by list API, so we default to global
+        // If we want to support per-branch capacity edit, we need backend support in list or fetch details
+        // For now we use global cap or empty.
         const cap = globalCap;
         
         html += `
@@ -1320,8 +962,11 @@ $(document).on('submit', '#formAdminEditUser', function(e) {
         role: form.find('[name="role"]').val(),
         is_active: form.find('[name="is_active"]').val(),
         branch_count: form.find('[name="branch_count"]').val(),
-        branch_capacity: 15
+        branch_capacity: 15 // default or from logic?
     };
+    
+    // Determine branch capacity for non-branch-admin users (global)
+    // Actually API handles it. If role is branch_admin, we send branches array.
     
     if (data.role === 'branch_admin') {
         const branches = [];
@@ -1338,7 +983,7 @@ $(document).on('submit', '#formAdminEditUser', function(e) {
             showToast(res.message, 'success');
             bootstrap.Modal.getInstance(document.getElementById('modalAdminEditUser')).hide();
             if (currentUser && currentUser.role === 'admin') refreshAdminUsers();
-            else refreshOfficeUsers(); // assuming office user refresh function exists or fallback
+            else refreshOfficeUsers();
         })
         .fail(xhr => {
              showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در ذخیره.', 'error');
@@ -1354,169 +999,11 @@ $(document).on('click', '.btn-admin-delete-user', function() {
         .done(res => {
             showToast(res.message, 'success');
             if (currentUser && currentUser.role === 'admin') refreshAdminUsers();
-            else refreshOfficeUsers(); // assuming office user refresh function exists
+            else refreshOfficeUsers();
         })
         .fail(xhr => {
              showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در حذف.', 'error');
         });
 });
 
-function refreshAdminDetailedStats() {
-  return api('admin.detailed.stats', {})
-    .done((res) => {
-      const stats = (res.data && res.data.stats) || [];
-      const rows = stats.map((s) => {
-        const city = $('<div/>').text(toPersianDigits(s.city_name || '')).html();
-        const role = s.role === 'office_admin' ? 'مدیر اداره' : (s.role === 'branch_admin' ? 'مدیر شعبه' : s.role);
-        const name = $('<div/>').text(toPersianDigits(s.display_name || s.username || '')).html();
-        const total = toPersianDigits(s.total || 0);
-        return `<tr><td>${city}</td><td>${role}</td><td>${name}</td><td>${total}</td></tr>`;
-      });
-      $('#adminDetailedStatsTbody').html(rows.join('') || `<tr><td colspan="4" class="text-center text-secondary py-3">داده‌ای یافت نشد.</td></tr>`);
-    })
-    .fail((xhr) => {
-      showToast('خطا در دریافت آمار تفکیکی.', 'error');
-    });
-}
-
-$(document).on('click', '#btnAdminDetailedStatsRefresh', function () {
-  refreshAdminDetailedStats();
-});
-
-function refreshAdminKelasehSearch() {
-  const q = $('#adminKelasehSearchQuery').val() || '';
-  if (!q.trim()) {
-    showToast('لطفاً عبارتی برای جستجو وارد کنید.', 'error');
-    return;
-  }
-  api('admin.kelaseh.search', { q })
-    .done((res) => {
-      const rows = (res.data && res.data.results) || [];
-      const html = rows.map((r) => {
-        // Use full_code if available
-        const rawCode = r.full_code || r.code || '';
-        const code = $('<div/>').text(toPersianDigits(rawCode)).html();
-        const owner = $('<div/>').text(toPersianDigits((r.city_name ? r.city_name + ' / ' : '') + (r.owner_name || ''))).html();
-        const plaintiff = $('<div/>').text(toPersianDigits(r.plaintiff_name || '')).html();
-        const plaintiffNC = $('<div/>').text(toPersianDigits(r.plaintiff_national_code || '')).html();
-        const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
-        const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || '')).html();
-        
-        return `<tr><td dir="ltr" class="text-end fw-bold">${code}</td><td>${owner}</td><td>${plaintiff}</td><td>${plaintiffNC}</td><td>${defendant}</td><td>${date}</td></tr>`;
-      }).join('');
-      $('#adminKelasehSearchTbody').html(html || `<tr><td colspan="6" class="text-center text-secondary py-3">موردی یافت نشد.</td></tr>`);
-    })
-    .fail((xhr) => {
-       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در جستجو.';
-       showToast(msg, 'error');
-    });
-}
-
-$(document).on('click', '#btnAdminKelasehSearch', function () {
-  refreshAdminKelasehSearch();
-});
-
-  const modalEl = document.getElementById('modalOfficeCreateUser');
-  if (modalEl) {
-    modalEl.addEventListener('shown.bs.modal', function () {
-        if ($('#officeCreateBranchList').is(':empty')) {
-          let html = '';
-          for (let i = 1; i <= 15; i++) {
-            html += `
-            <div class="col-6 col-md-4 col-lg-3">
-                <div class="border rounded p-2 h-100">
-                    <div class="form-check mb-1">
-                        <input class="form-check-input branch-check" type="checkbox" name="branches_check[]" value="${i}" id="off_create_br_${i}">
-                        <label class="form-check-label small" for="off_create_br_${i}">شعبه ${i}</label>
-                    </div>
-                    <input type="number" class="form-control form-control-sm branch-capacity" data-branch="${i}" value="15" min="1" max="999" placeholder="ظرفیت" disabled>
-                </div>
-            </div>`;
-          }
-          $('#officeCreateBranchList').html(html);
-        }
-    });
-  }
-
-  $(document).on('change', '#officeCreateBranchList .branch-check', function () {
-    const capInput = $(this).closest('div.border').find('.branch-capacity');
-    capInput.prop('disabled', !this.checked);
-  });
-
-  $(document).on('submit', '#formOfficeCreateUser', function (e) {
-    e.preventDefault();
-    const form = $(this);
-    const data = {
-        role: 'branch_admin',
-        first_name: form.find('[name="first_name"]').val(),
-        last_name: form.find('[name="last_name"]').val(),
-        username: form.find('[name="username"]').val(),
-        mobile: form.find('[name="mobile"]').val(),
-        password: form.find('[name="password"]').val(),
-    };
-    
-    // Collect branches
-    const branches = [];
-    const branchCaps = {};
-    $('#officeCreateBranchList .branch-check:checked').each(function () {
-      const b = $(this).val();
-      const cap = $(this).closest('div.border').find('.branch-capacity').val();
-      branches.push(b);
-      branchCaps[b] = cap;
-    });
-    data.branches = branches;
-    data.branch_caps = branchCaps;
-
-    api('admin.users.create', data)
-        .done(res => {
-             showToast(res.message || 'مدیر شعبه ایجاد شد.', 'success');
-             form[0].reset();
-             $('#officeCreateBranchList input[type="checkbox"]').prop('checked', false).trigger('change');
-             bootstrap.Modal.getInstance(document.getElementById('modalOfficeCreateUser')).hide();
-             refreshOfficeUsers();
-        })
-        .fail(xhr => {
-             showToast((xhr.responseJSON && xhr.responseJSON.message) || 'ایجاد ناموفق بود.', 'error');
-        });
-  });
-
-  function refreshOfficeCapacities() {
-      api('office.capacities.get', {})
-        .done(res => {
-            const list = res.data.capacities || [];
-            const rows = list.map(item => {
-                return `
-                <tr>
-                    <td>شعبه ${toPersianDigits(item.branch_no)}</td>
-                    <td>
-                        <input type="number" class="form-control form-control-sm office-cap-input" data-branch="${item.branch_no}" value="${item.capacity}" min="0" max="999">
-                    </td>
-                    <td>
-                        <button class="btn btn-primary btn-sm btn-office-save-cap" data-branch="${item.branch_no}">ذخیره</button>
-                    </td>
-                </tr>`;
-            }).join('');
-            $('#officeCapacitiesTbody').html(rows);
-        })
-        .fail(() => showToast('خطا در دریافت ظرفیت‌ها', 'error'));
-  }
-
-  $(document).on('click', '#btnOfficeCapacitiesRefresh', refreshOfficeCapacities);
-  
-  // Refresh when tab shown
-  $('button[data-bs-target="#officeCapacities"]').on('shown.bs.tab', function () {
-      refreshOfficeCapacities();
-  });
-
-  $(document).on('click', '.btn-office-save-cap', function() {
-      const btn = $(this);
-      const branch = btn.data('branch');
-      const input = btn.closest('tr').find('.office-cap-input');
-      const cap = input.val();
-      
-      api('office.capacities.update', { branch_no: branch, capacity: cap })
-        .done(res => showToast(res.message, 'success'))
-        .fail(xhr => showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در ذخیره', 'error'));
-  });
-
-  $(boot);
+$(boot);

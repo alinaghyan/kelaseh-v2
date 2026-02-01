@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>چاپ لیبل پرونده</title>
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('assets/fonts/Vazirmatn.woff2') format('woff2');
+        }
+        body {
+            font-family: 'Vazirmatn', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background: #eee;
+        }
+        .print-container {
+            max-width: 210mm; /* A4 width */
+            margin: 0 auto;
+            background: #fff;
+            padding: 10mm;
+            min-height: 297mm;
+        }
+        .label-box {
+            border: 2px solid #000;
+            padding: 15px;
+            margin-bottom: 20px;
+            page-break-inside: avoid;
+            position: relative;
+        }
+        .label-header {
+            text-align: center;
+            font-weight: bold;
+            font-size: 24px;
+            margin-bottom: 15px;
+            border-bottom: 1px solid #000;
+            padding-bottom: 10px;
+        }
+        .label-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 10px;
+            font-size: 18px;
+            border-bottom: 1px dotted #ccc;
+            padding-bottom: 5px;
+        }
+        .label-row:last-child {
+            border-bottom: none;
+        }
+        .label-footer {
+            font-size: 14px;
+            color: #444;
+            margin-top: 15px;
+            border-top: 1px solid #000;
+            padding-top: 5px;
+            display: flex;
+            justify-content: space-between;
+        }
+        @media print {
+            body { background: #fff; padding: 0; }
+            .print-container { width: 100%; max-width: none; margin: 0; padding: 0; box-shadow: none; }
+            .no-print { display: none !important; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="no-print" style="text-align: center; margin-bottom: 20px;">
+    <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">چاپ / ذخیره PDF</button>
+</div>
+
+<div class="print-container" id="labelsContainer">
+    <!-- Labels will be injected here -->
+</div>
+
+<script>
+    function toPersianDigits(str) {
+        if (!str) return '';
+        const map = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+        return String(str).replace(/[0-9]/g, function (w) {
+            return map[+w];
+        });
+    }
+
+    const queue = localStorage.getItem('print_queue');
+    if (queue) {
+        const items = JSON.parse(queue);
+        const container = document.getElementById('labelsContainer');
+        
+        items.forEach(item => {
+            const code = toPersianDigits(item.full_code || item.code);
+            const pName = item.plaintiff_name || '-';
+            const dName = item.defendant_name || '-';
+            const date = toPersianDigits(item.created_at_jalali || '-');
+            const city = item.city_name ? 'اداره ' + item.city_name : 'اداره ...';
+
+            const div = document.createElement('div');
+            div.className = 'label-box';
+            div.innerHTML = `
+                <div class="label-header">کلاسه: ${code}</div>
+                <div class="label-row">
+                    <span>خواهان: ${pName}</span>
+                </div>
+                <div class="label-row">
+                    <span>خوانده: ${dName}</span>
+                </div>
+                <div class="label-footer">
+                    <span>تاریخ ثبت: ${date}</span>
+                    <span>${city}</span>
+                </div>
+            `;
+            container.appendChild(div);
+        });
+    } else {
+        document.getElementById('labelsContainer').innerHTML = '<div style="text-align:center; padding: 50px;">موردی برای چاپ یافت نشد.</div>';
+    }
+</script>
+
+</body>
+</html>

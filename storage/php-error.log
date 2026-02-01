@@ -21,3 +21,21 @@ Stack trace:
 #2 C:\xampp\htdocs\kelaseh-v2\core.php(1563): action_kelaseh_create(Array)
 #3 C:\xampp\htdocs\kelaseh-v2\core.php(1630): handle_request()
 #4 {main}
+[01-Feb-2026 16:35:50 Asia/Tehran] PDOException: SQLSTATE[HY000] [2002] No connection could be made because the target machine actively refused it in C:\xampp\htdocs\kelaseh-v2\core.php:73
+Stack trace:
+#0 C:\xampp\htdocs\kelaseh-v2\core.php(73): PDO->__construct('mysql:host=127....', 'root', Object(SensitiveParameterValue), Array)
+#1 C:\xampp\htdocs\kelaseh-v2\core.php(649): db()
+#2 C:\xampp\htdocs\kelaseh-v2\core.php(767): bootstrap_admin_if_needed()
+#3 C:\xampp\htdocs\kelaseh-v2\core.php(2070): action_login(Array)
+#4 C:\xampp\htdocs\kelaseh-v2\core.php(2179): handle_request()
+#5 {main}
+[01-Feb-2026 18:15:50 Asia/Tehran] PHP Fatal error:  Uncaught PDOException: SQLSTATE[42S22]: Column not found: 1054 Unknown column 'branch_capacity' in 'field list' in C:\xampp\htdocs\kelaseh-v2\fix_login.php:15
+Stack trace:
+#0 C:\xampp\htdocs\kelaseh-v2\fix_login.php(15): PDO->prepare('INSERT INTO use...')
+#1 {main}
+  thrown in C:\xampp\htdocs\kelaseh-v2\fix_login.php on line 15
+[01-Feb-2026 18:16:18 Asia/Tehran] PHP Fatal error:  Uncaught PDOException: SQLSTATE[23000]: Integrity constraint violation: 1452 Cannot add or update a child row: a foreign key constraint fails (`kelaseh_v2`.`users`, CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE) in C:\xampp\htdocs\kelaseh-v2\fix_login.php:15
+Stack trace:
+#0 C:\xampp\htdocs\kelaseh-v2\fix_login.php(15): PDOStatement->execute(Array)
+#1 {main}
+  thrown in C:\xampp\htdocs\kelaseh-v2\fix_login.php on line 15

@@ -54,6 +54,9 @@ ALTER TABLE `users`
   ADD KEY `idx_users_city_code` (`city_code`);
 
 ALTER TABLE `users`
+  MODIFY COLUMN `role` ENUM('admin','office_admin','branch_admin','user') NOT NULL DEFAULT 'user';
+
+ALTER TABLE `users`
   ADD CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE;
 
 CREATE TABLE IF NOT EXISTS `app_settings` (
@@ -87,6 +90,12 @@ CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   KEY `idx_kelaseh_numbers_owner_date` (`owner_id`, `jalali_full_ymd`, `branch_no`, `seq_no`),
   KEY `idx_kelaseh_numbers_created_at` (`created_at`),
   KEY `idx_kelaseh_numbers_plaintiff` (`plaintiff_national_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+CREATE TABLE IF NOT EXISTS `user_branches` (
+  `user_id` INT UNSIGNED NOT NULL,
+  `branch_no` TINYINT UNSIGNED NOT NULL,
+  PRIMARY KEY (`user_id`, `branch_no`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE IF NOT EXISTS `kelaseh_daily_counters` (

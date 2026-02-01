@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `email` VARCHAR(255) NULL,
   `username` VARCHAR(50) NOT NULL,
   `password_hash` VARCHAR(255) NOT NULL,
-  `role` ENUM('admin','user') NOT NULL DEFAULT 'user',
+  `role` ENUM('admin','office_admin','branch_admin','user') NOT NULL DEFAULT 'user',
   `display_name` VARCHAR(100) NULL,
   `first_name` VARCHAR(60) NULL,
   `last_name` VARCHAR(60) NULL,
@@ -42,6 +42,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `city_code` CHAR(2) NULL,
   `branch_count` TINYINT UNSIGNED NULL,
   `branch_start_no` TINYINT UNSIGNED NOT NULL DEFAULT 1,
+  `branch_capacity` INT UNSIGNED NOT NULL DEFAULT 10,
   `is_active` TINYINT(1) NOT NULL DEFAULT 1,
   `created_at` DATETIME NOT NULL,
   `last_login_at` DATETIME NULL,
@@ -50,6 +51,21 @@ CREATE TABLE IF NOT EXISTS `users` (
   UNIQUE KEY `uniq_users_username` (`username`),
   KEY `idx_users_city_code` (`city_code`),
   CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+CREATE TABLE IF NOT EXISTS `user_branches` (
+  `user_id` INT UNSIGNED NOT NULL,
+  `branch_no` TINYINT UNSIGNED NOT NULL,
+  PRIMARY KEY (`user_id`, `branch_no`),
+  CONSTRAINT `fk_user_branches_user` FOREIGN KEY (`user_id`) REFERENCES `users` (`id`) ON DELETE CASCADE ON UPDATE CASCADE
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+CREATE TABLE IF NOT EXISTS `office_branch_capacities` (
+  `city_code` CHAR(2) NOT NULL,
+  `branch_no` TINYINT UNSIGNED NOT NULL,
+  `capacity` INT UNSIGNED NOT NULL DEFAULT 15,
+  PRIMARY KEY (`city_code`, `branch_no`),
+  CONSTRAINT `fk_office_branch_capacities_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE IF NOT EXISTS `app_settings` (
@@ -119,4 +135,15 @@ CREATE TABLE IF NOT EXISTS `audit_logs` (
   PRIMARY KEY (`id`),
   KEY `idx_audit_logs_actor_id` (`actor_id`),
   KEY `idx_audit_logs_created_at` (`created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+CREATE TABLE IF NOT EXISTS `sms_logs` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `recipient_mobile` VARCHAR(20) NOT NULL,
+  `message` TEXT NOT NULL,
+  `type` ENUM('plaintiff','defendant') NOT NULL,
+  `status` ENUM('sent','failed') NOT NULL DEFAULT 'sent',
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_sms_logs_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
