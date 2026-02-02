@@ -7,27 +7,6 @@ CREATE TABLE IF NOT EXISTS `isfahan_cities` (
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
-INSERT IGNORE INTO `isfahan_cities` (`code`, `name`) VALUES
-('01','اصفهان (اداره کل)'),
-('02','اصفهان (جنوب)'),
-('03','اصفهان (شمال)'),
-('04','خمینی‌شهر'),
-('05','نجف‌آباد'),
-('06','شاهین‌شهر و میمه'),
-('07','کاشان'),
-('08','آران و بیدگل'),
-('09','نایین'),
-('10','نطنز'),
-('11','سمیرم'),
-('12','شهرضا'),
-('13','دهاقان'),
-('14','لنجان (زرین‌شهر)'),
-('15','فلاورجان'),
-('16','فریدن (داران)'),
-('17','فریدون‌شهر'),
-('18','چادگان'),
-('19','خور و بیابانک');
-
 CREATE TABLE IF NOT EXISTS `users` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `email` VARCHAR(255) NULL,
@@ -147,3 +126,4 @@ CREATE TABLE IF NOT EXISTS `sms_logs` (
   PRIMARY KEY (`id`),
   KEY `idx_sms_logs_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+

@@ -147,3 +147,4 @@ CREATE TABLE IF NOT EXISTS `sms_logs` (
   PRIMARY KEY (`id`),
   KEY `idx_sms_logs_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
