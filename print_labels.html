@@ -56,6 +56,13 @@
             display: flex;
             justify-content: space-between;
         }
+        .label-history {
+            font-size: 14px;
+            margin-top: 10px;
+            padding-top: 6px;
+            border-top: 1px dashed #bbb;
+            line-height: 1.6;
+        }
         @media print {
             body { background: #fff; padding: 0; }
             .print-container { width: 100%; max-width: none; margin: 0; padding: 0; box-shadow: none; }
@@ -94,6 +101,20 @@
             const date = toPersianDigits(item.created_at_jalali || '-');
             const city = item.city_name ? 'اداره ' + item.city_name : 'اداره ...';
 
+            const pHist = Array.isArray(item.history_plaintiff) ? item.history_plaintiff : [];
+            const dHist = Array.isArray(item.history_defendant) ? item.history_defendant : [];
+
+            let histHtml = '';
+            if (pHist.length || dHist.length) {
+                const pLine = pHist.length
+                    ? ('<div>سوابق خواهان: ' + toPersianDigits(pHist.map(h => `${h.code}${h.city ? ' (' + h.city + ')' : ''}`).join('، ')) + '</div>')
+                    : '';
+                const dLine = dHist.length
+                    ? ('<div>سوابق خوانده: ' + toPersianDigits(dHist.map(h => `${h.code}${h.city ? ' (' + h.city + ')' : ''}`).join('، ')) + '</div>')
+                    : '';
+                histHtml = `<div class="label-history">${pLine}${dLine}</div>`;
+            }
+
             const div = document.createElement('div');
             div.className = 'label-box';
             div.innerHTML = `
@@ -108,6 +129,7 @@
                     <span>تاریخ ثبت: ${date}</span>
                     <span>${city}</span>
                 </div>
+                ${histHtml}
             `;
             container.appendChild(div);
         });

@@ -149,6 +149,34 @@ function renderUser() {
   $('#headerNav a[data-page="create"]').closest('li').toggleClass('d-none', isOfficeAdmin);
 }
 
+function updateKelasehBranchSelect() {
+  const wrap = $('#kelasehBranchSelectWrap');
+  const sel = $('#kelasehBranchNoSelect');
+  if (!currentUser || currentUser.role !== 'branch_admin') {
+    wrap.addClass('d-none');
+    sel.html('<option value="">انتخاب خودکار</option>');
+    return;
+  }
+
+  const raw = Array.isArray(currentUser.branches) ? currentUser.branches : [];
+  let branches = raw.map((x) => Number(x)).filter((x) => Number.isFinite(x) && x > 0);
+  if (!branches.length) {
+    const start = Number(currentUser.branch_start_no || 1);
+    const count = Number(currentUser.branch_count || 1);
+    branches = [];
+    for (let i = 0; i < count; i++) branches.push(start + i);
+  }
+  branches = Array.from(new Set(branches)).sort((a, b) => a - b);
+
+  const opts = ['<option value="">انتخاب خودکار</option>'];
+  branches.forEach((b) => {
+    const v = String(b);
+    opts.push(`<option value="${v}">شعبه ${toPersianDigits(String(b).padStart(2, '0'))}</option>`);
+  });
+  sel.html(opts.join(''));
+  wrap.removeClass('d-none');
+}
+
 // Ensure the click handler is attached
 $(document).on('click', '#navItemAdmin a', function(e) {
     e.preventDefault();
@@ -244,6 +272,7 @@ function renderPage(page) {
     $('#cardKelaseh').removeClass('d-none');
     $('#kelasehCreateSection').removeClass('d-none');
     $('#kelasehCardTitle').text('ایجاد شماره کلاسه');
+    updateKelasehBranchSelect();
     return;
   }
 
@@ -256,19 +285,8 @@ function renderPage(page) {
   if (isOfficeAdmin) {
     $('#officePanel').removeClass('d-none');
   }
-  
-  // Branch admin sees capacity management too
-  if (currentUser.role === 'branch_admin') {
-      $('#officePanel').removeClass('d-none');
-      // Hide unrelated tabs for branch admin
-      $('button[data-bs-target="#officeUsers"]').closest('li').addClass('d-none');
-      $('button[data-bs-target="#officeStats"]').closest('li').addClass('d-none');
-      $('button[data-bs-target="#officeKelaseh"]').closest('li').addClass('d-none');
-      
-      // Show capacities tab
-      $('button[data-bs-target="#officeCapacities"]').trigger('click');
-      $('#officePanel .card-header').text('مدیریت ظرفیت شعب');
-  } else if (currentUser.role === 'office_admin') {
+
+  if (currentUser.role === 'office_admin') {
       // Show all tabs for office admin
       $('button[data-bs-target="#officeUsers"]').closest('li').removeClass('d-none');
       $('button[data-bs-target="#officeStats"]').closest('li').removeClass('d-none');
@@ -285,6 +303,7 @@ function generateKelasehRows(rows) {
     const rawCode = r.full_code || r.code || '';
     const code = $('<div/>').text(toPersianDigits(rawCode)).html();
     const branchNo = toPersianDigits(String(r.branch_no || '').padStart(2, '0'));
+    const cityName = $('<div/>').text(toPersianDigits(r.city_name || '')).html();
     const plaintiff = $('<div/>').text(toPersianDigits(r.plaintiff_name || '')).html();
     const plaintiffNC = $('<div/>').text(toPersianDigits(r.plaintiff_national_code || '')).html();
     const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
@@ -341,6 +360,7 @@ function generateKelasehRows(rows) {
         <td class="text-secondary">${rowNo}</td>
         <td><div class="fw-semibold" dir="ltr">${code}</div></td>
         <td class="text-secondary">${branchNo}</td>
+        <td class="text-secondary">${cityName}</td>
         <td>${plaintiff}</td>
         <td>${plaintiffNC}</td>
         <td>${defendant}</td>
@@ -356,7 +376,7 @@ function generateKelasehRows(rows) {
 
 function renderKelaseh(rows) {
   const html = generateKelasehRows(rows);
-  $('#kelasehTbody').html(html || `<tr><td colspan="10" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  $('#kelasehTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
 }
 
 function refreshKelasehToday() {
@@ -364,7 +384,7 @@ function refreshKelasehToday() {
     .done((res) => {
       const rows = (res.data && res.data.kelaseh) || [];
       const html = generateKelasehRows(rows);
-      $('#kelasehTodayTbody').html(html || `<tr><td colspan="10" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
+      $('#kelasehTodayTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
     })
     .fail(() => {});
 }
@@ -388,42 +408,102 @@ function refreshAdminUsers() {
   return api('admin.users.list', { q })
     .done((res) => {
       const users = (res.data && res.data.users) || [];
-      const rows = users.map((u) => {
+      const admins = users.filter((u) => u.role === 'admin');
+      const officeAdmins = users.filter((u) => u.role === 'office_admin');
+      const branchAdmins = users.filter((u) => u.role === 'branch_admin');
+      const others = users.filter((u) => u.role !== 'admin' && u.role !== 'office_admin' && u.role !== 'branch_admin');
+
+      const renderUserRow = (u, opts) => {
         const username = $('<div/>').text(toPersianDigits(u.username || '')).html();
         const email = $('<div/>').text(toPersianDigits(u.email || '')).html();
         const name = $('<div/>').text(toPersianDigits(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim())).html();
         const mobile = $('<div/>').text(toPersianDigits(u.mobile || '')).html();
-        const city = $('<div/>').text(toPersianDigits(u.city_name || '')).html();
+        const city = $('<div/>').text(toPersianDigits(u.city_name || u.city_code || '')).html();
         const branchesText = (u.branches || '').toString();
-        const branches = $('<div/>').text(branchesText ? `شعبه‌ها: ${toPersianDigits(branchesText.split(',').map((x) => String(x).padStart(2, '0')).join(', '))}` : ((u.branch_start_no && u.branch_count) ? `محدوده شعبه: ${toPersianDigits(String(u.branch_start_no).padStart(2, '0'))} تا ${toPersianDigits(String(u.branch_start_no + u.branch_count - 1).padStart(2, '0'))}` : '')).html();
-        const role = u.role === 'office_admin' ? 'مدیر اداره' : u.role === 'branch_admin' ? 'مدیر شعبه' : 'کاربر عادی';
+        const branchInfoText = branchesText
+          ? `شعبه‌ها: ${toPersianDigits(branchesText.split(',').map((x) => String(x).padStart(2, '0')).join(', '))}`
+          : ((u.branch_start_no && u.branch_count)
+            ? `محدوده: ${toPersianDigits(String(u.branch_start_no).padStart(2, '0'))} تا ${toPersianDigits(String(u.branch_start_no + u.branch_count - 1).padStart(2, '0'))}`
+            : (u.role === 'branch_admin' ? (toPersianDigits(u.branch_count || 1) + ' شعبه') : '-'));
+
+        const role = u.role === 'admin' ? 'مدیر کل' : u.role === 'office_admin' ? 'مدیر اداره' : u.role === 'branch_admin' ? 'مدیر شعبه' : 'کاربر عادی';
         const isActive = Number(u.is_active) === 1 ? 'فعال' : 'غیرفعال';
         const activeClass = Number(u.is_active) === 1 ? 'text-success' : 'text-danger';
-        
         const json = encodeURIComponent(JSON.stringify(u));
 
+        const indent = opts && opts.indent ? 'ps-4' : '';
+        const rowClass = opts && opts.rowClass ? opts.rowClass : '';
+        const metaParts = [mobile].filter(Boolean);
+        const meta = metaParts.length ? `<div class="text-secondary small">${metaParts.join(' | ')}</div>` : '';
+
+        const createBranchBtn = u.role === 'office_admin' ? `<button class="btn btn-outline-success btn-sm btn-admin-create-branch-under-office" type="button">ایجاد مدیر شعبه</button>` : '';
+
         return `
-          <tr data-id="${u.id}" data-json="${json}">
+          <tr data-id="${u.id}" data-json="${json}" class="${rowClass}">
             <td>
-              <div class="fw-semibold">${username || email}</div>
-              ${name ? `<div class="text-secondary small">${name}</div>` : ''}
-              ${(mobile || city || branches) ? `<div class="text-secondary small">${[mobile, city, branches].filter(Boolean).join(' | ')}</div>` : ''}
+              <div class="${indent}">
+                <div class="fw-semibold">${username || email}</div>
+                ${name ? `<div class="text-secondary small">${name}</div>` : ''}
+                ${meta}
+              </div>
             </td>
+            <td class="text-secondary">${u.role === 'admin' ? '-' : city}</td>
             <td>${role}</td>
-            <td>
-               <span class="${activeClass}">${isActive}</span>
-            </td>
-            <td>
-               ${u.role === 'branch_admin' ? toPersianDigits(u.branch_count || 1) + ' شعبه' : '-'}
-            </td>
+            <td><span class="${activeClass}">${isActive}</span></td>
+            <td class="text-secondary">${branchInfoText}</td>
             <td class="text-end">
               <button class="btn btn-outline-primary btn-sm btn-admin-edit-user" type="button">ویرایش</button>
+              ${createBranchBtn}
               <button class="btn btn-outline-danger btn-sm btn-admin-delete-user" type="button">حذف</button>
             </td>
           </tr>
         `;
+      };
+
+      const rows = [];
+
+      admins
+        .slice()
+        .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+        .forEach((a) => rows.push(renderUserRow(a, { rowClass: 'table-primary' })));
+
+      const cityGroups = {};
+      const getKey = (u) => String(u.city_code || '');
+      officeAdmins.forEach((u) => {
+        const key = getKey(u);
+        if (!cityGroups[key]) cityGroups[key] = { city_code: key, city_name: u.city_name || '', office: [], branch: [] };
+        cityGroups[key].office.push(u);
       });
-      $('#adminUsersTbody').html(rows.join('') || `<tr><td colspan="5" class="text-center text-secondary py-3">کاربری یافت نشد.</td></tr>`);
+      branchAdmins.forEach((u) => {
+        const key = getKey(u);
+        if (!cityGroups[key]) cityGroups[key] = { city_code: key, city_name: u.city_name || '', office: [], branch: [] };
+        if (!cityGroups[key].city_name && u.city_name) cityGroups[key].city_name = u.city_name;
+        cityGroups[key].branch.push(u);
+      });
+
+      Object.values(cityGroups)
+        .sort((a, b) => {
+          const an = String(a.city_name || '');
+          const bn = String(b.city_name || '');
+          if (an && bn) return an.localeCompare(bn);
+          return String(a.city_code || '').localeCompare(String(b.city_code || ''));
+        })
+        .forEach((g) => {
+          const cityLabel = $('<div/>').text(toPersianDigits(g.city_name || g.city_code || '')).html();
+          rows.push(`<tr class="table-secondary"><td colspan="6" class="fw-semibold">اداره ${cityLabel || '—'}</td></tr>`);
+          g.office
+            .slice()
+            .sort((a, b) => Number(b.id || 0) - Number(a.id || 0))
+            .forEach((oa) => rows.push(renderUserRow(oa, { rowClass: 'table-light' })));
+          g.branch
+            .slice()
+            .sort((a, b) => String(a.username || '').localeCompare(String(b.username || '')))
+            .forEach((ba) => rows.push(renderUserRow(ba, { indent: true }))); 
+        });
+
+      others.forEach((u) => rows.push(renderUserRow(u, {})));
+
+      $('#adminUsersTbody').html(rows.join('') || `<tr><td colspan="6" class="text-center text-secondary py-3">کاربری یافت نشد.</td></tr>`);
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت کاربران.';
@@ -517,6 +597,12 @@ function refreshAdminSmsSettings() {
     .done((res) => {
       const s = (res.data && res.data.settings) || {};
       $('#adminSmsEnabled').prop('checked', Number(s.enabled) === 1);
+      $('#adminSmsOtpEnabled').prop('checked', Number(s.otp_enabled) === 1);
+      $('#adminSmsOtpSettings').toggleClass('d-none', Number(s.otp_enabled) !== 1);
+      $('#adminSmsTplOtp').val(s.tpl_otp || '');
+      $('#adminSmsOtpLen').val(s.otp_len || 6);
+      $('#adminSmsOtpTtl').val(s.otp_ttl || 5);
+      $('#adminSmsOtpMaxTries').val(s.otp_max_tries || 5);
       $('#adminSmsSender').val(s.sender || '');
       $('#adminSmsTplPlaintiff').val(s.tpl_plaintiff || '');
       $('#adminSmsTplDefendant').val(s.tpl_defendant || '');
@@ -598,8 +684,6 @@ function boot() {
           refreshOfficeUsers();
           refreshOfficeKelasehSearch();
           refreshOfficeCapacities();
-        } else if (currentUser.role === 'branch_admin') {
-          refreshOfficeCapacities();
         }
       }
     })
@@ -612,10 +696,23 @@ function boot() {
 
 $(document).on('submit', '#formLogin', function (e) {
   e.preventDefault();
-  const data = Object.fromEntries(new FormData(this));
-  api('login', data)
+  const formEl = this;
+  const data = Object.fromEntries(new FormData(formEl));
+  api('login', { login: data.login, password: data.password })
     .done((res) => {
       csrfToken = (res.data && res.data.csrf_token) || csrfToken;
+      if (res.data && Number(res.data.otp_required) === 1) {
+        $('#loginOtpSection').removeClass('d-none');
+        $('#btnLoginOtpVerify').removeClass('d-none');
+        $('#loginOtpInput').val('').trigger('focus');
+        const hint = res.data.mobile_hint ? `کد به ${toPersianDigits(res.data.mobile_hint)} ارسال شد.` : 'کد تایید ارسال شد.';
+        $('#loginOtpHint').text(hint);
+        $(formEl).find('[name="login"]').prop('disabled', true);
+        $(formEl).find('[name="password"]').prop('disabled', true);
+        showToast(res.message || 'کد تایید ارسال شد.', 'success');
+        return;
+      }
+
       currentUser = (res.data && res.data.user) || null;
       showToast(res.message || 'ورود انجام شد.', 'success');
       renderUser();
@@ -639,12 +736,51 @@ $(document).on('submit', '#formLogin', function (e) {
         refreshOfficeUsers();
         refreshOfficeKelasehSearch();
         refreshOfficeCapacities();
-      } else if (currentUser && currentUser.role === 'branch_admin') {
-        refreshOfficeCapacities();
       }
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ورود ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('click', '#btnLoginOtpVerify', function () {
+  const otp = $('#loginOtpInput').val() || '';
+  api('login.otp.verify', { otp })
+    .done((res) => {
+      csrfToken = (res.data && res.data.csrf_token) || csrfToken;
+      currentUser = (res.data && res.data.user) || null;
+      $('#loginOtpSection').addClass('d-none');
+      $('#btnLoginOtpVerify').addClass('d-none');
+      const form = $('#formLogin');
+      form.find('[name="login"]').prop('disabled', false);
+      form.find('[name="password"]').prop('disabled', false);
+      showToast(res.message || 'ورود انجام شد.', 'success');
+      renderUser();
+      setView('app');
+      if (!window.location.hash) {
+        window.location.hash = '#dashboard';
+      }
+      renderPage(getPageFromHash());
+      startHeaderClock();
+      refreshKelaseh();
+      refreshKelasehToday();
+      if (currentUser && currentUser.role === 'admin') {
+        loadAdminCities();
+        refreshAdminUsers();
+        refreshAdminCities();
+        refreshAdminItems();
+        refreshAdminLogs();
+        refreshAdminStats();
+        refreshAdminSmsSettings();
+      } else if (currentUser && currentUser.role === 'office_admin') {
+        refreshOfficeUsers();
+        refreshOfficeKelasehSearch();
+        refreshOfficeCapacities();
+      }
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تایید کد ناموفق بود.';
       showToast(msg, 'error');
     });
 });
@@ -678,13 +814,35 @@ $(document).on('click', '#btnKelasehSearch', function () {
   refreshKelaseh();
 });
 
-function checkKelasehHistory(type) {
-  const inputName = type === 'plaintiff' ? 'plaintiff_national_code' : 'defendant_national_code';
-  const tbodyId = type === 'plaintiff' ? '#historyPlaintiffTbody' : '#historyDefendantTbody';
-  const val = $(`[name="${inputName}"]`).val();
+$(document).on('change', '#officeCreateManualBranches', function () {
+  const manual = $('#officeCreateManualBranches').is(':checked');
+  $('#officeCreateBranchListWrap').toggleClass('d-none', !manual);
+  $('#officeCreateBranchRangeWrap').toggleClass('d-none', manual);
+});
 
+function renderKelasehHistoryRows(list, type) {
+  const badgeClass = type === 'plaintiff' ? 'bg-info' : 'bg-warning text-dark';
+  if (!Array.isArray(list) || !list.length) {
+    return `<tr><td colspan="4" class="text-center text-muted">سابقه‌ای یافت نشد.</td></tr>`;
+  }
+  return list
+    .map((item) => {
+      const code = $('<div/>').text(toPersianDigits(item.code || '')).html();
+      const city = $('<div/>').text(toPersianDigits(item.city_name || item.city_code || '')).html();
+      const date = $('<div/>').text(toPersianDigits(item.created_at_jalali || '')).html();
+      const oppositeRaw = type === 'plaintiff' ? (item.defendant_name || '') : (item.plaintiff_name || '');
+      const oppositeLabel = type === 'plaintiff' ? 'خوانده' : 'خواهان';
+      const opposite = $('<div/>').text(toPersianDigits(oppositeRaw ? `${oppositeRaw} (${oppositeLabel})` : '')).html();
+      return `<tr><td><span class="badge ${badgeClass}">${code}</span></td><td>${city}</td><td>${date}</td><td>${opposite}</td></tr>`;
+    })
+    .join('');
+}
+
+function refreshKelasehHistoryFor(nationalCode) {
+  const val = String(nationalCode || '');
   if (!val || val.length < 10) {
-    $(tbodyId).empty();
+    $('#historyPlaintiffTbody').empty();
+    $('#historyDefendantTbody').empty();
     toggleHistorySection();
     return;
   }
@@ -693,40 +851,13 @@ function checkKelasehHistory(type) {
     .done((res) => {
       const pList = (res.data && res.data.plaintiff) || [];
       const dList = (res.data && res.data.defendant) || [];
-      const all = [];
-
-      // Combine and format
-      pList.forEach(item => {
-        all.push({
-          code: item.code,
-          date: item.created_at_jalali,
-          opposite: item.defendant_name + ' (خوانده)',
-          raw_date: item.created_at_jalali // simplify sort if needed
-        });
-      });
-      dList.forEach(item => {
-        all.push({
-          code: item.code,
-          date: item.created_at_jalali,
-          opposite: item.plaintiff_name + ' (خواهان)',
-          raw_date: item.created_at_jalali
-        });
-      });
-
-      // Render
-      const rows = all.map(item => {
-        const c = $('<div/>').text(toPersianDigits(item.code)).html();
-        const d = $('<div/>').text(toPersianDigits(item.date)).html();
-        const o = $('<div/>').text(toPersianDigits(item.opposite)).html();
-        return `<tr><td>${c}</td><td>${d}</td><td>${o}</td></tr>`;
-      }).join('');
-
-      $(tbodyId).html(rows || `<tr><td colspan="3" class="text-center text-muted">سابقه‌ای یافت نشد.</td></tr>`);
+      $('#historyPlaintiffTbody').html(renderKelasehHistoryRows(pList, 'plaintiff'));
+      $('#historyDefendantTbody').html(renderKelasehHistoryRows(dList, 'defendant'));
       toggleHistorySection();
     })
     .fail(() => {
-      // Ignore errors (maybe invalid national code format locally handled)
-      $(tbodyId).empty();
+      $('#historyPlaintiffTbody').empty();
+      $('#historyDefendantTbody').empty();
       toggleHistorySection();
     });
 }
@@ -743,9 +874,7 @@ function toggleHistorySection() {
 }
 
 $(document).on('change', '.national-check', function() {
-  const name = $(this).attr('name');
-  if (name === 'plaintiff_national_code') checkKelasehHistory('plaintiff');
-  if (name === 'defendant_national_code') checkKelasehHistory('defendant');
+  refreshKelasehHistoryFor($(this).val());
 });
 
 $(document).on('input', '.national-check', function() {
@@ -762,11 +891,19 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
   const to_plaintiff = $('#kelasehSmsPlaintiff').is(':checked') ? 1 : 0;
   const to_defendant = $('#kelasehSmsDefendant').is(':checked') ? 1 : 0;
   const data = Object.fromEntries(new FormData(this));
+  showToast('در حال ثبت پرونده…', 'info');
   api('kelaseh.create', data)
     .done((res) => {
       const code = (res.data && res.data.code) || '';
+      const notices = (res.data && res.data.notices) || [];
+      if (Array.isArray(notices) && notices.length) {
+        notices.forEach((m) => showToast(m, 'success'));
+      }
       showToast(code ? `شناسه پرونده ایجاد شد: ${code}` : (res.message || 'ثبت شد.'), 'success');
       this.reset();
+      $('#historyPlaintiffTbody').empty();
+      $('#historyDefendantTbody').empty();
+      toggleHistorySection();
       refreshKelaseh();
       refreshKelasehToday();
       if (code) {
@@ -1155,6 +1292,48 @@ $(document).on('click', '#btnAdminUsersRefresh', function () {
   refreshAdminUsers();
 });
 
+$(document).on('click', '#adminUsersTbody .btn-admin-create-branch-under-office', function () {
+  const raw = $(this).closest('tr').attr('data-json');
+  if (!raw) return;
+  const u = JSON.parse(decodeURIComponent(raw));
+  const cityCode = u.city_code || '';
+  if (!cityCode) {
+    showToast('شهر مدیر اداره مشخص نیست.', 'error');
+    return;
+  }
+
+  $('#adminRoleSelect').val('branch_admin').trigger('change');
+  $('#adminCitySelect').val(String(cityCode)).trigger('change');
+  document.getElementById('formAdminCreateUser')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  setTimeout(() => {
+    $('#formAdminCreateUser [name="username"]').trigger('focus');
+  }, 250);
+});
+
+$(document).on('click', '#btnAdminRunBranchAdminTest', function () {
+  const ok = window.confirm('این تست یک کاربر و ۳۰ پرونده تستی ایجاد می‌کند و در پایان پاکسازی می‌کند. ادامه می‌دهید؟');
+  if (!ok) return;
+
+  $('#adminTestDownloadLink').addClass('d-none').attr('href', '#');
+  $('#adminTestResult').text('در حال اجرای تست…');
+  api('admin.test.branch_admin_flow.run', {})
+    .done((res) => {
+      const d = (res.data || {});
+      const counts = d.branch_counts || {};
+      const txt = `نتیجه: OK | شعبه ۱: ${toPersianDigits(counts[1] || 0)} | شعبه ۲: ${toPersianDigits(counts[2] || 0)} | شعبه ۳: ${toPersianDigits(counts[3] || 0)} | لینک دانلود تا ${toPersianDigits(d.expires_in || 0)} ثانیه معتبر است.`;
+      $('#adminTestResult').text(txt);
+      if (d.download_url) {
+        $('#adminTestDownloadLink').removeClass('d-none').attr('href', d.download_url);
+      }
+      showToast(res.message || 'تست انجام شد.', 'success');
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در اجرای تست.';
+      $('#adminTestResult').text(msg);
+      showToast(msg, 'error');
+    });
+});
+
 $(document).on('click', '#btnAdminCitiesRefresh', function () {
   refreshAdminCities();
 });
@@ -1262,12 +1441,17 @@ $(document).on('click', '#btnAdminStatsRefresh', function () {
 $(document).on('submit', '#formAdminSmsSettings', function (e) {
   e.preventDefault();
   const enabled = $('#adminSmsEnabled').is(':checked') ? 1 : 0;
+  const otp_enabled = $('#adminSmsOtpEnabled').is(':checked') ? 1 : 0;
+  const tpl_otp = $('#adminSmsTplOtp').val() || '';
+  const otp_len = $('#adminSmsOtpLen').val() || '';
+  const otp_ttl = $('#adminSmsOtpTtl').val() || '';
+  const otp_max_tries = $('#adminSmsOtpMaxTries').val() || '';
   const api_key = $('#adminSmsApiKey').val() || '';
   const sender = $('#adminSmsSender').val() || '';
   const tpl_plaintiff = $('#adminSmsTplPlaintiff').val() || '';
   const tpl_defendant = $('#adminSmsTplDefendant').val() || '';
 
-  api('admin.sms.settings.set', { enabled, api_key, sender, tpl_plaintiff, tpl_defendant })
+  api('admin.sms.settings.set', { enabled, otp_enabled, tpl_otp, otp_len, otp_ttl, otp_max_tries, api_key, sender, tpl_plaintiff, tpl_defendant })
     .done((res) => {
       showToast(res.message || 'ذخیره شد.', 'success');
       refreshAdminSmsSettings();
@@ -1276,6 +1460,11 @@ $(document).on('submit', '#formAdminSmsSettings', function (e) {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ذخیره تنظیمات پیامک ناموفق بود.';
       showToast(msg, 'error');
     });
+});
+
+$(document).on('change', '#adminSmsOtpEnabled', function () {
+  const enabled = $('#adminSmsOtpEnabled').is(':checked');
+  $('#adminSmsOtpSettings').toggleClass('d-none', !enabled);
 });
 
 /* ADMIN USER EDIT & DELETE LOGIC */
@@ -1323,7 +1512,11 @@ $(document).on('click', '.btn-admin-edit-user', function () {
 
     // Branch checkboxes
     let html = '';
-    const userBranches = (u.branches || []);
+    const userBranches = Array.isArray(u.branches)
+      ? u.branches.map((x) => Number(x))
+      : (typeof u.branches === 'string'
+        ? u.branches.split(',').map((x) => Number(String(x).trim())).filter((n) => Number.isFinite(n) && n > 0)
+        : []);
     const globalCap = u.branch_capacity || 15;
     
     for (let i = 1; i <= 15; i++) {
@@ -1465,6 +1658,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
   const modalEl = document.getElementById('modalOfficeCreateUser');
   if (modalEl) {
     modalEl.addEventListener('shown.bs.modal', function () {
+        $('#officeCreateManualBranches').prop('checked', true).trigger('change');
         if ($('#officeCreateBranchList').is(':empty')) {
           let html = '';
           for (let i = 1; i <= 15; i++) {
@@ -1500,18 +1694,27 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
         mobile: form.find('[name="mobile"]').val(),
         password: form.find('[name="password"]').val(),
     };
-    
-    // Collect branches
-    const branches = [];
-    const branchCaps = {};
-    $('#officeCreateBranchList .branch-check:checked').each(function () {
-      const b = $(this).val();
-      const cap = $(this).closest('div.border').find('.branch-capacity').val();
-      branches.push(b);
-      branchCaps[b] = cap;
-    });
-    data.branches = branches;
-    data.branch_caps = branchCaps;
+
+    const manual = $('#officeCreateManualBranches').is(':checked');
+    if (manual) {
+      const branches = [];
+      const branchCaps = {};
+      $('#officeCreateBranchList .branch-check:checked').each(function () {
+        const b = $(this).val();
+        const cap = $(this).closest('div.border').find('.branch-capacity').val();
+        branches.push(b);
+        branchCaps[b] = cap;
+      });
+      if (!branches.length) {
+        showToast('حداقل یک شعبه را انتخاب کنید.', 'error');
+        return;
+      }
+      data.branches = branches;
+      data.branch_caps = branchCaps;
+    } else {
+      data.branch_start_no = form.find('[name="branch_start_no"]').val();
+      data.branch_count = form.find('[name="branch_count"]').val();
+    }
 
     api('admin.users.create', data)
         .done(res => {

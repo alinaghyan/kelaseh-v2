@@ -141,7 +141,7 @@ CREATE TABLE IF NOT EXISTS `sms_logs` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `recipient_mobile` VARCHAR(20) NOT NULL,
   `message` TEXT NOT NULL,
-  `type` ENUM('plaintiff','defendant') NOT NULL,
+  `type` ENUM('plaintiff','defendant','otp') NOT NULL,
   `status` ENUM('sent','failed') NOT NULL DEFAULT 'sent',
   `created_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`),
