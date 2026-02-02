@@ -81,6 +81,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
         <li class="nav-item"><a class="nav-link" href="#dashboard" data-page="dashboard">پنل کاربری</a></li>
         <li class="nav-item"><a class="nav-link" href="#profile" data-page="profile">پروفایل</a></li>
         <li class="nav-item" id="navItemAdmin"><a class="nav-link" href="#admin" data-page="admin">پنل مدیر کل</a></li>
+        <li class="nav-item" id="navItemAdminKelasehSearch"><a class="nav-link" href="#admin-kelaseh-search" data-page="admin-kelaseh-search">جستجوی پرونده</a></li>
       </ul>
     </div>
 
@@ -292,7 +293,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <div class="row g-2 align-items-end">
                       <div class="col-12 col-md-3">
                         <label class="form-label form-label-sm">کد</label>
-                        <input name="code" type="text" class="form-control form-control-sm" placeholder="مثلاً 01" maxlength="5" required />
+                        <input name="code" type="text" class="form-control form-control-sm" placeholder="مثلاً ۰۰۱۰" maxlength="4" required />
                       </div>
                       <div class="col-12 col-md-6">
                         <label class="form-label form-label-sm">نام شهر</label>
@@ -520,6 +521,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">جستجو</span>
                     <input id="adminKelasehSearchQuery" type="text" class="form-control" placeholder="کلاسه/کدملی/نام" />
+                    <select id="adminKelasehCityFilter" class="form-select" style="max-width: 220px;">
+                      <option value="">همه شهرها</option>
+                    </select>
                     <button id="btnAdminKelasehSearch" class="btn btn-outline-secondary" type="button">جستجو</button>
                   </div>
                   <div class="table-responsive">

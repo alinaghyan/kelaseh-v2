@@ -57,6 +57,16 @@ function loadAdminCities() {
         )
         .join('');
       $('#adminCitySelect').html(opts);
+      const opts2 = ['<option value="">همه شهرها</option>']
+        .concat(
+          cities.map((c) => {
+            const code = $('<div/>').text(c.code || '').html();
+            const name = $('<div/>').text(c.name || '').html();
+            return `<option value="${code}">${name}</option>`;
+          })
+        )
+        .join('');
+      $('#adminKelasehCityFilter').html(opts2);
       adminCitiesLoaded = true;
     })
     .fail(() => {
@@ -75,7 +85,7 @@ function refreshAdminCities() {
           return `
             <tr data-code="${c.code}">
               <td>
-                <input class="form-control form-control-sm city-code" type="text" value="${c.code}" maxlength="5" dir="ltr" />
+                <input class="form-control form-control-sm city-code" type="text" value="${c.code}" maxlength="4" dir="ltr" />
               </td>
               <td>
                 <input class="form-control form-control-sm city-name" type="text" value="${c.name}" />
@@ -119,7 +129,7 @@ function renderUser() {
     return;
   }
 
-  const roleFa = currentUser.role === 'admin' ? 'مدیر کل' : 'کاربر';
+  const roleFa = currentUser.role === 'admin' ? 'مدیر کل' : currentUser.role === 'office_admin' ? 'مدیر اداره' : currentUser.role === 'branch_admin' ? 'مدیر شعبه' : 'کاربر';
   $('#currentRole').text(roleFa);
   $('#profileEmail').text(currentUser.username || currentUser.email || '');
   $('#profileName').text(currentUser.display_name || '');
@@ -134,6 +144,7 @@ function renderUser() {
   // but handled by click to switch view, not just toggle d-none on panel itself.
   // Actually, the nav item visibility is controlled here.
   $('#navItemAdmin').toggleClass('d-none', !isAdmin);
+  $('#navItemAdminKelasehSearch').toggleClass('d-none', !isAdmin);
 }
 
 // Ensure the click handler is attached
@@ -164,7 +175,7 @@ function startHeaderClock() {
 
 function getPageFromHash() {
   const raw = (window.location.hash || '').replace('#', '').trim();
-  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin') {
+  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin' || raw === 'admin-kelaseh-search') {
     return raw;
   }
   return 'dashboard';
@@ -201,6 +212,22 @@ function renderPage(page) {
       $('#kelasehListSection').addClass('d-none'); // Hide list section
       $('#cardKelaseh').addClass('d-none'); // Hide main card
       $('#officePanel').addClass('d-none');
+    } else {
+      window.location.hash = '#dashboard';
+    }
+    return;
+  }
+
+  if (page === 'admin-kelaseh-search') {
+    if (isAdmin) {
+      $('#adminPanel').removeClass('d-none');
+      $('#colRight').removeClass('d-none');
+      $('#kelasehCreateSection').addClass('d-none');
+      $('#kelasehListSection').addClass('d-none');
+      $('#cardKelaseh').addClass('d-none');
+      $('#officePanel').addClass('d-none');
+      $('button[data-bs-target="#adminKelasehSearch"]').trigger('click');
+      $('#adminKelasehSearchQuery').trigger('focus');
     } else {
       window.location.hash = '#dashboard';
     }
@@ -561,6 +588,12 @@ function boot() {
           refreshAdminLogs();
           refreshAdminStats();
           refreshAdminSmsSettings();
+        } else if (currentUser.role === 'office_admin') {
+          refreshOfficeUsers();
+          refreshOfficeKelasehSearch();
+          refreshOfficeCapacities();
+        } else if (currentUser.role === 'branch_admin') {
+          refreshOfficeCapacities();
         }
       }
     })
@@ -596,6 +629,12 @@ $(document).on('submit', '#formLogin', function (e) {
         refreshAdminLogs();
         refreshAdminStats();
         refreshAdminSmsSettings();
+      } else if (currentUser && currentUser.role === 'office_admin') {
+        refreshOfficeUsers();
+        refreshOfficeKelasehSearch();
+        refreshOfficeCapacities();
+      } else if (currentUser && currentUser.role === 'branch_admin') {
+        refreshOfficeCapacities();
       }
     })
     .fail((xhr) => {
@@ -1385,11 +1424,12 @@ $(document).on('click', '#btnAdminDetailedStatsRefresh', function () {
 
 function refreshAdminKelasehSearch() {
   const q = $('#adminKelasehSearchQuery').val() || '';
+  const city_code = $('#adminKelasehCityFilter').val() || '';
   if (!q.trim()) {
     showToast('لطفاً عبارتی برای جستجو وارد کنید.', 'error');
     return;
   }
-  api('admin.kelaseh.search', { q })
+  api('admin.kelaseh.search', { q, city_code })
     .done((res) => {
       const rows = (res.data && res.data.results) || [];
       const html = rows.map((r) => {
@@ -1500,6 +1540,116 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
         })
         .fail(() => showToast('خطا در دریافت ظرفیت‌ها', 'error'));
   }
+
+  let officeSelectedOwnerId = 0;
+
+  function refreshOfficeUsers() {
+    return api('admin.users.list', { q: '' })
+      .done((res) => {
+        const users = (res.data && res.data.users) || [];
+        const filtered = users.filter((u) => u.role === 'branch_admin');
+        const rows = filtered.map((u) => {
+          const username = $('<div/>').text(toPersianDigits(u.username || '')).html();
+          const name = $('<div/>').text(toPersianDigits(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim())).html();
+          const branchesText = (u.branches || '').toString();
+          const branches = $('<div/>').text(branchesText ? toPersianDigits(branchesText.split(',').map((x) => String(x).padStart(2, '0')).join(', ')) : '').html();
+          return `
+            <tr data-id="${u.id}">
+              <td class="fw-semibold">${username}</td>
+              <td>${name}</td>
+              <td>مدیر شعبه</td>
+              <td class="text-secondary">${branches}</td>
+              <td class="text-end">
+                <button class="btn btn-outline-secondary btn-sm btn-office-filter-user" type="button" data-id="${u.id}">ثبت‌های این کاربر</button>
+              </td>
+              <td class="text-end">
+                <button class="btn btn-outline-dark btn-sm btn-office-clear-filter" type="button">همه</button>
+              </td>
+            </tr>
+          `;
+        });
+        $('#officeUsersTbody').html(rows.join('') || `<tr><td colspan="6" class="text-center text-secondary py-3">کاربری یافت نشد.</td></tr>`);
+      })
+      .fail((xhr) => {
+        showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت کاربران.', 'error');
+      });
+  }
+
+  function renderOfficeKelasehRows(rows) {
+    const html = (rows || []).map((r) => {
+      const rawCode = r.full_code || r.code || '';
+      const code = $('<div/>').text(toPersianDigits(rawCode)).html();
+      const owner = $('<div/>').text(toPersianDigits(r.owner_name || r.username || '')).html();
+      const plaintiff = $('<div/>').text(toPersianDigits(r.plaintiff_name || '')).html();
+      const plaintiffNC = $('<div/>').text(toPersianDigits(r.plaintiff_national_code || '')).html();
+      const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
+      const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
+      const codeRaw = r.code || '';
+      return `
+        <tr>
+          <td dir="ltr" class="text-end fw-bold">${code}</td>
+          <td>${owner}</td>
+          <td>${plaintiff}</td>
+          <td dir="ltr" class="text-end text-secondary">${plaintiffNC}</td>
+          <td>${defendant}</td>
+          <td class="text-secondary">${date}</td>
+          <td class="text-end">
+            <div class="btn-group btn-group-sm" role="group">
+              <button class="btn btn-outline-secondary btn-office-label" type="button" data-code="${codeRaw}">لیبل</button>
+              <button class="btn btn-outline-dark btn-office-print" type="button" data-code="${codeRaw}">چاپ</button>
+            </div>
+          </td>
+        </tr>
+      `;
+    }).join('');
+    $('#officeKelasehSearchTbody').html(html || `<tr><td colspan="7" class="text-center text-secondary py-3">موردی یافت نشد.</td></tr>`);
+  }
+
+  function refreshOfficeKelasehSearch() {
+    const q = $('#officeKelasehSearchQuery').val() || '';
+    const payload = { q };
+    if (officeSelectedOwnerId > 0) payload.owner_id = officeSelectedOwnerId;
+    return api('kelaseh.list', payload)
+      .done((res) => {
+        const rows = (res.data && res.data.kelaseh) || [];
+        renderOfficeKelasehRows(rows);
+      })
+      .fail((xhr) => {
+        showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در جستجو.', 'error');
+      });
+  }
+
+  $(document).on('click', '#btnOfficeKelasehSearch', function () {
+    refreshOfficeKelasehSearch();
+  });
+
+  $(document).on('click', '#btnOfficeKelasehPrintAll', function () {
+    const q = $('#officeKelasehSearchQuery').val() || '';
+    const qs = new URLSearchParams({ action: 'kelaseh.export.print', csrf_token: csrfToken, q });
+    if (officeSelectedOwnerId > 0) qs.set('owner_id', String(officeSelectedOwnerId));
+    window.open(`core.php?${qs.toString()}`, '_blank');
+  });
+
+  $(document).on('click', '#officeUsersTbody .btn-office-filter-user', function () {
+    officeSelectedOwnerId = Number($(this).data('id') || 0);
+    $('button[data-bs-target="#officeKelaseh"]').trigger('click');
+    refreshOfficeKelasehSearch();
+  });
+
+  $(document).on('click', '#officeUsersTbody .btn-office-clear-filter', function () {
+    officeSelectedOwnerId = 0;
+    refreshOfficeKelasehSearch();
+  });
+
+  $(document).on('click', '#officeKelasehSearchTbody .btn-office-label', function () {
+    const code = $(this).data('code');
+    window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
+  });
+
+  $(document).on('click', '#officeKelasehSearchTbody .btn-office-print', function () {
+    const code = $(this).data('code');
+    window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
+  });
 
   $(document).on('click', '#btnOfficeCapacitiesRefresh', refreshOfficeCapacities);
   

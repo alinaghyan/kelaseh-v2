@@ -201,6 +201,16 @@ function to_english_digits($str): string
     return str_replace($per, $eng, (string)$str);
 }
 
+function normalize_city_code(?string $code): ?string
+{
+    if ($code === null) return null;
+    $code = trim(to_english_digits($code));
+    if ($code === '') return null;
+    if (!preg_match('/^[0-9]{1,10}$/', $code)) return null;
+    if (strlen($code) <= 4) return str_pad($code, 4, '0', STR_PAD_LEFT);
+    return $code;
+}
+
 function validate_ir_mobile(?string $mobile): ?string
 {
     if (!$mobile) return null;
@@ -215,6 +225,53 @@ function validate_national_code(?string $code): ?string
     $code = to_english_digits($code);
     if (!preg_match('/^[0-9]{10}$/', $code)) return null;
     return $code; // Simplified validation
+}
+
+function ensure_kelaseh_daily_counters_table_v2(): void
+{
+    db()->exec("CREATE TABLE IF NOT EXISTS kelaseh_daily_counters_v2 (
+        city_code VARCHAR(10) NOT NULL,
+        jalali_ymd CHAR(6) NOT NULL,
+        branch_no INT NOT NULL,
+        seq_no INT NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (city_code, jalali_ymd, branch_no)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+function kelaseh_daily_counters_table(): string
+{
+    static $name = null;
+    if (is_string($name)) return $name;
+    try {
+        db()->query('SELECT city_code FROM kelaseh_daily_counters LIMIT 0');
+        $name = 'kelaseh_daily_counters';
+        return $name;
+    } catch (Throwable $e) {
+        $name = 'kelaseh_daily_counters_v2';
+        ensure_kelaseh_daily_counters_table_v2();
+        return $name;
+    }
+}
+
+function jalali_today_parts(): array
+{
+    try {
+        $j = Jalalian::now();
+        $jy = (int)$j->format('Y');
+        $jm = (int)$j->format('m');
+        $jd = (int)$j->format('d');
+        $ymd = sprintf('%02d%02d%02d', $jy % 100, $jm, $jd);
+        $full = sprintf('%04d%02d%02d', $jy, $jm, $jd);
+        return ['jalali_ymd' => $ymd, 'jalali_full_ymd' => $full, 'jy' => $jy, 'jm' => $jm, 'jd' => $jd];
+    } catch (Throwable $e) {
+        $gy = (int)date('Y');
+        $gm = (int)date('m');
+        $gd = (int)date('d');
+        $ymd = sprintf('%02d%02d%02d', $gy % 100, $gm, $gd);
+        $full = sprintf('%04d%02d%02d', $gy, $gm, $gd);
+        return ['jalali_ymd' => $ymd, 'jalali_full_ymd' => $full, 'jy' => $gy, 'jm' => $gm, 'jd' => $gd];
+    }
 }
 
 function validate_username(string $u): ?string
@@ -309,16 +366,62 @@ function action_time_now(): void
 function action_kelaseh_list(array $data): void {
     $user = auth_require_login();
     $national = trim((string)($data['national_code'] ?? ''));
+    $q = trim((string)($data['q'] ?? ''));
+    $ownerIdFilter = isset($data['owner_id']) ? (int)$data['owner_id'] : 0;
+    $cityFilter = normalize_city_code($data['city_code'] ?? null);
     $from = parse_jalali_full_ymd($data['from'] ?? null);
     $to = parse_jalali_full_ymd($data['to'] ?? null);
 
-    $sql = "SELECT * FROM kelaseh_numbers WHERE owner_id = ?";
-    $params = [$user['id']];
+    $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name
+            FROM kelaseh_numbers k
+            JOIN users u ON u.id = k.owner_id
+            LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+            WHERE 1=1";
+    $params = [];
+
+    if (in_array($user['role'], ['branch_admin', 'user'], true)) {
+        $sql .= " AND k.owner_id = ?";
+        $params[] = $user['id'];
+    } elseif ($user['role'] === 'office_admin') {
+        $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+        $params[] = $user['city_code'];
+        $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
+        if ($ownerIdFilter > 0) {
+            $sql .= " AND k.owner_id = ?";
+            $params[] = $ownerIdFilter;
+        }
+    } elseif ($user['role'] === 'admin') {
+        if ($cityFilter) {
+            $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+            $params[] = $cityFilter;
+            $params[] = ltrim($cityFilter, '0') === '' ? '0' : ltrim($cityFilter, '0');
+        }
+        if ($ownerIdFilter > 0) {
+            $sql .= " AND k.owner_id = ?";
+            $params[] = $ownerIdFilter;
+        }
+    } else {
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    }
 
     if ($national !== '') {
-        $sql .= " AND (plaintiff_national_code LIKE ? OR defendant_national_code LIKE ?)";
-        $params[] = "%$national%";
-        $params[] = "%$national%";
+        $national = to_english_digits($national);
+        if (preg_match('/^[0-9]{10}$/', $national)) {
+            $sql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ?)";
+            $params[] = $national;
+            $params[] = $national;
+        } else {
+            $sql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ?)";
+            $params[] = "%$national%";
+            $params[] = "%$national%";
+        }
+    }
+
+    if ($q !== '') {
+        $qEng = to_english_digits($q);
+        $like = "%$qEng%";
+        $sql .= " AND (k.code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+        array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
     }
     if ($from) {
         $sql .= " AND created_at >= ?";
@@ -334,8 +437,9 @@ function action_kelaseh_list(array $data): void {
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at']);
-        $r['full_code'] = ($user['city_code'] ?? '') . '-' . $r['code'];
-        $r['city_name'] = $user['city_name'] ?? '';
+        $cityCode = $r['city_code'] ?? ($user['city_code'] ?? '');
+        $r['full_code'] = ($cityCode ? $cityCode . '-' : '') . $r['code'];
+        $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
     }
     json_response(true, ['data' => ['kelaseh' => $rows]]);
 }
@@ -366,7 +470,8 @@ function action_kelaseh_create(array $data): void {
         $branches = range($start, $start + $count - 1);
     }
     
-    $cityCode = $user['city_code'];
+    $cityCode = normalize_city_code($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
+    if (!$cityCode) json_response(false, ['message' => 'کد شهر کاربر تنظیم نشده است.'], 422);
     $today = date('Y-m-d');
     $selectedBranch = null;
     
@@ -376,8 +481,14 @@ function action_kelaseh_create(array $data): void {
         $cap = $stmt->fetchColumn();
         if ($cap === false) $cap = 15;
         
-        $stmt = db()->prepare('SELECT COUNT(*) FROM kelaseh_numbers WHERE owner_id = ? AND branch_no = ? AND DATE(created_at) = ? AND status != "voided"');
-        $stmt->execute([$user['id'], $b, $today]);
+        $stmt = db()->prepare('SELECT COUNT(*)
+            FROM kelaseh_numbers k
+            JOIN users u ON u.id = k.owner_id
+            WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?)
+              AND k.branch_no = ?
+              AND DATE(k.created_at) = ?
+              AND k.status != "voided"');
+        $stmt->execute([$user['city_code'], $cityCode, $b, $today]);
         $used = $stmt->fetchColumn();
         
         if ($used < $cap) {
@@ -391,20 +502,63 @@ function action_kelaseh_create(array $data): void {
     $pNC = validate_national_code($data['plaintiff_national_code'] ?? null);
     $pMob = validate_ir_mobile($data['plaintiff_mobile'] ?? null);
     $pName = trim($data['plaintiff_name'] ?? '');
-    $dNC = validate_national_code($data['defendant_national_code'] ?? null);
-    $dMob = validate_ir_mobile($data['defendant_mobile'] ?? null);
-    $dName = trim($data['defendant_name'] ?? '');
+    $dNCInput = trim((string)($data['defendant_national_code'] ?? ''));
+    $dMobInput = trim((string)($data['defendant_mobile'] ?? ''));
+    $dName = trim((string)($data['defendant_name'] ?? ''));
+    $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
+    $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
     
     if (!$pNC || !$pMob) json_response(false, ['message' => 'اطلاعات خواهان نامعتبر است.'], 422);
+    if ($dNC === null) json_response(false, ['message' => 'کد ملی خوانده نامعتبر است.'], 422);
+    if ($dMob === null) json_response(false, ['message' => 'موبایل خوانده نامعتبر است.'], 422);
 
-    do {
-        $code = mt_rand(100000, 999999);
-        $stmt = db()->prepare('SELECT id FROM kelaseh_numbers WHERE code = ? LIMIT 1');
-        $stmt->execute([$code]);
-    } while ($stmt->fetch());
-    
-    $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)";
-    db()->prepare($sql)->execute([$user['id'], $code, $selectedBranch, $pName, $pNC, $pMob, $dName, $dNC, $dMob, now_mysql()]);
+    $counterTable = kelaseh_daily_counters_table();
+    $j = jalali_today_parts();
+    $jalaliYmd = $j['jalali_ymd'];
+    $jalaliFull = $j['jalali_full_ymd'];
+    $branchNo2 = sprintf('%02d', (int)$selectedBranch);
+
+    $code = null;
+    $seqNo = null;
+    db()->beginTransaction();
+    try {
+        $stmt = db()->prepare("SELECT seq_no FROM {$counterTable} WHERE city_code = ? AND jalali_ymd = ? AND branch_no = ? FOR UPDATE");
+        $stmt->execute([$cityCode, $jalaliYmd, (int)$selectedBranch]);
+        $cur = $stmt->fetchColumn();
+        if ($cur === false) {
+            $stmt2 = db()->prepare('SELECT COALESCE(MAX(k.seq_no), 0)
+                FROM kelaseh_numbers k
+                JOIN users u ON u.id = k.owner_id
+                WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?)
+                  AND k.branch_no = ?
+                  AND k.jalali_ymd = ?');
+            $stmt2->execute([$user['city_code'], $cityCode, (int)$selectedBranch, $jalaliYmd]);
+            $cur = (int)$stmt2->fetchColumn();
+        }
+
+        $seqNo = (int)$cur + 1;
+        if ($seqNo > (int)$cap) {
+            db()->rollBack();
+            json_response(false, ['message' => 'ظرفیت تکمیل شده است.'], 429);
+        }
+
+        db()->prepare("INSERT INTO {$counterTable} (city_code, jalali_ymd, branch_no, seq_no, updated_at)
+            VALUES (?, ?, ?, ?, ?)
+            ON DUPLICATE KEY UPDATE seq_no = VALUES(seq_no), updated_at = VALUES(updated_at)")
+            ->execute([$cityCode, $jalaliYmd, (int)$selectedBranch, $seqNo, now_mysql()]);
+
+        $seq2 = sprintf('%02d', $seqNo);
+        $code = sprintf('%s%s%s%s', sprintf('%02d', $j['jy'] % 100), sprintf('%02d', $j['jm']), sprintf('%02d', $j['jd']), $branchNo2) . $seq2;
+
+        $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)";
+        db()->prepare($sql)->execute([$user['id'], $code, (int)$selectedBranch, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, now_mysql(), now_mysql()]);
+        db()->commit();
+    } catch (Throwable $e) {
+        if (db()->inTransaction()) db()->rollBack();
+        throw $e;
+    }
+
     audit_log($user['id'], 'kelaseh_create', 'kelaseh', null, null);
     json_response(true, ['message' => 'پرونده ایجاد شد.', 'data' => ['code' => $code]]);
 }
@@ -428,7 +582,7 @@ function action_kelaseh_history_check(array $data): void {
 
 function action_office_capacities_get(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['office_admin', 'branch_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     
     $cityCode = $user['city_code'];
     $stmt = db()->prepare('SELECT branch_no, capacity FROM office_branch_capacities WHERE city_code = ?');
@@ -564,7 +718,7 @@ function action_kelaseh_print(array $data): void {
 
 function action_office_capacities_update(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['office_admin', 'branch_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     csrf_require_valid();
     
     $branch = isset($data['branch_no']) ? (int)$data['branch_no'] : 0;
@@ -578,6 +732,10 @@ function action_office_capacities_update(array $data): void {
     }
     
     $cityCode = $user['city_code'];
+    if ($user['role'] === 'admin') {
+        $cityCode = normalize_city_code($data['city_code'] ?? null) ?? $cityCode;
+        if (!$cityCode) json_response(false, ['message' => 'کد شهر الزامی است.'], 422);
+    }
     $stmt = db()->prepare('SELECT id FROM office_branch_capacities WHERE city_code = ? AND branch_no = ?');
     $stmt->execute([$cityCode, $branch]);
     if ($stmt->fetch()) {
@@ -586,6 +744,467 @@ function action_office_capacities_update(array $data): void {
         db()->prepare('INSERT INTO office_branch_capacities (city_code, branch_no, capacity) VALUES (?, ?, ?)')->execute([$cityCode, $branch, $cap]);
     }
     json_response(true, ['message' => 'ظرفیت ذخیره شد.']);
+}
+
+function setting_get(string $key, $default = null)
+{
+    $stmt = db()->prepare('SELECT v FROM app_settings WHERE k = ? LIMIT 1');
+    $stmt->execute([$key]);
+    $v = $stmt->fetchColumn();
+    return ($v === false) ? $default : $v;
+}
+
+function setting_set(string $key, ?string $value): void
+{
+    $stmt = db()->prepare('INSERT INTO app_settings (k, v, updated_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE v = VALUES(v), updated_at = VALUES(updated_at)');
+    $stmt->execute([$key, $value, now_mysql()]);
+}
+
+function action_kelaseh_update(array $data): void
+{
+    $user = auth_require_login();
+    csrf_require_valid();
+
+    $code = trim((string)($data['code'] ?? ''));
+    if ($code === '') json_response(false, ['message' => 'کلاسه الزامی است.'], 422);
+
+    $pNC = validate_national_code($data['plaintiff_national_code'] ?? null);
+    $pMob = validate_ir_mobile($data['plaintiff_mobile'] ?? null);
+    $pName = trim((string)($data['plaintiff_name'] ?? ''));
+
+    $dNCInput = trim((string)($data['defendant_national_code'] ?? ''));
+    $dMobInput = trim((string)($data['defendant_mobile'] ?? ''));
+    $dName = trim((string)($data['defendant_name'] ?? ''));
+    $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
+    $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
+
+    if (!$pNC || !$pMob) json_response(false, ['message' => 'اطلاعات خواهان نامعتبر است.'], 422);
+    if ($dNC === null) json_response(false, ['message' => 'کد ملی خوانده نامعتبر است.'], 422);
+    if ($dMob === null) json_response(false, ['message' => 'موبایل خوانده نامعتبر است.'], 422);
+
+    $params = [$pName, $dName, $pNC, (string)$dNC, $pMob, (string)$dMob, now_mysql()];
+    $where = 'code = ?';
+    $params[] = $code;
+
+    if (in_array($user['role'], ['branch_admin', 'user'], true)) {
+        $where .= ' AND owner_id = ?';
+        $params[] = $user['id'];
+    } elseif ($user['role'] === 'office_admin') {
+        $where .= ' AND owner_id IN (SELECT id FROM users WHERE city_code = ? OR LPAD(city_code, 4, "0") = ?)';
+        $params[] = $user['city_code'];
+        $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
+    } elseif ($user['role'] !== 'admin') {
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    }
+
+    $sql = "UPDATE kelaseh_numbers SET plaintiff_name = ?, defendant_name = ?, plaintiff_national_code = ?, defendant_national_code = ?, plaintiff_mobile = ?, defendant_mobile = ?, updated_at = ? WHERE $where";
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    if ($stmt->rowCount() < 1) json_response(false, ['message' => 'پرونده یافت نشد یا دسترسی ندارید.'], 404);
+    audit_log($user['id'], 'kelaseh_update', 'kelaseh', null, null);
+    json_response(true, ['message' => 'ویرایش شد']);
+}
+
+function action_kelaseh_set_status(array $data): void
+{
+    $user = auth_require_login();
+    csrf_require_valid();
+    $code = trim((string)($data['code'] ?? ''));
+    $status = (string)($data['status'] ?? '');
+    if ($code === '' || !in_array($status, ['active', 'inactive', 'voided'], true)) {
+        json_response(false, ['message' => 'اطلاعات نامعتبر'], 422);
+    }
+
+    $params = [$status, now_mysql()];
+    $where = 'code = ?';
+    $params[] = $code;
+
+    if (in_array($user['role'], ['branch_admin', 'user'], true)) {
+        $where .= ' AND owner_id = ?';
+        $params[] = $user['id'];
+    } elseif ($user['role'] === 'office_admin') {
+        $where .= ' AND owner_id IN (SELECT id FROM users WHERE city_code = ? OR LPAD(city_code, 4, "0") = ?)';
+        $params[] = $user['city_code'];
+        $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
+    } elseif ($user['role'] !== 'admin') {
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    }
+
+    $stmt = db()->prepare("UPDATE kelaseh_numbers SET status = ?, updated_at = ? WHERE $where");
+    $stmt->execute($params);
+    if ($stmt->rowCount() < 1) json_response(false, ['message' => 'پرونده یافت نشد یا دسترسی ندارید.'], 404);
+    audit_log($user['id'], 'kelaseh_set_status', 'kelaseh', null, null);
+    json_response(true, ['message' => 'وضعیت ذخیره شد']);
+}
+
+function action_kelaseh_sms_send(array $data): void
+{
+    $user = auth_require_login();
+    csrf_require_valid();
+
+    $code = trim((string)($data['code'] ?? ''));
+    $toPlaintiff = (int)($data['to_plaintiff'] ?? 0) === 1;
+    $toDefendant = (int)($data['to_defendant'] ?? 0) === 1;
+    if ($code === '' || (!$toPlaintiff && !$toDefendant)) json_response(false, ['message' => 'اطلاعات نامعتبر'], 422);
+
+    $row = null;
+    if (in_array($user['role'], ['branch_admin', 'user'], true)) {
+        $stmt = db()->prepare('SELECT * FROM kelaseh_numbers WHERE owner_id = ? AND code = ? LIMIT 1');
+        $stmt->execute([$user['id'], $code]);
+        $row = $stmt->fetch();
+    } elseif ($user['role'] === 'office_admin') {
+        $stmt = db()->prepare('SELECT k.* FROM kelaseh_numbers k JOIN users u ON u.id = k.owner_id WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?) AND k.code = ? LIMIT 1');
+        $stmt->execute([$user['city_code'], normalize_city_code($user['city_code']) ?? $user['city_code'], $code]);
+        $row = $stmt->fetch();
+    } elseif ($user['role'] === 'admin') {
+        $stmt = db()->prepare('SELECT * FROM kelaseh_numbers WHERE code = ? ORDER BY id DESC LIMIT 1');
+        $stmt->execute([$code]);
+        $row = $stmt->fetch();
+    }
+    if (!$row) json_response(false, ['message' => 'پرونده یافت نشد.'], 404);
+
+    $enabled = (int)(setting_get('sms.enabled', '0') ?? '0');
+    if ($enabled !== 1) json_response(false, ['message' => 'ارسال پیامک غیرفعال است.'], 422);
+
+    $message = 'اطلاع‌رسانی پرونده';
+    $now = now_mysql();
+    if ($toPlaintiff && !empty($row['plaintiff_mobile'])) {
+        db()->prepare('INSERT INTO sms_logs (recipient_mobile, message, type, status, created_at) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$row['plaintiff_mobile'], $message, 'plaintiff', 'sent', $now]);
+    }
+    if ($toDefendant && !empty($row['defendant_mobile'])) {
+        db()->prepare('INSERT INTO sms_logs (recipient_mobile, message, type, status, created_at) VALUES (?, ?, ?, ?, ?)')
+            ->execute([$row['defendant_mobile'], $message, 'defendant', 'sent', $now]);
+    }
+    audit_log($user['id'], 'sms_send', 'kelaseh', null, null);
+    json_response(true, ['message' => 'در صف ارسال ثبت شد.']);
+}
+
+function action_kelaseh_export_csv(array $data): void
+{
+    $user = auth_require_login();
+    csrf_require_valid();
+
+    $national = trim((string)($_REQUEST['national_code'] ?? $data['national_code'] ?? ''));
+    $from = parse_jalali_full_ymd($_REQUEST['from'] ?? $data['from'] ?? null);
+    $to = parse_jalali_full_ymd($_REQUEST['to'] ?? $data['to'] ?? null);
+    $q = trim((string)($_REQUEST['q'] ?? $data['q'] ?? ''));
+    $ownerIdFilter = isset($_REQUEST['owner_id']) ? (int)$_REQUEST['owner_id'] : (isset($data['owner_id']) ? (int)$data['owner_id'] : 0);
+    $cityFilter = normalize_city_code($_REQUEST['city_code'] ?? $data['city_code'] ?? null);
+
+    $filters = ['national_code' => $national, 'from' => $from, 'to' => $to, 'q' => $q, 'owner_id' => $ownerIdFilter, 'city_code' => $cityFilter];
+    $rows = kelaseh_fetch_rows($user, $filters, 2000);
+
+    header('Content-Type: text/csv; charset=utf-8');
+    header('Content-Disposition: attachment; filename="kelaseh.csv"');
+    $out = fopen('php://output', 'w');
+    fputcsv($out, ['code', 'city_code', 'branch_no', 'seq_no', 'plaintiff_national_code', 'defendant_national_code', 'plaintiff_name', 'defendant_name', 'status', 'created_at']);
+    foreach ($rows as $r) {
+        fputcsv($out, [$r['code'] ?? '', $r['city_code'] ?? '', $r['branch_no'] ?? '', $r['seq_no'] ?? '', $r['plaintiff_national_code'] ?? '', $r['defendant_national_code'] ?? '', $r['plaintiff_name'] ?? '', $r['defendant_name'] ?? '', $r['status'] ?? '', $r['created_at'] ?? '']);
+    }
+    fclose($out);
+    exit;
+}
+
+function action_kelaseh_export_print(array $data): void
+{
+    $user = auth_require_login();
+    csrf_require_valid();
+
+    $national = trim((string)($_REQUEST['national_code'] ?? $data['national_code'] ?? ''));
+    $from = parse_jalali_full_ymd($_REQUEST['from'] ?? $data['from'] ?? null);
+    $to = parse_jalali_full_ymd($_REQUEST['to'] ?? $data['to'] ?? null);
+    $q = trim((string)($_REQUEST['q'] ?? $data['q'] ?? ''));
+    $ownerIdFilter = isset($_REQUEST['owner_id']) ? (int)$_REQUEST['owner_id'] : (isset($data['owner_id']) ? (int)$data['owner_id'] : 0);
+    $cityFilter = normalize_city_code($_REQUEST['city_code'] ?? $data['city_code'] ?? null);
+
+    $filters = ['national_code' => $national, 'from' => $from, 'to' => $to, 'q' => $q, 'owner_id' => $ownerIdFilter, 'city_code' => $cityFilter];
+    $rows = kelaseh_fetch_rows($user, $filters, 2000);
+
+    header('Content-Type: text/html; charset=utf-8');
+    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>لیست پرونده‌ها</title>';
+    echo '<style>body{font-family:Tahoma,Arial,sans-serif;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px}th{background:#f3f3f3}</style>';
+    echo '</head><body>';
+    echo '<table><thead><tr><th>کلاسه</th><th>شهر</th><th>کاربر</th><th>شعبه</th><th>خواهان</th><th>کدملی خواهان</th><th>خوانده</th><th>تاریخ</th><th>وضعیت</th></tr></thead><tbody>';
+    foreach ($rows as $r) {
+        $fullCode = htmlspecialchars((string)($r['full_code'] ?? $r['code'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $city = htmlspecialchars((string)($r['city_name'] ?? $r['city_code'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $owner = htmlspecialchars((string)($r['owner_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $branch = htmlspecialchars((string)($r['branch_no'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $pn = htmlspecialchars((string)($r['plaintiff_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $pnc = htmlspecialchars((string)($r['plaintiff_national_code'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $dn = htmlspecialchars((string)($r['defendant_name'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $dt = htmlspecialchars((string)($r['created_at_jalali'] ?? $r['created_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        $st = htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8');
+        echo "<tr><td dir=\"ltr\">$fullCode</td><td>$city</td><td>$owner</td><td>$branch</td><td>$pn</td><td dir=\"ltr\">$pnc</td><td>$dn</td><td>$dt</td><td>$st</td></tr>";
+    }
+    echo '</tbody></table>';
+    echo '<script>window.print()</script>';
+    echo '</body></html>';
+    exit;
+}
+
+function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
+{
+    $national = trim((string)($filters['national_code'] ?? ''));
+    $from = $filters['from'] ?? null;
+    $to = $filters['to'] ?? null;
+    $q = trim((string)($filters['q'] ?? ''));
+    $ownerIdFilter = (int)($filters['owner_id'] ?? 0);
+    $cityFilter = $filters['city_code'] ?? null;
+
+    $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name
+            FROM kelaseh_numbers k
+            JOIN users u ON u.id = k.owner_id
+            LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+            WHERE 1=1";
+    $params = [];
+
+    if (in_array($user['role'], ['branch_admin', 'user'], true)) {
+        $sql .= " AND k.owner_id = ?";
+        $params[] = $user['id'];
+    } elseif ($user['role'] === 'office_admin') {
+        $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+        $params[] = $user['city_code'];
+        $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
+        if ($ownerIdFilter > 0) {
+            $sql .= " AND k.owner_id = ?";
+            $params[] = $ownerIdFilter;
+        }
+    } elseif ($user['role'] === 'admin') {
+        if ($cityFilter) {
+            $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+            $params[] = $cityFilter;
+            $params[] = ltrim((string)$cityFilter, '0') === '' ? '0' : ltrim((string)$cityFilter, '0');
+        }
+        if ($ownerIdFilter > 0) {
+            $sql .= " AND k.owner_id = ?";
+            $params[] = $ownerIdFilter;
+        }
+    } else {
+        return [];
+    }
+
+    if ($national !== '') {
+        $national = to_english_digits($national);
+        if (preg_match('/^[0-9]{10}$/', $national)) {
+            $sql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ?)";
+            $params[] = $national;
+            $params[] = $national;
+        } else {
+            $sql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ?)";
+            $params[] = "%$national%";
+            $params[] = "%$national%";
+        }
+    }
+
+    if ($q !== '') {
+        $qEng = to_english_digits($q);
+        $like = "%$qEng%";
+        $sql .= " AND (k.code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+        array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
+    }
+
+    if ($from) {
+        $sql .= " AND k.created_at >= ?";
+        $params[] = "$from 00:00:00";
+    }
+    if ($to) {
+        $sql .= " AND k.created_at <= ?";
+        $params[] = "$to 23:59:59";
+    }
+
+    $sql .= " ORDER BY k.id DESC LIMIT " . (int)$limit;
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+        $cityCode = $r['city_code'] ?? ($user['city_code'] ?? '');
+        $r['full_code'] = ($cityCode ? $cityCode . '-' : '') . ($r['code'] ?? '');
+        $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
+    }
+    return $rows;
+}
+
+function action_admin_items_list(array $data): void
+{
+    auth_require_admin(auth_require_login());
+    $q = trim((string)($data['q'] ?? ''));
+    $params = [];
+    $sql = "SELECT i.*, u.username as owner_key FROM items i LEFT JOIN users u ON u.id = i.owner_id";
+    if ($q !== '') {
+        $sql .= " WHERE (i.title LIKE ? OR i.content LIKE ?)";
+        $like = "%$q%";
+        $params = [$like, $like];
+    }
+    $sql .= " ORDER BY i.updated_at DESC LIMIT 100";
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $items = $stmt->fetchAll();
+    foreach ($items as &$it) {
+        $it['updated_at_jalali'] = format_jalali_datetime($it['updated_at'] ?? null);
+    }
+    json_response(true, ['data' => ['items' => $items]]);
+}
+
+function action_admin_items_delete(array $data): void
+{
+    auth_require_admin(auth_require_login());
+    csrf_require_valid();
+    $id = (int)($data['id'] ?? 0);
+    if ($id < 1) json_response(false, ['message' => 'شناسه نامعتبر'], 422);
+    db()->prepare('DELETE FROM items WHERE id = ?')->execute([$id]);
+    audit_log((int)$_SESSION['user_id'], 'delete', 'item', $id, null);
+    json_response(true, ['message' => 'حذف شد']);
+}
+
+function action_admin_sms_settings_get(): void
+{
+    auth_require_admin(auth_require_login());
+    $enabled = (int)(setting_get('sms.enabled', '0') ?? '0');
+    $sender = (string)(setting_get('sms.sender', '') ?? '');
+    $tplP = (string)(setting_get('sms.tpl_plaintiff', '') ?? '');
+    $tplD = (string)(setting_get('sms.tpl_defendant', '') ?? '');
+    $apiKey = (string)(setting_get('sms.api_key', '') ?? '');
+    json_response(true, ['data' => ['settings' => [
+        'enabled' => $enabled,
+        'sender' => $sender,
+        'tpl_plaintiff' => $tplP,
+        'tpl_defendant' => $tplD,
+        'api_key_present' => $apiKey !== '' ? 1 : 0,
+    ]]]);
+}
+
+function action_admin_sms_settings_set(array $data): void
+{
+    auth_require_admin(auth_require_login());
+    csrf_require_valid();
+    $enabled = (int)($data['enabled'] ?? 0) === 1 ? '1' : '0';
+    $sender = trim((string)($data['sender'] ?? ''));
+    $tplP = (string)($data['tpl_plaintiff'] ?? '');
+    $tplD = (string)($data['tpl_defendant'] ?? '');
+    $apiKey = trim((string)($data['api_key'] ?? ''));
+
+    setting_set('sms.enabled', $enabled);
+    setting_set('sms.sender', $sender);
+    setting_set('sms.tpl_plaintiff', $tplP);
+    setting_set('sms.tpl_defendant', $tplD);
+    if ($apiKey !== '') setting_set('sms.api_key', $apiKey);
+    audit_log((int)$_SESSION['user_id'], 'sms_settings_update', 'app_settings', null, null);
+    json_response(true, ['message' => 'تنظیمات ذخیره شد']);
+}
+
+function action_admin_kelaseh_stats(array $data): void
+{
+    auth_require_admin(auth_require_login());
+    $from = parse_jalali_full_ymd($data['from'] ?? null);
+    $to = parse_jalali_full_ymd($data['to'] ?? null);
+    $params = [];
+    $where = [];
+    if ($from) {
+        $where[] = 'k.created_at >= ?';
+        $params[] = "$from 00:00:00";
+    }
+    if ($to) {
+        $where[] = 'k.created_at <= ?';
+        $params[] = "$to 23:59:59";
+    }
+    $w = $where ? ('WHERE ' . implode(' AND ', $where)) : '';
+
+    $totSql = "SELECT COUNT(*) as total,
+        SUM(k.status='active') as active,
+        SUM(k.status='inactive') as inactive,
+        SUM(k.status='voided') as voided
+        FROM kelaseh_numbers k $w";
+    $stmt = db()->prepare($totSql);
+    $stmt->execute($params);
+    $totals = $stmt->fetch() ?: ['total' => 0, 'active' => 0, 'inactive' => 0, 'voided' => 0];
+
+    $citySql = "SELECT u.city_code as city_code, c.name as city_name,
+        COUNT(*) as total,
+        SUM(k.status='active') as active,
+        SUM(k.status='inactive') as inactive,
+        SUM(k.status='voided') as voided
+        FROM kelaseh_numbers k
+        JOIN users u ON u.id = k.owner_id
+        LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+        $w
+        GROUP BY u.city_code, c.name
+        ORDER BY total DESC";
+    $stmt = db()->prepare($citySql);
+    $stmt->execute($params);
+    $cities = $stmt->fetchAll();
+
+    $userSql = "SELECT u.id, u.username, u.first_name, u.last_name, c.name as city_name, u.city_code,
+        COUNT(*) as total,
+        SUM(k.status='active') as active,
+        SUM(k.status='inactive') as inactive,
+        SUM(k.status='voided') as voided
+        FROM kelaseh_numbers k
+        JOIN users u ON u.id = k.owner_id
+        LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+        $w
+        GROUP BY u.id
+        ORDER BY total DESC
+        LIMIT 200";
+    $stmt = db()->prepare($userSql);
+    $stmt->execute($params);
+    $users = $stmt->fetchAll();
+    foreach ($users as &$u) {
+        $u['display_name'] = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: ($u['username'] ?? '');
+    }
+
+    json_response(true, ['data' => ['totals' => $totals, 'cities' => $cities, 'users' => $users]]);
+}
+
+function action_admin_detailed_stats(): void
+{
+    auth_require_admin(auth_require_login());
+    $sql = "SELECT u.city_code, c.name as city_name, u.role, u.username, u.first_name, u.last_name, COUNT(k.id) as total
+            FROM users u
+            LEFT JOIN kelaseh_numbers k ON k.owner_id = u.id
+            LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+            WHERE u.role IN ('office_admin', 'branch_admin')
+            GROUP BY u.id
+            ORDER BY u.city_code ASC, u.role ASC, total DESC
+            LIMIT 400";
+    $rows = db()->query($sql)->fetchAll();
+    foreach ($rows as &$r) {
+        $r['display_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
+    }
+    json_response(true, ['data' => ['stats' => $rows]]);
+}
+
+function action_admin_kelaseh_search(array $data): void
+{
+    auth_require_admin(auth_require_login());
+    $q = trim((string)($data['q'] ?? ''));
+    $cityFilter = normalize_city_code($data['city_code'] ?? null);
+    if ($q === '') json_response(true, ['data' => ['results' => []]]);
+    $qEng = to_english_digits($q);
+    $like = "%$qEng%";
+    $sql = "SELECT k.*, u.city_code, c.name as city_name, u.username, u.first_name, u.last_name
+        FROM kelaseh_numbers k
+        JOIN users u ON u.id = k.owner_id
+        LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+        WHERE (k.code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ?)";
+    $params = [$like, $like, $like, $like, $like];
+    if ($cityFilter) {
+        $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+        $params[] = $cityFilter;
+        $params[] = ltrim($cityFilter, '0') === '' ? '0' : ltrim($cityFilter, '0');
+    }
+    $sql .= " ORDER BY k.id DESC LIMIT 200";
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    foreach ($rows as &$r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+        $r['full_code'] = (($r['city_code'] ?? '') ? ($r['city_code'] . '-') : '') . ($r['code'] ?? '');
+        $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
+    }
+    json_response(true, ['data' => ['results' => $rows]]);
 }
 
 // ADMIN ACTIONS RESTORED
@@ -599,8 +1218,9 @@ function action_admin_users_list(array $data): void {
     $sql = "SELECT u.*, c.name as city_name, GROUP_CONCAT(ub.branch_no) as branches FROM users u LEFT JOIN isfahan_cities c ON c.code = u.city_code LEFT JOIN user_branches ub ON ub.user_id = u.id";
     $where = [];
     if ($user['role'] === 'office_admin') {
-        $where[] = "u.city_code = ?";
+        $where[] = "(u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
         $params[] = $user['city_code'];
+        $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
     }
     if ($q !== '') {
         $where[] = "(u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ? OR u.mobile LIKE ?)";
@@ -633,7 +1253,7 @@ function action_admin_users_create(array $data): void {
     
     $passHash = password_hash($data['password'], PASSWORD_DEFAULT);
     $role = $isOfficeAdmin ? 'branch_admin' : ($data['role'] ?? 'user');
-    $cityCode = $isOfficeAdmin ? $user['city_code'] : ($data['city_code'] ?? null);
+    $cityCode = $isOfficeAdmin ? (normalize_city_code($user['city_code']) ?? $user['city_code']) : (normalize_city_code($data['city_code'] ?? null) ?? ($data['city_code'] ?? null));
     
     db()->prepare("INSERT INTO users (username, password_hash, first_name, last_name, mobile, role, city_code, is_active, branch_count, branch_start_no, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)")
         ->execute([$username, $passHash, $data['first_name'], $data['last_name'], $data['mobile'], $role, $cityCode, $data['branch_count']??1, $data['branch_start_no']??1, now_mysql()]);
@@ -722,36 +1342,69 @@ function action_admin_cities_list(): void {
 
 function action_admin_cities_create(array $data): void {
     auth_require_admin(auth_require_login());
+
+    $code = normalize_city_code($data['code'] ?? null);
+    if (!$code) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    $name = trim((string)($data['name'] ?? ''));
+    if ($name === '') json_response(false, ['message' => 'نام شهر الزامی است.'], 422);
     
     $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
-    $stmt->execute([$data['code']]);
+    $stmt->execute([$code]);
     if ($stmt->fetch()) {
          json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
     }
     
-    db()->prepare("INSERT INTO isfahan_cities (code, name) VALUES (?, ?)")->execute([$data['code'], $data['name']]);
+    try {
+        db()->prepare("INSERT INTO isfahan_cities (code, name) VALUES (?, ?)")->execute([$code, $name]);
+    } catch (Throwable $e) {
+        json_response(false, ['message' => 'خطا در ثبت شهر: ' . $e->getMessage()], 500);
+    }
     json_response(true, ['message' => 'شهر ایجاد شد']);
 }
 
 function action_admin_cities_update(array $data): void {
     auth_require_admin(auth_require_login());
+
+    $oldCodeRaw = $data['code'] ?? null;
+    $newCode = normalize_city_code($data['new_code'] ?? null);
+    if (!$newCode) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    $name = trim((string)($data['name'] ?? ''));
+    if ($name === '') json_response(false, ['message' => 'نام شهر الزامی است.'], 422);
     
     // Check if new code exists and is not the same as old code
-    if ($data['new_code'] !== $data['code']) {
+    $oldNormalized = normalize_city_code($oldCodeRaw);
+    if ($oldNormalized !== $newCode) {
         $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
-        $stmt->execute([$data['new_code']]);
+        $stmt->execute([$newCode]);
         if ($stmt->fetch()) {
              json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
         }
     }
 
-    db()->prepare("UPDATE isfahan_cities SET code=?, name=? WHERE code=?")->execute([$data['new_code'], $data['name'], $data['code']]);
+    try {
+        $stmt = db()->prepare("UPDATE isfahan_cities SET code=?, name=? WHERE code=?");
+        $stmt->execute([$newCode, $name, (string)$oldCodeRaw]);
+        if ($stmt->rowCount() < 1) {
+            if ($oldNormalized && $oldNormalized !== (string)$oldCodeRaw) {
+                $stmt2 = db()->prepare("UPDATE isfahan_cities SET code=?, name=? WHERE code=?");
+                $stmt2->execute([$newCode, $name, $oldNormalized]);
+            }
+        }
+    } catch (Throwable $e) {
+        if ($e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'Duplicate entry'))) {
+            json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+        }
+        json_response(false, ['message' => 'خطای سیستم: ' . $e->getMessage()], 500);
+    }
     json_response(true, ['message' => 'شهر ویرایش شد']);
 }
 
 function action_admin_cities_delete(array $data): void {
     auth_require_admin(auth_require_login());
-    db()->prepare("DELETE FROM isfahan_cities WHERE code=?")->execute([$data['code']]);
+    csrf_require_valid();
+    $code = normalize_city_code($data['code'] ?? null) ?? (string)($data['code'] ?? '');
+    if ($code === '') json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    db()->prepare("DELETE FROM isfahan_cities WHERE code=?")->execute([$code]);
     json_response(true, ['message' => 'شهر حذف شد']);
 }
 
@@ -773,26 +1426,43 @@ function handle_request(): void
             case 'time.now': action_time_now(); break;
             case 'login': action_login($data); break;
             case 'logout': action_logout(); break;
+
             case 'kelaseh.list': action_kelaseh_list($data); break;
             case 'kelaseh.list.today': action_kelaseh_list_today($data); break;
             case 'kelaseh.create': action_kelaseh_create($data); break;
             case 'kelaseh.history.check': action_kelaseh_history_check($data); break;
-            case 'office.capacities.get': action_office_capacities_get($data); break;
-            case 'office.capacities.update': action_office_capacities_update($data); break;
+            case 'kelaseh.update': action_kelaseh_update($data); break;
+            case 'kelaseh.set_status': action_kelaseh_set_status($data); break;
+            case 'kelaseh.sms.send': action_kelaseh_sms_send($data); break;
+
+            case 'kelaseh.export.csv': action_kelaseh_export_csv($data); break;
+            case 'kelaseh.export.print': action_kelaseh_export_print($data); break;
             case 'kelaseh.label': action_kelaseh_label($data); break;
             case 'kelaseh.print': action_kelaseh_print($data); break;
-            
+
+            case 'office.capacities.get': action_office_capacities_get($data); break;
+            case 'office.capacities.update': action_office_capacities_update($data); break;
+
             // Admin / Office Admin
             case 'admin.users.list': action_admin_users_list($data); break;
             case 'admin.users.create': action_admin_users_create($data); break;
             case 'admin.users.update': action_admin_users_update($data); break;
             case 'admin.users.delete': action_admin_users_delete($data); break;
+
             case 'admin.cities.list': action_admin_cities_list(); break;
             case 'admin.cities.create': action_admin_cities_create($data); break;
             case 'admin.cities.update': action_admin_cities_update($data); break;
             case 'admin.cities.delete': action_admin_cities_delete($data); break;
+
             case 'admin.audit.list': action_admin_audit_list(); break;
-            
+            case 'admin.items.list': action_admin_items_list($data); break;
+            case 'admin.items.delete': action_admin_items_delete($data); break;
+            case 'admin.kelaseh.stats': action_admin_kelaseh_stats($data); break;
+            case 'admin.sms.settings.get': action_admin_sms_settings_get(); break;
+            case 'admin.sms.settings.set': action_admin_sms_settings_set($data); break;
+            case 'admin.detailed.stats': action_admin_detailed_stats(); break;
+            case 'admin.kelaseh.search': action_admin_kelaseh_search($data); break;
+
             default:
                 json_response(false, ['message' => 'اکشن نامعتبر یا پیاده‌سازی نشده.'], 404);
         }
