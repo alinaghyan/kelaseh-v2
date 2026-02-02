@@ -211,6 +211,40 @@ function normalize_city_code(?string $code): ?string
     return $code;
 }
 
+function resolve_city_code_fk(?string $input): ?string
+{
+    if ($input === null) return null;
+    $raw = trim(to_english_digits($input));
+    if ($raw === '') return null;
+
+    static $cache = [];
+    if (array_key_exists($raw, $cache)) return $cache[$raw];
+
+    $candidates = [];
+    $candidates[] = $raw;
+    $norm = normalize_city_code($raw);
+    if ($norm) $candidates[] = $norm;
+    if (preg_match('/^[0-9]+$/', $raw)) {
+        $candidates[] = ltrim($raw, '0') === '' ? '0' : ltrim($raw, '0');
+    }
+
+    $seen = [];
+    foreach ($candidates as $cand) {
+        if ($cand === '' || isset($seen[$cand])) continue;
+        $seen[$cand] = true;
+        $stmt = db()->prepare('SELECT code FROM isfahan_cities WHERE code = ? LIMIT 1');
+        $stmt->execute([$cand]);
+        $row = $stmt->fetchColumn();
+        if ($row !== false) {
+            $cache[$raw] = (string)$row;
+            return $cache[$raw];
+        }
+    }
+
+    $cache[$raw] = null;
+    return null;
+}
+
 function validate_ir_mobile(?string $mobile): ?string
 {
     if (!$mobile) return null;
@@ -462,6 +496,10 @@ function action_kelaseh_list_today(array $data): void {
 function action_kelaseh_create(array $data): void {
     $user = auth_require_login();
     csrf_require_valid();
+
+    if (!in_array($user['role'], ['branch_admin', 'user'], true)) {
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    }
     
     $branches = $user['branches'] ?? [];
     if (empty($branches)) {
@@ -470,7 +508,7 @@ function action_kelaseh_create(array $data): void {
         $branches = range($start, $start + $count - 1);
     }
     
-    $cityCode = normalize_city_code($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
+    $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
     if (!$cityCode) json_response(false, ['message' => 'کد شهر کاربر تنظیم نشده است.'], 422);
     $today = date('Y-m-d');
     $selectedBranch = null;
@@ -744,6 +782,57 @@ function action_office_capacities_update(array $data): void {
         db()->prepare('INSERT INTO office_branch_capacities (city_code, branch_no, capacity) VALUES (?, ?, ?)')->execute([$cityCode, $branch, $cap]);
     }
     json_response(true, ['message' => 'ظرفیت ذخیره شد.']);
+}
+
+function action_office_stats(): void
+{
+    $user = auth_require_login();
+    if ($user['role'] !== 'office_admin') json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+
+    $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
+    if ($cityCode === '') json_response(false, ['message' => 'کد شهر تنظیم نشده است.'], 422);
+
+    $sqlTotals = "SELECT
+        COUNT(*) as total,
+        SUM(k.status='active') as active,
+        SUM(k.status='inactive') as inactive,
+        SUM(k.status='voided') as voided
+        FROM kelaseh_numbers k
+        JOIN users u ON u.id = k.owner_id
+        WHERE (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+    $stmt = db()->prepare($sqlTotals);
+    $stmt->execute([$cityCode, normalize_city_code($cityCode) ?? $cityCode]);
+    $totals = $stmt->fetch() ?: ['total' => 0, 'active' => 0, 'inactive' => 0, 'voided' => 0];
+
+    $sqlBranches = "SELECT k.branch_no,
+        COUNT(*) as total,
+        SUM(k.status='active') as active,
+        SUM(k.status='inactive') as inactive,
+        SUM(k.status='voided') as voided
+        FROM kelaseh_numbers k
+        JOIN users u ON u.id = k.owner_id
+        WHERE (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)
+        GROUP BY k.branch_no
+        ORDER BY k.branch_no ASC";
+    $stmt = db()->prepare($sqlBranches);
+    $stmt->execute([$cityCode, normalize_city_code($cityCode) ?? $cityCode]);
+    $branches = $stmt->fetchAll();
+
+    $sqlUsers = "SELECT u.id, u.username, u.first_name, u.last_name, COUNT(k.id) as total
+        FROM users u
+        LEFT JOIN kelaseh_numbers k ON k.owner_id = u.id
+        WHERE (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?) AND u.role = 'branch_admin'
+        GROUP BY u.id
+        ORDER BY total DESC
+        LIMIT 100";
+    $stmt = db()->prepare($sqlUsers);
+    $stmt->execute([$cityCode, normalize_city_code($cityCode) ?? $cityCode]);
+    $users = $stmt->fetchAll();
+    foreach ($users as &$u) {
+        $u['display_name'] = trim(($u['first_name'] ?? '') . ' ' . ($u['last_name'] ?? '')) ?: ($u['username'] ?? '');
+    }
+
+    json_response(true, ['data' => ['totals' => $totals, 'branches' => $branches, 'users' => $users]]);
 }
 
 function setting_get(string $key, $default = null)
@@ -1253,7 +1342,14 @@ function action_admin_users_create(array $data): void {
     
     $passHash = password_hash($data['password'], PASSWORD_DEFAULT);
     $role = $isOfficeAdmin ? 'branch_admin' : ($data['role'] ?? 'user');
-    $cityCode = $isOfficeAdmin ? (normalize_city_code($user['city_code']) ?? $user['city_code']) : (normalize_city_code($data['city_code'] ?? null) ?? ($data['city_code'] ?? null));
+
+    $cityCode = null;
+    if ($isOfficeAdmin) {
+        $cityCode = resolve_city_code_fk($user['city_code'] ?? null);
+        if (!$cityCode) json_response(false, ['message' => 'کد شهر مدیر اداره معتبر نیست.'], 422);
+    } else {
+        $cityCode = resolve_city_code_fk($data['city_code'] ?? null);
+    }
     
     db()->prepare("INSERT INTO users (username, password_hash, first_name, last_name, mobile, role, city_code, is_active, branch_count, branch_start_no, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, 1, ?, ?, ?)")
         ->execute([$username, $passHash, $data['first_name'], $data['last_name'], $data['mobile'], $role, $cityCode, $data['branch_count']??1, $data['branch_start_no']??1, now_mysql()]);
@@ -1288,7 +1384,12 @@ function action_admin_users_update(array $data): void {
     $u = $target->fetch();
     if (!$u) json_response(false, ['message' => 'کاربر یافت نشد'], 404);
     
-    if ($user['role'] === 'office_admin' && $u['city_code'] !== $user['city_code']) json_response(false, ['message' => 'دسترسی ندارید'], 403);
+    if ($user['role'] === 'office_admin') {
+        $officeCity = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
+        $targetCity = resolve_city_code_fk($u['city_code'] ?? null) ?? ($u['city_code'] ?? '');
+        if ($officeCity === '' || $targetCity === '' || $officeCity !== $targetCity) json_response(false, ['message' => 'دسترسی ندارید'], 403);
+        if (($u['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'مجاز نیستید'], 403);
+    }
     
     $updates = []; $params = [];
     if (!empty($data['first_name'])) { $updates[] = "first_name=?"; $params[] = $data['first_name']; }
@@ -1330,6 +1431,16 @@ function action_admin_users_delete(array $data): void {
     csrf_require_valid();
     $id = (int)$data['id'];
     if ($id == $user['id']) json_response(false, ['message' => 'حذف خود ممکن نیست'], 422);
+    if ($user['role'] === 'office_admin') {
+        $target = db()->prepare('SELECT id, role, city_code FROM users WHERE id = ?');
+        $target->execute([$id]);
+        $u = $target->fetch();
+        if (!$u) json_response(false, ['message' => 'کاربر یافت نشد'], 404);
+        $officeCity = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
+        $targetCity = resolve_city_code_fk($u['city_code'] ?? null) ?? ($u['city_code'] ?? '');
+        if ($officeCity === '' || $targetCity === '' || $officeCity !== $targetCity) json_response(false, ['message' => 'دسترسی ندارید'], 403);
+        if (($u['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'مجاز نیستید'], 403);
+    }
     db()->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
     json_response(true, ['message' => 'حذف شد']);
 }
@@ -1343,8 +1454,12 @@ function action_admin_cities_list(): void {
 function action_admin_cities_create(array $data): void {
     auth_require_admin(auth_require_login());
 
-    $code = normalize_city_code($data['code'] ?? null);
-    if (!$code) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    $code = trim(to_english_digits((string)($data['code'] ?? '')));
+    $resolved = resolve_city_code_fk($code);
+    if ($resolved !== null) {
+        json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+    }
+    if (!preg_match('/^[0-9]{1,10}$/', $code)) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
     $name = trim((string)($data['name'] ?? ''));
     if ($name === '') json_response(false, ['message' => 'نام شهر الزامی است.'], 422);
     
@@ -1366,19 +1481,19 @@ function action_admin_cities_update(array $data): void {
     auth_require_admin(auth_require_login());
 
     $oldCodeRaw = $data['code'] ?? null;
-    $newCode = normalize_city_code($data['new_code'] ?? null);
-    if (!$newCode) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    $newCode = trim(to_english_digits((string)($data['new_code'] ?? '')));
+    if (!preg_match('/^[0-9]{1,10}$/', $newCode)) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
     $name = trim((string)($data['name'] ?? ''));
     if ($name === '') json_response(false, ['message' => 'نام شهر الزامی است.'], 422);
     
     // Check if new code exists and is not the same as old code
-    $oldNormalized = normalize_city_code($oldCodeRaw);
+    $oldNormalized = trim(to_english_digits((string)$oldCodeRaw));
     if ($oldNormalized !== $newCode) {
         $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
         $stmt->execute([$newCode]);
-        if ($stmt->fetch()) {
-             json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
-        }
+        if ($stmt->fetch()) json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+        $resolved = resolve_city_code_fk($newCode);
+        if ($resolved !== null) json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
     }
 
     try {
@@ -1442,6 +1557,7 @@ function handle_request(): void
 
             case 'office.capacities.get': action_office_capacities_get($data); break;
             case 'office.capacities.update': action_office_capacities_update($data); break;
+            case 'office.stats': action_office_stats(); break;
 
             // Admin / Office Admin
             case 'admin.users.list': action_admin_users_list($data); break;

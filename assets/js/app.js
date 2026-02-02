@@ -139,12 +139,14 @@ function renderUser() {
   $('#kelasehOffice').text(cityName ? `اداره ${cityName}` : '').toggleClass('d-none', !cityName);
 
   const isAdmin = currentUser.role === 'admin';
+  const isOfficeAdmin = currentUser.role === 'office_admin';
   $('#adminPanel').toggleClass('d-none', !isAdmin);
   // Revert: We want admin panel link to be always visible for admin, 
   // but handled by click to switch view, not just toggle d-none on panel itself.
   // Actually, the nav item visibility is controlled here.
   $('#navItemAdmin').toggleClass('d-none', !isAdmin);
   $('#navItemAdminKelasehSearch').toggleClass('d-none', !isAdmin);
+  $('#headerNav a[data-page="create"]').closest('li').toggleClass('d-none', isOfficeAdmin);
 }
 
 // Ensure the click handler is attached
@@ -235,6 +237,10 @@ function renderPage(page) {
   }
 
   if (page === 'create') {
+    if (isOfficeAdmin) {
+      window.location.hash = '#dashboard';
+      return;
+    }
     $('#cardKelaseh').removeClass('d-none');
     $('#kelasehCreateSection').removeClass('d-none');
     $('#kelasehCardTitle').text('ایجاد شماره کلاسه');
@@ -1618,6 +1624,47 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
         showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در جستجو.', 'error');
       });
   }
+
+  function refreshOfficeStats() {
+    return api('office.stats', {})
+      .done((res) => {
+        const totals = (res.data && res.data.totals) || {};
+        const branches = (res.data && res.data.branches) || [];
+        const users = (res.data && res.data.users) || [];
+
+        const cards = [];
+        cards.push(`<div class="col-12 col-md-3"><div class="card border-0 bg-light"><div class="card-body p-2"><div class="small text-secondary">کل ثبت‌ها</div><div class="fw-bold">${toPersianDigits(totals.total || 0)}</div></div></div></div>`);
+        cards.push(`<div class="col-12 col-md-3"><div class="card border-0 bg-light"><div class="card-body p-2"><div class="small text-secondary">فعال</div><div class="fw-bold text-success">${toPersianDigits(totals.active || 0)}</div></div></div></div>`);
+        cards.push(`<div class="col-12 col-md-3"><div class="card border-0 bg-light"><div class="card-body p-2"><div class="small text-secondary">غیرفعال</div><div class="fw-bold text-secondary">${toPersianDigits(totals.inactive || 0)}</div></div></div></div>`);
+        cards.push(`<div class="col-12 col-md-3"><div class="card border-0 bg-light"><div class="card-body p-2"><div class="small text-secondary">ابطال</div><div class="fw-bold text-danger">${toPersianDigits(totals.voided || 0)}</div></div></div></div>`);
+
+        const branchRows = branches.map((b) => {
+          const bn = toPersianDigits(String(b.branch_no || '').padStart(2, '0'));
+          return `<tr><td>شعبه ${bn}</td><td>${toPersianDigits(b.total || 0)}</td><td class="text-success">${toPersianDigits(b.active || 0)}</td><td class="text-secondary">${toPersianDigits(b.inactive || 0)}</td><td class="text-danger">${toPersianDigits(b.voided || 0)}</td></tr>`;
+        }).join('');
+
+        const userRows = users.map((u) => {
+          const name = $('<div/>').text(toPersianDigits(u.display_name || u.username || '')).html();
+          return `<tr><td>${name}</td><td>${toPersianDigits(u.total || 0)}</td></tr>`;
+        }).join('');
+
+        cards.push(`<div class="col-12"><div class="card"><div class="card-header py-2">آمار شعب</div><div class="card-body p-2"><div class="table-responsive"><table class="table table-sm table-bordered align-middle m-0"><thead><tr><th>شعبه</th><th>کل</th><th>فعال</th><th>غیرفعال</th><th>ابطال</th></tr></thead><tbody>${branchRows || `<tr><td colspan="5" class="text-center text-secondary py-3">داده‌ای یافت نشد.</td></tr>`}</tbody></table></div></div></div></div>`);
+        cards.push(`<div class="col-12"><div class="card"><div class="card-header py-2">ثبت‌ها بر اساس مدیر شعبه</div><div class="card-body p-2"><div class="table-responsive"><table class="table table-sm table-bordered align-middle m-0"><thead><tr><th>مدیر شعبه</th><th>تعداد ثبت</th></tr></thead><tbody>${userRows || `<tr><td colspan="2" class="text-center text-secondary py-3">کاربری یافت نشد.</td></tr>`}</tbody></table></div></div></div></div>`);
+
+        $('#officeStatsContainer').html(cards.join(''));
+      })
+      .fail((xhr) => {
+        showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت آمار.', 'error');
+      });
+  }
+
+  $(document).on('click', '#btnOfficeStatsRefresh', function () {
+    refreshOfficeStats();
+  });
+
+  $('button[data-bs-target="#officeStats"]').on('shown.bs.tab', function () {
+    refreshOfficeStats();
+  });
 
   $(document).on('click', '#btnOfficeKelasehSearch', function () {
     refreshOfficeKelasehSearch();
