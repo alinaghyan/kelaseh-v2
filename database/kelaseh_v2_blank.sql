@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS `items` (
 CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,
-  `code` CHAR(10) NOT NULL,
+  `code` VARCHAR(30) NOT NULL,
   `branch_no` TINYINT UNSIGNED NOT NULL,
   `jalali_ymd` CHAR(6) NOT NULL,
   `jalali_full_ymd` CHAR(8) NOT NULL,

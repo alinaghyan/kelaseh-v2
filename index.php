@@ -1,4 +1,8 @@
 <?php
+/**
+ * نقطه ورود اصلی برنامه و رابط کاربری (Frontend)
+ * این فایل ساختار HTML صفحات را می‌سازد و کدهای JS/CSS را بارگذاری می‌کند.
+ */
 
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');

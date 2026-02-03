@@ -1,4 +1,8 @@
 <?php
+/**
+ * هسته اصلی پردازش‌های برنامه (Backend)
+ * شامل توابع کمکی، اتصال به دیتابیس، مدیریت نشست‌ها (Session) و پردازش درخواست‌های AJAX
+ */
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
 ini_set('session.use_strict_mode', '1');
 ini_set('session.use_only_cookies', '1');
@@ -18,15 +22,26 @@ function db(): PDO
 {
     static $pdo = null;
     if ($pdo === null) {
-        $configPath = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
-        $cfg = is_file($configPath) ? require $configPath : [];
-        $db = $cfg['db'] ?? [];
+        $cfg = app_config();
+        $db = $cfg['db'] ?? null;
+        if (!is_array($db)) {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'message' => 'تنظیمات دیتابیس در config.php یافت نشد.']);
+            exit;
+        }
 
-        $host = $db['host'] ?? 'localhost';
-        $port = $db['port'] ?? 3306;
-        $name = $db['name'] ?? 'kelaseh_db';
-        $user = $db['user'] ?? 'root';
-        $pass = $db['pass'] ?? '';
+        $host = (string)($db['host'] ?? '');
+        $name = (string)($db['name'] ?? '');
+        $user = (string)($db['user'] ?? '');
+        $pass = (string)($db['pass'] ?? '');
+        $port = (int)($db['port'] ?? 3306);
+        if ($host === '' || $name === '' || $user === '') {
+            header('Content-Type: application/json');
+            http_response_code(500);
+            echo json_encode(['ok' => false, 'message' => 'تنظیمات دیتابیس در config.php ناقص است.']);
+            exit;
+        }
 
         try {
             $pdo = new PDO("mysql:host=$host;port=$port;dbname=$name;charset=utf8mb4", $user, $pass, [
@@ -236,7 +251,7 @@ function normalize_city_code(?string $code): ?string
     $code = trim(to_english_digits($code));
     if ($code === '') return null;
     if (!preg_match('/^[0-9]{1,10}$/', $code)) return null;
-    if (strlen($code) <= 4) return str_pad($code, 4, '0', STR_PAD_LEFT);
+    // Removed automatic padding to allow variable length city codes (e.g. "01", "1", "001")
     return $code;
 }
 
@@ -371,6 +386,71 @@ function ensure_sms_logs_supports_otp(): void
     $done = true;
     try {
         db()->exec("ALTER TABLE sms_logs MODIFY `type` ENUM('plaintiff','defendant','otp') NOT NULL");
+    } catch (Throwable $e) {
+    }
+}
+
+function ensure_kelaseh_numbers_code_supports_city_prefix(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec('ALTER TABLE kelaseh_numbers MODIFY `code` VARCHAR(30) NOT NULL');
+    } catch (Throwable $e) {
+    }
+}
+
+function ensure_city_code_supports_variable_length(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec('SET FOREIGN_KEY_CHECKS=0');
+    } catch (Throwable $e) {
+    }
+
+    try {
+        db()->exec('ALTER TABLE users DROP FOREIGN KEY fk_users_city');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE users DROP FOREIGN KEY users_ibfk_1');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE office_branch_capacities DROP FOREIGN KEY fk_office_branch_capacities_city');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE office_branch_capacities DROP FOREIGN KEY office_branch_capacities_ibfk_1');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE isfahan_cities MODIFY `code` VARCHAR(10) NOT NULL');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE users MODIFY `city_code` VARCHAR(10) NULL');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE office_branch_capacities MODIFY `city_code` VARCHAR(10) NOT NULL');
+    } catch (Throwable $e) {
+    }
+
+    try {
+        db()->exec('ALTER TABLE users ADD CONSTRAINT fk_users_city FOREIGN KEY (city_code) REFERENCES isfahan_cities(code) ON UPDATE CASCADE');
+    } catch (Throwable $e) {
+    }
+    try {
+        db()->exec('ALTER TABLE office_branch_capacities ADD CONSTRAINT fk_office_branch_capacities_city FOREIGN KEY (city_code) REFERENCES isfahan_cities(code) ON UPDATE CASCADE');
+    } catch (Throwable $e) {
+    }
+
+    try {
+        db()->exec('SET FOREIGN_KEY_CHECKS=1');
     } catch (Throwable $e) {
     }
 }
@@ -545,6 +625,7 @@ function action_logout(): void
 
 function action_session(): void
 {
+    ensure_city_code_supports_variable_length();
     $user = null;
     try { $user = current_user(); } catch (Throwable $e) {}
     json_response(true, ['data' => ['csrf_token' => csrf_token(), 'user' => $user]]);
@@ -635,7 +716,8 @@ function action_kelaseh_list(array $data): void {
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at']);
         $cityCode = $r['city_code'] ?? ($user['city_code'] ?? '');
-        $r['full_code'] = ($cityCode ? $cityCode . '-' : '') . $r['code'];
+        $c = (string)($r['code'] ?? '');
+        $r['full_code'] = str_contains($c, '-') ? $c : (($cityCode ? $cityCode . '-' : '') . $c);
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
     }
     json_response(true, ['data' => ['kelaseh' => $rows]]);
@@ -650,7 +732,9 @@ function action_kelaseh_list_today(array $data): void {
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at']);
-        $r['full_code'] = ($user['city_code'] ?? '') . '-' . $r['code'];
+        $c = (string)($r['code'] ?? '');
+        $cityCode = (string)($user['city_code'] ?? '');
+        $r['full_code'] = str_contains($c, '-') ? $c : (($cityCode !== '' ? $cityCode . '-' : '') . $c);
         $r['city_name'] = $user['city_name'] ?? '';
     }
     json_response(true, ['data' => ['kelaseh' => $rows]]);
@@ -687,6 +771,8 @@ function kelaseh_create_internal(array $user, array $data): array
 
     $branches = array_values(array_unique(array_map('intval', $branches)));
     sort($branches);
+
+    ensure_kelaseh_numbers_code_supports_city_prefix();
 
     $requestedBranch = isset($data['branch_no']) ? (int)to_english_digits((string)$data['branch_no']) : 0;
 
@@ -809,8 +895,16 @@ function kelaseh_create_internal(array $user, array $data): array
             ON DUPLICATE KEY UPDATE seq_no = VALUES(seq_no), updated_at = VALUES(updated_at)")
             ->execute([$cityCode, $jalaliYmd, (int)$selectedBranch, $seqNo, now_mysql()]);
 
-        $seq2 = sprintf('%02d', $seqNo);
-        $code = sprintf('%s%s%s%s', sprintf('%02d', $j['jy'] % 100), sprintf('%02d', $j['jm']), sprintf('%02d', $j['jd']), $branchNo2) . $seq2;
+        $seqPart = (string)$seqNo;
+        $cityPart = (string)$cityCode;
+        if (preg_match('/^[0-9]+$/', $cityPart) && strlen($cityPart) === 1) $cityPart = '0' . $cityPart;
+        // Format: CC-BB-YYMMDDN (example: 02-02-0104111)
+        $code = $cityPart
+            . '-' . $branchNo2
+            . '-' . sprintf('%02d', $j['jy'] % 100)
+            . sprintf('%02d', $j['jm'])
+            . sprintf('%02d', $j['jd'])
+            . $seqPart;
 
         $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, created_at, updated_at)
                 VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)";
@@ -1236,9 +1330,10 @@ function action_kelaseh_sms_send(array $data): void
     $enabled = (int)(setting_get('sms.enabled', '0') ?? '0');
     if ($enabled !== 1) json_response(false, ['message' => 'ارسال پیامک غیرفعال است.'], 422);
 
-    $fullCode = (($row['city_code'] ?? '') ? ((string)$row['city_code'] . '-') : '') . (string)($row['code'] ?? '');
+    $rawCode = (string)($row['code'] ?? '');
+    $fullCode = str_contains($rawCode, '-') ? $rawCode : (($row['city_code'] ?? '') ? ((string)$row['city_code'] . '-') : '') . $rawCode;
     $vars = [
-        'code' => (string)($row['code'] ?? ''),
+        'code' => $rawCode,
         'full_code' => $fullCode,
         'city_name' => (string)($row['city_name'] ?? ''),
         'branch_no' => (string)($row['branch_no'] ?? ''),
@@ -1434,7 +1529,8 @@ function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
         $cityCode = $r['city_code'] ?? ($user['city_code'] ?? '');
-        $r['full_code'] = ($cityCode ? $cityCode . '-' : '') . ($r['code'] ?? '');
+        $c = (string)($r['code'] ?? '');
+        $r['full_code'] = str_contains($c, '-') ? $c : (($cityCode ? $cityCode . '-' : '') . $c);
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
     }
     return $rows;
@@ -1640,7 +1736,9 @@ function action_admin_kelaseh_search(array $data): void
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
-        $r['full_code'] = (($r['city_code'] ?? '') ? ($r['city_code'] . '-') : '') . ($r['code'] ?? '');
+        $cityCode = (string)($r['city_code'] ?? '');
+        $c = (string)($r['code'] ?? '');
+        $r['full_code'] = str_contains($c, '-') ? $c : (($cityCode !== '' ? $cityCode . '-' : '') . $c);
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
     }
     json_response(true, ['data' => ['results' => $rows]]);
@@ -1930,8 +2028,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         fclose($fp);
         if (!is_string($body) || !str_contains($body, 'کلاسه')) throw new RuntimeException('export.csv missing header');
         foreach (array_slice($codes, 0, 5) as $sample) {
-            $needle = $cityCode . '-' . $sample;
-            if (!str_contains($body, $needle)) throw new RuntimeException('export.csv missing sample');
+            if (!str_contains($body, $sample)) throw new RuntimeException('export.csv missing sample');
         }
 
         $outDir = __DIR__ . '/tests/output';

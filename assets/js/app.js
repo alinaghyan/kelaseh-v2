@@ -1,4 +1,9 @@
 
+/**
+ * کدهای جاوااسکریپت اصلی برنامه (Frontend Logic)
+ * مدیریت رویدادها، ارسال درخواست‌های AJAX به سرور، و به‌روزرسانی رابط کاربری (UI)
+ */
+
 let csrfToken = '';
 let currentUser = null;
 let adminCitiesLoaded = false;

@@ -2,7 +2,7 @@ SET NAMES utf8mb4;
 SET time_zone = '+00:00';
 
 CREATE TABLE IF NOT EXISTS `isfahan_cities` (
-  `code` CHAR(2) NOT NULL,
+  `code` VARCHAR(10) NOT NULL,
   `name` VARCHAR(80) NOT NULL,
   PRIMARY KEY (`code`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
@@ -18,7 +18,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   `last_name` VARCHAR(60) NULL,
   `mobile` VARCHAR(20) NULL,
   `national_code` VARCHAR(20) NULL,
-  `city_code` CHAR(2) NULL,
+  `city_code` VARCHAR(10) NULL,
   `branch_count` TINYINT UNSIGNED NULL,
   `branch_start_no` TINYINT UNSIGNED NOT NULL DEFAULT 1,
   `branch_capacity` INT UNSIGNED NOT NULL DEFAULT 10,
@@ -40,7 +40,7 @@ CREATE TABLE IF NOT EXISTS `user_branches` (
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 CREATE TABLE IF NOT EXISTS `office_branch_capacities` (
-  `city_code` CHAR(2) NOT NULL,
+  `city_code` VARCHAR(10) NOT NULL,
   `branch_no` TINYINT UNSIGNED NOT NULL,
   `capacity` INT UNSIGNED NOT NULL DEFAULT 15,
   PRIMARY KEY (`city_code`, `branch_no`),
@@ -69,7 +69,7 @@ CREATE TABLE IF NOT EXISTS `items` (
 CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,
-  `code` CHAR(10) NOT NULL,
+  `code` VARCHAR(30) NOT NULL,
   `branch_no` TINYINT UNSIGNED NOT NULL,
   `jalali_ymd` CHAR(6) NOT NULL,
   `jalali_full_ymd` CHAR(8) NOT NULL,

@@ -290,7 +290,7 @@ try {
 
     $csv = $http->get('core.php', ['action' => 'kelaseh.export.csv', 'csrf_token' => $csrf, 'q' => '']);
     assert_true($csv['status'] === 200, 'export.csv HTTP ' . $csv['status']);
-    assert_true(str_contains($csv['body'], "code,city_code,branch_no"), 'export.csv missing header');
+    assert_true(str_contains($csv['body'], "کلاسه"), 'export.csv missing header');
     foreach (array_slice($created['codes'], 0, 5) as $sample) {
         assert_true(str_contains($csv['body'], $sample), 'export.csv missing code sample ' . $sample);
     }
