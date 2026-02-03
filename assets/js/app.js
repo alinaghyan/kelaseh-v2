@@ -151,7 +151,7 @@ function renderUser() {
   // Actually, the nav item visibility is controlled here.
   $('#navItemAdmin').toggleClass('d-none', !isAdmin);
   $('#navItemAdminKelasehSearch').toggleClass('d-none', !isAdmin);
-  $('#headerNav a[data-page="create"]').closest('li').toggleClass('d-none', isOfficeAdmin);
+  $('#headerNav a[data-page="create"]').closest('li').toggleClass('d-none', isOfficeAdmin || isAdmin);
 }
 
 function updateKelasehBranchSelect() {
@@ -817,6 +817,15 @@ $(document).on('click', '#btnKelasehRefresh', function () {
 
 $(document).on('click', '#btnKelasehSearch', function () {
   refreshKelaseh();
+});
+
+$(document).on('input', '#kelasehNational', function () {
+  const from = $('#kelasehFrom').val() || '';
+  const to = $('#kelasehTo').val() || '';
+  // If date filters are empty, search immediately
+  if (from === '' && to === '') {
+    refreshKelaseh();
+  }
 });
 
 $(document).on('change', '#officeCreateManualBranches', function () {
