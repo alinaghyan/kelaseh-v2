@@ -130,6 +130,7 @@ CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `plaintiff_mobile` VARCHAR(20) NOT NULL,
   `defendant_mobile` VARCHAR(20) NOT NULL,
   `status` ENUM('active','inactive','voided') NOT NULL DEFAULT 'active',
+  `is_manual` TINYINT(1) NOT NULL DEFAULT 0,
   `created_at` DATETIME NOT NULL,
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`),

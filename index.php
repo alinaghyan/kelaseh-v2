@@ -746,6 +746,15 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           </select>
                         </div>
                         <div class="col-12 col-md-6">
+                          <label class="form-label form-label-sm">تاریخ ثبت کلاسه (دستی)</label>
+                          <div class="input-group input-group-sm">
+                            <input name="manual_year" type="number" class="form-control" placeholder="سال (۰۴)" min="0" max="99" />
+                            <input name="manual_month" type="number" class="form-control" placeholder="ماه (۰۱)" min="1" max="12" />
+                            <input name="manual_day" type="number" class="form-control" placeholder="روز (۰۱)" min="1" max="31" />
+                          </div>
+                          <div class="form-text small">در صورت خالی بودن، تاریخ امروز درج می‌شود.</div>
+                        </div>
+                        <div class="col-12 col-md-6">
                           <label class="form-label form-label-sm">کد ملی خواهان (الزامی)</label>
                           <input name="plaintiff_national_code" type="text" class="form-control form-control-sm national-check" required maxlength="10" placeholder="۱۰ رقم" />
                           <div class="form-text text-danger d-none nc-error">کد ملی نامعتبر است.</div>
@@ -783,7 +792,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   <div class="row g-3">
                     <div class="col-12 col-lg-6">
                       <div class="card border-info h-100">
-                        <div class="card-header bg-info text-white small py-1">کلاسه‌های خواهان</div>
+                        <div class="card-header bg-info text-white small py-1">سوابق خواهان</div>
                         <div class="card-body p-0">
                           <table class="table table-sm table-striped mb-0 small">
                             <thead><tr><th>کلاسه</th><th>شهر</th><th>تاریخ</th><th>طرف مقابل</th></tr></thead>
@@ -794,7 +803,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     </div>
                     <div class="col-12 col-lg-6">
                       <div class="card border-warning h-100">
-                        <div class="card-header bg-warning text-dark small py-1">کلاسه‌های خوانده</div>
+                        <div class="card-header bg-warning text-dark small py-1">سوابق خوانده</div>
                         <div class="card-body p-0">
                           <table class="table table-sm table-striped mb-0 small">
                             <thead><tr><th>کلاسه</th><th>شهر</th><th>تاریخ</th><th>طرف مقابل</th></tr></thead>

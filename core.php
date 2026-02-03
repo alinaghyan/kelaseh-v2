@@ -401,6 +401,17 @@ function ensure_kelaseh_numbers_code_supports_city_prefix(): void
     }
 }
 
+function ensure_kelaseh_numbers_supports_manual_flag(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `is_manual` TINYINT(1) NOT NULL DEFAULT 0 AFTER `status`');
+    } catch (Throwable $e) {
+    }
+}
+
 function ensure_city_code_supports_variable_length(): void
 {
     static $done = false;
@@ -661,12 +672,25 @@ function action_kelaseh_list(array $data): void {
 
 function action_kelaseh_list_today(array $data): void {
     $user = auth_require_login();
-    $filters = [
-        'owner_id' => $user['id'],
-        'from' => date('Y-m-d'),
-        'to' => date('Y-m-d'),
-    ];
-    $rows = kelaseh_fetch_rows($user, $filters, 100);
+    // Show last 50 records of the user so they can always see their latest work
+    $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name
+            FROM kelaseh_numbers k
+            JOIN users u ON u.id = k.owner_id
+            LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+            WHERE k.owner_id = ?
+            ORDER BY k.id DESC LIMIT 50";
+    
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$user['id']]);
+    $rows = $stmt->fetchAll();
+    
+    foreach ($rows as &$r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+        $r['full_code'] = (string)($r['code'] ?? '');
+        $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
+        $r['is_manual'] = (int)($r['is_manual'] ?? 0);
+    }
+    
     json_response(true, ['data' => ['kelaseh' => $rows]]);
 }
 
@@ -696,20 +720,66 @@ function kelaseh_create_internal(array $user, array $data): array
 
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
     if (!$cityCode) throw new HttpError(422, 'کد شهر کاربر تنظیم نشده است.');
-    $today = date('Y-m-d');
-    $selectedBranch = null;
-
-    $branches = array_values(array_unique(array_map('intval', $branches)));
-    sort($branches);
-
-    ensure_kelaseh_numbers_code_supports_city_prefix();
-
+    
     $requestedBranch = isset($data['branch_no']) ? (int)to_english_digits((string)$data['branch_no']) : 0;
 
     $defaultCap = 10;
     $notices = [];
     $selectedCap = null;
     $lastFullBranch = null;
+
+    // Support manual date
+    $mY = trim((string)($data['manual_year'] ?? ''));
+    $mM = trim((string)($data['manual_month'] ?? ''));
+    $mD = trim((string)($data['manual_day'] ?? ''));
+    
+    $manualY = (int)to_english_digits($mY);
+    $manualM = (int)to_english_digits($mM);
+    $manualD = (int)to_english_digits($mD);
+    
+    $today = date('Y-m-d');
+    $j = jalali_today_parts();
+    $createdAt = now_mysql();
+    $isManual = 0;
+
+    if ($manualY > 0 && $manualM > 0 && $manualD > 0) {
+        // If manual year is 2 digits (e.g. 04), convert to 4 digits (1404)
+        if ($manualY < 100) {
+            $manualY += 1400;
+        }
+
+        if ($manualY >= 1300 && $manualM >= 1 && $manualM <= 12 && $manualD >= 1 && $manualD <= 31) {
+            try {
+                // Use constructor or fromDateTime
+                $jalalian = new Jalalian($manualY, $manualM, $manualD);
+                $gDate = $jalalian->toGregorian();
+                $today = $gDate->format('Y-m-d');
+                // Use manual date but keep current time
+                $createdAt = $gDate->format('Y-m-d') . ' ' . date('H:i:s');
+                $isManual = 1;
+                $j = [
+                    'jy' => $manualY,
+                    'jm' => $manualM,
+                    'jd' => $manualD,
+                    'jalali_ymd' => sprintf('%02d%02d%02d', $manualY % 100, $manualM, $manualD),
+                    'jalali_full_ymd' => sprintf('%04d%02d%02d', $manualY, $manualM, $manualD)
+                ];
+                $notices[] = 'ثبت با تاریخ دستی: ' . sprintf('%04d/%02d/%02d', $manualY, $manualM, $manualD);
+            } catch (Throwable $e) {
+                throw new HttpError(422, 'تاریخ شمسی وارد شده معتبر نیست یا وجود ندارد.');
+            }
+        } else {
+            throw new HttpError(422, 'فرمت تاریخ دستی اشتباه است.');
+        }
+    }
+
+    $branches = array_values(array_unique(array_map('intval', $branches)));
+    sort($branches);
+
+    ensure_kelaseh_numbers_code_supports_city_prefix();
+    ensure_kelaseh_numbers_supports_manual_flag();
+
+    $selectedBranch = null;
 
     if ($requestedBranch > 0) {
         if (!in_array($requestedBranch, $branches, true)) {
@@ -786,7 +856,6 @@ function kelaseh_create_internal(array $user, array $data): array
     if ($dMob === null) throw new HttpError(422, 'موبایل خوانده نامعتبر است.');
 
     $counterTable = kelaseh_daily_counters_table();
-    $j = jalali_today_parts();
     $jalaliYmd = $j['jalali_ymd'];
     $jalaliFull = $j['jalali_full_ymd'];
     $branchNo2 = sprintf('%02d', (int)$selectedBranch);
@@ -837,9 +906,9 @@ function kelaseh_create_internal(array $user, array $data): array
             . sprintf('%02d', $j['jd'])
             . $seqPart;
 
-        $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?)";
-        db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$selectedBranch, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, now_mysql(), now_mysql()]);
+        $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, is_manual, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)";
+        db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$selectedBranch, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, $isManual, $createdAt, $createdAt]);
         db()->commit();
     } catch (Throwable $e) {
         if (db()->inTransaction()) db()->rollBack();
@@ -1465,8 +1534,9 @@ function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
         $cityCode = $r['city_code'] ?? ($user['city_code'] ?? '');
         $c = (string)($r['code'] ?? '');
-        $r['full_code'] = str_contains($c, '-') ? $c : (($cityCode ? $cityCode . '-' : '') . $c);
+        $r['full_code'] = (string)($r['code'] ?? '');
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
+        $r['is_manual'] = (int)($r['is_manual'] ?? 0);
     }
     return $rows;
 }

@@ -316,6 +316,12 @@ function generateKelasehRows(rows) {
     const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
     const statusHtml = $('<div/>').text(status).html();
     const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
+    
+    let manualBadge = '';
+    if (r.is_manual) {
+      manualBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">دستی</span>';
+    }
+
     const json = encodeURIComponent(
       JSON.stringify({
         code: r.code || '',
@@ -363,7 +369,7 @@ function generateKelasehRows(rows) {
            </div>
         </td>
         <td class="text-secondary">${rowNo}</td>
-        <td><div class="fw-semibold" dir="ltr">${code}</div></td>
+        <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}</div></td>
         <td class="text-secondary">${branchNo}</td>
         <td class="text-secondary">${cityName}</td>
         <td>${plaintiff}</td>
@@ -834,29 +840,31 @@ $(document).on('change', '#officeCreateManualBranches', function () {
   $('#officeCreateBranchRangeWrap').toggleClass('d-none', manual);
 });
 
-function renderKelasehHistoryRows(list, type) {
-  const badgeClass = type === 'plaintiff' ? 'bg-info' : 'bg-warning text-dark';
-  if (!Array.isArray(list) || !list.length) {
+function renderKelasehHistoryRows(items, lookupNC) {
+  if (!items || !items.length) {
     return `<tr><td colspan="4" class="text-center text-muted">سابقه‌ای یافت نشد.</td></tr>`;
   }
-  return list
+  return items
     .map((item) => {
+      const roleInRecord = (String(item.plaintiff_national_code) === String(lookupNC)) ? 'plaintiff' : 'defendant';
+      const badgeClass = roleInRecord === 'plaintiff' ? 'bg-info' : 'bg-warning text-dark';
       const code = $('<div/>').text(toPersianDigits(item.code || '')).html();
       const city = $('<div/>').text(toPersianDigits(item.city_name || item.city_code || '')).html();
       const date = $('<div/>').text(toPersianDigits(item.created_at_jalali || '')).html();
-      const oppositeRaw = type === 'plaintiff' ? (item.defendant_name || '') : (item.plaintiff_name || '');
-      const oppositeLabel = type === 'plaintiff' ? 'خوانده' : 'خواهان';
+      const oppositeRaw = roleInRecord === 'plaintiff' ? (item.defendant_name || '') : (item.plaintiff_name || '');
+      const oppositeLabel = roleInRecord === 'plaintiff' ? 'خوانده' : 'خواهان';
       const opposite = $('<div/>').text(toPersianDigits(oppositeRaw ? `${oppositeRaw} (${oppositeLabel})` : '')).html();
       return `<tr><td><span class="badge ${badgeClass}">${code}</span></td><td>${city}</td><td>${date}</td><td>${opposite}</td></tr>`;
     })
     .join('');
 }
 
-function refreshKelasehHistoryFor(nationalCode) {
+function refreshKelasehHistoryFor(nationalCode, role) {
   const val = String(nationalCode || '');
+  const target = role === 'plaintiff' ? '#historyPlaintiffTbody' : '#historyDefendantTbody';
+
   if (!val || val.length < 10) {
-    $('#historyPlaintiffTbody').empty();
-    $('#historyDefendantTbody').empty();
+    $(target).empty();
     toggleHistorySection();
     return;
   }
@@ -865,13 +873,15 @@ function refreshKelasehHistoryFor(nationalCode) {
     .done((res) => {
       const pList = (res.data && res.data.plaintiff) || [];
       const dList = (res.data && res.data.defendant) || [];
-      $('#historyPlaintiffTbody').html(renderKelasehHistoryRows(pList, 'plaintiff'));
-      $('#historyDefendantTbody').html(renderKelasehHistoryRows(dList, 'defendant'));
+      const allCases = [...pList, ...dList];
+      // Sort by ID descending (most recent first)
+      allCases.sort((a, b) => (b.id || 0) - (a.id || 0));
+      
+      $(target).html(renderKelasehHistoryRows(allCases, val));
       toggleHistorySection();
     })
     .fail(() => {
-      $('#historyPlaintiffTbody').empty();
-      $('#historyDefendantTbody').empty();
+      $(target).empty();
       toggleHistorySection();
     });
 }
@@ -888,7 +898,8 @@ function toggleHistorySection() {
 }
 
 $(document).on('change', '.national-check', function() {
-  refreshKelasehHistoryFor($(this).val());
+  const role = $(this).attr('name') === 'plaintiff_national_code' ? 'plaintiff' : 'defendant';
+  refreshKelasehHistoryFor($(this).val(), role);
 });
 
 $(document).on('input', '.national-check', function() {
