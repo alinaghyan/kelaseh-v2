@@ -1539,6 +1539,11 @@ $(document).on('click', '.btn-admin-edit-user', function () {
     form.find('[name="email"]').val(u.email || '');
     form.find('[name="password"]').val('');
     form.find('[name="role"]').val(u.role || 'user');
+    if (currentUser && currentUser.role === 'office_admin') {
+        form.find('[name="role"]').prop('disabled', true);
+    } else {
+        form.find('[name="role"]').prop('disabled', false);
+    }
     form.find('[name="is_active"]').val(Number(u.is_active) === 1 ? '1' : '0');
     form.find('[name="branch_count"]').val(u.branch_count || 1);
 
@@ -1549,11 +1554,12 @@ $(document).on('click', '.btn-admin-edit-user', function () {
       : (typeof u.branches === 'string'
         ? u.branches.split(',').map((x) => Number(String(x).trim())).filter((n) => Number.isFinite(n) && n > 0)
         : []);
-    const globalCap = u.branch_capacity || 15;
+    
+    const branchCaps = u.branch_capacities || {};
     
     for (let i = 1; i <= 15; i++) {
         const isChecked = userBranches.includes(i) ? 'checked' : '';
-        const cap = globalCap;
+        const cap = branchCaps[i] || 15;
         
         html += `
         <div class="col-6 col-md-4 col-lg-3">
@@ -1589,8 +1595,7 @@ $(document).on('submit', '#formAdminEditUser', function(e) {
         password: form.find('[name="password"]').val(),
         role: form.find('[name="role"]').val(),
         is_active: form.find('[name="is_active"]').val(),
-        branch_count: form.find('[name="branch_count"]').val(),
-        branch_capacity: 15
+        branch_count: form.find('[name="branch_count"]').val()
     };
     
     if (data.role === 'branch_admin') {
@@ -1770,7 +1775,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
                 <tr>
                     <td>شعبه ${toPersianDigits(item.branch_no)}</td>
                     <td>
-                        <input type="number" class="form-control form-control-sm office-cap-input" data-branch="${item.branch_no}" value="${item.capacity}" min="0" max="999">
+                        <input type="number" class="form-control form-control-sm office-cap-input" data-branch="${item.branch_no}" value="${item.capacity}" min="1" max="999">
                     </td>
                     <td>
                         <button class="btn btn-primary btn-sm btn-office-save-cap" data-branch="${item.branch_no}">ذخیره</button>
@@ -1794,17 +1799,22 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           const name = $('<div/>').text(toPersianDigits(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim())).html();
           const branchesText = (u.branches || '').toString();
           const branches = $('<div/>').text(branchesText ? toPersianDigits(branchesText.split(',').map((x) => String(x).padStart(2, '0')).join(', ')) : '').html();
+          const json = encodeURIComponent(JSON.stringify(u));
           return `
-            <tr data-id="${u.id}">
+            <tr data-id="${u.id}" data-json="${json}">
               <td class="fw-semibold">${username}</td>
               <td>${name}</td>
               <td>مدیر شعبه</td>
               <td class="text-secondary">${branches}</td>
               <td class="text-end">
-                <button class="btn btn-outline-secondary btn-sm btn-office-filter-user" type="button" data-id="${u.id}">ثبت‌های این کاربر</button>
+                <button class="btn btn-outline-primary btn-sm btn-admin-edit-user" type="button">ویرایش</button>
+                <button class="btn btn-outline-danger btn-sm btn-admin-delete-user" type="button">حذف</button>
               </td>
               <td class="text-end">
-                <button class="btn btn-outline-dark btn-sm btn-office-clear-filter" type="button">همه</button>
+                <div class="btn-group btn-group-sm">
+                  <button class="btn btn-outline-secondary btn-office-filter-user" type="button" data-id="${u.id}">ثبت‌ها</button>
+                  <button class="btn btn-outline-dark btn-office-clear-filter" type="button">همه</button>
+                </div>
               </td>
             </tr>
           `;

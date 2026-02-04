@@ -973,7 +973,7 @@ function action_office_capacities_get(array $data): void {
     
     $result = [];
     foreach (range(1, 15) as $b) {
-        $result[] = ['branch_no' => $b, 'capacity' => $map[$b] ?? 10];
+        $result[] = ['branch_no' => $b, 'capacity' => $map[$b] ?? 15];
     }
     json_response(true, ['capacities' => $result]);
 }
@@ -1792,6 +1792,19 @@ function action_admin_users_list(array $data): void {
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     $users = $stmt->fetchAll();
+    
+    // Fetch branch capacities for each user's city
+    $cityCaps = [];
+    foreach ($users as &$u) {
+        $cCode = $u['city_code'];
+        if ($cCode && !isset($cityCaps[$cCode])) {
+            $stmtCap = db()->prepare('SELECT branch_no, capacity FROM office_branch_capacities WHERE city_code = ?');
+            $stmtCap->execute([$cCode]);
+            $cityCaps[$cCode] = $stmtCap->fetchAll(PDO::FETCH_KEY_PAIR);
+        }
+        $u['branch_capacities'] = $cityCaps[$cCode] ?? [];
+    }
+    
     json_response(true, ['data' => ['users' => $users]]);
 }
 
@@ -1805,10 +1818,10 @@ function action_admin_users_create(array $data): void {
     $username = validate_username($data['username'] ?? '');
     if (!$username) json_response(false, ['message' => 'نام کاربری نامعتبر'], 422);
     
-    // Check duplicate
-    $stmt = db()->prepare('SELECT id FROM users WHERE username = ? OR mobile = ?');
-    $stmt->execute([$username, $data['mobile'] ?? '']);
-    if ($stmt->fetch()) json_response(false, ['message' => 'کاربر تکراری است'], 409);
+    // Check duplicate username
+    $stmt = db()->prepare('SELECT id FROM users WHERE username = ?');
+    $stmt->execute([$username]);
+    if ($stmt->fetch()) json_response(false, ['message' => 'نام کاربری تکراری است'], 409);
     
     $passHash = password_hash($data['password'], PASSWORD_DEFAULT);
     $role = $isOfficeAdmin ? 'branch_admin' : ($data['role'] ?? 'user');

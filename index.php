@@ -640,24 +640,6 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     </table>
                   </div>
                 </div>
-                <div class="tab-pane fade" id="officeCapacities" role="tabpanel">
-                   <div class="d-flex justify-content-between align-items-center mb-2">
-                      <div class="text-secondary small">ظرفیت روزانه شعب را مدیریت کنید.</div>
-                      <button id="btnOfficeCapacitiesRefresh" class="btn btn-outline-secondary btn-sm">تازه‌سازی</button>
-                   </div>
-                   <div class="table-responsive">
-                      <table class="table table-sm table-bordered align-middle">
-                         <thead>
-                            <tr>
-                               <th>شعبه</th>
-                               <th>ظرفیت فعلی</th>
-                               <th>تنظیمات</th>
-                            </tr>
-                         </thead>
-                         <tbody id="officeCapacitiesTbody"></tbody>
-                      </table>
-                   </div>
-                </div>
               </div>
             </div>
           </div>
@@ -729,6 +711,24 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <tbody id="officeKelasehSearchTbody"></tbody>
                     </table>
                   </div>
+                </div>
+                <div class="tab-pane fade" id="officeCapacities" role="tabpanel">
+                   <div class="d-flex justify-content-between align-items-center mb-2">
+                      <div class="text-secondary small">ظرفیت روزانه شعب را مدیریت کنید.</div>
+                      <button id="btnOfficeCapacitiesRefresh" class="btn btn-outline-secondary btn-sm">تازه‌سازی</button>
+                   </div>
+                   <div class="table-responsive">
+                      <table class="table table-sm table-bordered align-middle">
+                         <thead>
+                            <tr>
+                               <th>شعبه</th>
+                               <th>ظرفیت فعلی</th>
+                               <th>تنظیمات</th>
+                            </tr>
+                         </thead>
+                         <tbody id="officeCapacitiesTbody"></tbody>
+                      </table>
+                   </div>
                 </div>
               </div>
             </div>

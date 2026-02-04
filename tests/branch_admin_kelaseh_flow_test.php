@@ -303,6 +303,8 @@ try {
     echo "OK\n";
     echo "base_url: $baseUrl\n";
     echo "username: $username\n";
+    echo "password: $passwordPlain\n";
+    echo "city_code: $cityCode\n";
     echo "export: $outFile\n";
 
     $created['ok'] = true;
@@ -310,6 +312,7 @@ try {
     fwrite(STDERR, "FAIL: " . $e->getMessage() . "\n");
     $created['ok'] = false;
 } finally {
+    /*
     try {
         if (!empty($created['codes']) && $created['user_id']) {
             $in = implode(',', array_fill(0, count($created['codes']), '?'));
@@ -344,6 +347,7 @@ try {
     } catch (Throwable $cleanupErr) {
         fwrite(STDERR, "CLEANUP FAIL: " . $cleanupErr->getMessage() . "\n");
     }
+    */
 
     if ($server) stop_builtin_server($server);
 }
