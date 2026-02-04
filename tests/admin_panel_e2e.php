@@ -174,10 +174,10 @@ try {
     $cityCode1 = pick_city_code();
     $cityCode2 = pick_city_code([$cityCode1]);
 
-    $createCity = $http->post(['action' => 'admin.cities.create', 'code' => $cityCode1, 'name' => 'شهر تست E2E'], $hdr);
+    $createCity = $http->post(['action' => 'admin.cities.create', 'code' => $cityCode1, 'name' => 'اداره تست E2E'], $hdr);
     assert_true(($createCity['json']['ok'] ?? false) === true, 'city create failed: ' . (string)($createCity['json']['message'] ?? ''));
 
-    $updateCity = $http->post(['action' => 'admin.cities.update', 'code' => $cityCode1, 'new_code' => $cityCode2, 'name' => 'شهر تست ویرایش'], $hdr);
+    $updateCity = $http->post(['action' => 'admin.cities.update', 'code' => $cityCode1, 'new_code' => $cityCode2, 'name' => 'اداره تست ویرایش'], $hdr);
     assert_true(($updateCity['json']['ok'] ?? false) === true, 'city update failed: ' . (string)($updateCity['json']['message'] ?? ''));
 
     $listCities = $http->post(['action' => 'admin.cities.list'], $hdr);

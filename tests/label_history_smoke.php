@@ -191,7 +191,7 @@ try {
     $hdr = ['X-CSRF-Token: ' . $csrf];
 
     $cityCode = pick_city_code();
-    $createCity = $http->post(['action' => 'admin.cities.create', 'code' => $cityCode, 'name' => 'شهر تست لیبل'], $hdr);
+    $createCity = $http->post(['action' => 'admin.cities.create', 'code' => $cityCode, 'name' => 'اداره تست لیبل'], $hdr);
     assert_true(($createCity['json']['ok'] ?? false) === true, 'create city failed');
 
     $branchUser = 'lbl_branch_' . random_int(10000, 99999);

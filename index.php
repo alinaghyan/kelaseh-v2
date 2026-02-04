@@ -93,9 +93,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
   <div class="container-fluid py-3" style="max-width: 1400px; margin: 0 auto;">
     <div class="d-flex flex-column gap-2 mb-3">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
-        <div class="d-flex flex-column">
-          <h1 class="h5 m-0"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h1>
-          <div id="kelasehOffice" class="small text-secondary d-none"></div>
+        <div class="d-flex align-items-center gap-3">
+          <img src="assets/img/logo.png" alt="Logo" style="height: 50px;" onerror="this.style.display='none'">
+          <div class="d-flex flex-column">
+            <h1 class="h5 m-0"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h1>
+            <div id="kelasehOffice" class="small text-secondary d-none"></div>
+          </div>
         </div>
         <div class="d-flex align-items-center gap-2">
           <div id="headerDateTime" class="small text-secondary d-none"></div>
@@ -128,6 +131,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       <div class="col-12 col-md-6 col-lg-5">
         <div class="card shadow-sm">
           <div class="card-body">
+            <div class="text-center mb-4">
+              <img src="assets/img/logo.png" alt="Logo" style="max-height: 120px;" onerror="this.style.display='none'">
+              <h2 class="h5 mt-3"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h2>
+            </div>
             <form id="formLogin" class="vstack gap-2">
               <div>
                 <label class="form-label">نام کاربری یا ایمیل</label>
@@ -185,7 +192,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#adminUsers" type="button" role="tab">کاربران</button>
                 </li>
                 <li class="nav-item" role="presentation">
-                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminCities" type="button" role="tab">شهرها</button>
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminCities" type="button" role="tab">اداره‌ها</button>
                 </li>
                 <li class="nav-item" role="presentation">
                   <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminItems" type="button" role="tab">داده‌ها</button>
@@ -231,7 +238,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <input name="password" type="password" class="form-control form-control-sm" autocomplete="new-password" required />
                       </div>
                       <div class="col-12 col-md-6">
-                        <label class="form-label form-label-sm">شهر (استان اصفهان)</label>
+                        <label class="form-label form-label-sm">اداره (استان اصفهان)</label>
                         <select name="city_code" id="adminCitySelect" class="form-select form-select-sm" required>
                           <option value="">انتخاب کنید…</option>
                         </select>
@@ -312,7 +319,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <thead>
                         <tr>
                           <th>کاربر</th>
-                          <th style="width: 140px;">شهر</th>
+                          <th style="width: 140px;">اداره</th>
                           <th>نقش</th>
                           <th>فعال</th>
                           <th style="width: 140px;">شعبه</th>
@@ -332,7 +339,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <input name="code" type="text" class="form-control form-control-sm" placeholder="مثلاً ۰۰۱۰" maxlength="4" required />
                       </div>
                       <div class="col-12 col-md-6">
-                        <label class="form-label form-label-sm">نام شهر</label>
+                        <label class="form-label form-label-sm">نام اداره</label>
                         <input name="name" type="text" class="form-control form-control-sm" required />
                       </div>
                       <div class="col-12 col-md-3">
@@ -417,12 +424,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
                   <div class="row g-3">
                     <div class="col-12 col-lg-6">
-                      <div class="fw-semibold mb-1">به تفکیک شهر</div>
+                      <div class="fw-semibold mb-1">به تفکیک اداره</div>
                       <div class="table-responsive">
                         <table class="table table-sm align-middle">
                           <thead>
                             <tr>
-                              <th>شهر</th>
+                              <th>اداره</th>
                               <th>کل</th>
                               <th>فعال</th>
                               <th>غیرفعال</th>
@@ -440,7 +447,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <thead>
                             <tr>
                               <th>کاربر</th>
-                              <th>شهر</th>
+                              <th>اداره</th>
                               <th>کل</th>
                               <th>فعال</th>
                               <th>غیرفعال</th>
@@ -537,8 +544,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                             <div class="small text-secondary">
                               متغیرها:
                               {code} (کد کلاسه)،
-                              {full_code} (کد کامل شهر-کلاسه)،
-                              {city_name} (نام شهر)،
+                              {full_code} (کد کامل اداره-کلاسه)،
+                              {city_name} (نام اداره)،
                               {branch_no} (شماره شعبه)،
                               {date} (تاریخ ثبت)،
                               {plaintiff_name} (نام خواهان)،
@@ -597,7 +604,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <table class="table table-sm align-middle table-bordered">
                       <thead>
                         <tr>
-                          <th>شهر</th>
+                          <th>اداره</th>
                           <th>نقش</th>
                           <th>نام کاربر</th>
                           <th>تعداد ثبت</th>
@@ -613,7 +620,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <span class="input-group-text">جستجو</span>
                     <input id="adminKelasehSearchQuery" type="text" class="form-control" placeholder="کلاسه/کدملی/نام" />
                     <select id="adminKelasehCityFilter" class="form-select" style="max-width: 220px;">
-                      <option value="">همه شهرها</option>
+                      <option value="">همه اداره‌ها</option>
                     </select>
                     <button id="btnAdminKelasehSearch" class="btn btn-outline-secondary" type="button">جستجو</button>
                   </div>
@@ -622,7 +629,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <thead>
                         <tr>
                           <th>کلاسه</th>
-                          <th>شهر/کاربر</th>
+                          <th>اداره/کاربر</th>
                           <th>خواهان</th>
                           <th>کدملی خواهان</th>
                           <th>خوانده</th>
@@ -795,7 +802,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <div class="card-header bg-info text-white small py-1">سوابق خواهان</div>
                         <div class="card-body p-0">
                           <table class="table table-sm table-striped mb-0 small">
-                            <thead><tr><th>کلاسه</th><th>شهر</th><th>تاریخ</th><th>طرف مقابل</th></tr></thead>
+                            <thead><tr><th>کلاسه</th><th>اداره</th><th>تاریخ</th><th>طرف مقابل</th></tr></thead>
                             <tbody id="historyPlaintiffTbody"></tbody>
                           </table>
                         </div>
@@ -806,7 +813,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <div class="card-header bg-warning text-dark small py-1">سوابق خوانده</div>
                         <div class="card-body p-0">
                           <table class="table table-sm table-striped mb-0 small">
-                            <thead><tr><th>کلاسه</th><th>شهر</th><th>تاریخ</th><th>طرف مقابل</th></tr></thead>
+                            <thead><tr><th>کلاسه</th><th>اداره</th><th>تاریخ</th><th>طرف مقابل</th></tr></thead>
                             <tbody id="historyDefendantTbody"></tbody>
                           </table>
                         </div>
@@ -828,7 +835,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th style="width: 50px;">ردیف</th>
                           <th>کلاسه</th>
                           <th style="width: 60px;">شعبه</th>
-                          <th style="width: 140px;">شهر</th>
+                          <th style="width: 140px;">اداره</th>
                           <th>خواهان</th>
                           <th>کدملی خواهان</th>
                           <th>خوانده</th>
@@ -883,7 +890,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <th style="width: 70px;">ردیف</th>
                       <th>کلاسه</th>
                       <th style="width: 90px;">شعبه</th>
-                      <th style="width: 140px;">شهر</th>
+                      <th style="width: 140px;">اداره</th>
                       <th>خواهان</th>
                       <th>کدملی خواهان</th>
                       <th>خوانده</th>

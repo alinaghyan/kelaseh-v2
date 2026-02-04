@@ -1,0 +1,21 @@
+# جلوگیری از مشاهده لیست فایل‌ها
+Options -Indexes
+
+# جلوگیری از دسترسی مستقیم به فایل‌های حساس
+<FilesMatch "^(config\.php|schema\.sql|composer\.(json|lock|phar))$">
+    Order allow,deny
+    Deny from all
+</FilesMatch>
+
+# تنظیمات برای UTF-8
+AddDefaultCharset UTF-8
+
+# افزایش امنیت کوکی‌ها (در صورت پشتیبانی هاست)
+<IfModule mod_php7.c>
+    php_value session.cookie_httponly 1
+    php_value session.use_only_cookies 1
+</IfModule>
+<IfModule mod_php.c>
+    php_value session.cookie_httponly 1
+    php_value session.use_only_cookies 1
+</IfModule>

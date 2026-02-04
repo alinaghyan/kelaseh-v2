@@ -228,7 +228,7 @@ try {
     assert_true($cityCode !== null, 'Failed to generate city code');
     $created['city_code'] = $cityCode;
 
-    db()->prepare('INSERT INTO isfahan_cities (code, name) VALUES (?, ?)')->execute([$cityCode, 'شهر تست']);
+    db()->prepare('INSERT INTO isfahan_cities (code, name) VALUES (?, ?)')->execute([$cityCode, 'اداره تست']);
 
     $username = 'test_branch_' . random_int(10000, 99999);
     $passwordPlain = 'TestPass_' . random_int(10000, 99999);

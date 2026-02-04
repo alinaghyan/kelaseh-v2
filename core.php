@@ -408,8 +408,10 @@ function ensure_kelaseh_numbers_supports_manual_flag(): void
     $done = true;
     try {
         db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `is_manual` TINYINT(1) NOT NULL DEFAULT 0 AFTER `status`');
-    } catch (Throwable $e) {
-    }
+    } catch (Throwable $e) {}
+    try {
+        db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `is_manual_branch` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_manual`');
+    } catch (Throwable $e) {}
 }
 
 function ensure_city_code_supports_variable_length(): void
@@ -689,6 +691,7 @@ function action_kelaseh_list_today(array $data): void {
         $r['full_code'] = (string)($r['code'] ?? '');
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
         $r['is_manual'] = (int)($r['is_manual'] ?? 0);
+        $r['is_manual_branch'] = (int)($r['is_manual_branch'] ?? 0);
     }
     
     json_response(true, ['data' => ['kelaseh' => $rows]]);
@@ -719,9 +722,10 @@ function kelaseh_create_internal(array $user, array $data): array
     }
 
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
-    if (!$cityCode) throw new HttpError(422, 'کد شهر کاربر تنظیم نشده است.');
+    if (!$cityCode) throw new HttpError(422, 'کد اداره کاربر تنظیم نشده است.');
     
     $requestedBranch = isset($data['branch_no']) ? (int)to_english_digits((string)$data['branch_no']) : 0;
+    $isManualBranch = $requestedBranch > 0 ? 1 : 0;
 
     $defaultCap = 10;
     $notices = [];
@@ -750,9 +754,11 @@ function kelaseh_create_internal(array $user, array $data): array
 
         if ($manualY >= 1300 && $manualM >= 1 && $manualM <= 12 && $manualD >= 1 && $manualD <= 31) {
             try {
-                // Use constructor or fromDateTime
+                if (!\Morilog\Jalali\CalendarUtils::checkDate($manualY, $manualM, $manualD)) {
+                    throw new Exception("تاریخ شمسی وارد شده در تقویم وجود ندارد.");
+                }
                 $jalalian = new Jalalian($manualY, $manualM, $manualD);
-                $gDate = $jalalian->toGregorian();
+                $gDate = $jalalian->toCarbon();
                 $today = $gDate->format('Y-m-d');
                 // Use manual date but keep current time
                 $createdAt = $gDate->format('Y-m-d') . ' ' . date('H:i:s');
@@ -766,10 +772,10 @@ function kelaseh_create_internal(array $user, array $data): array
                 ];
                 $notices[] = 'ثبت با تاریخ دستی: ' . sprintf('%04d/%02d/%02d', $manualY, $manualM, $manualD);
             } catch (Throwable $e) {
-                throw new HttpError(422, 'تاریخ شمسی وارد شده معتبر نیست یا وجود ندارد.');
+                throw new HttpError(422, 'خطا در پردازش تاریخ: ' . $e->getMessage());
             }
         } else {
-            throw new HttpError(422, 'فرمت تاریخ دستی اشتباه است.');
+            throw new HttpError(422, 'فرمت تاریخ دستی (سال، ماه یا روز) اشتباه است.');
         }
     }
 
@@ -906,9 +912,9 @@ function kelaseh_create_internal(array $user, array $data): array
             . sprintf('%02d', $j['jd'])
             . $seqPart;
 
-        $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, is_manual, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?)";
-        db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$selectedBranch, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, $isManual, $createdAt, $createdAt]);
+        $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, is_manual, is_manual_branch, created_at, updated_at)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
+        db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$selectedBranch, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, $isManual, $isManualBranch, $createdAt, $createdAt]);
         db()->commit();
     } catch (Throwable $e) {
         if (db()->inTransaction()) db()->rollBack();
@@ -933,8 +939,9 @@ function action_kelaseh_create(array $data): void {
 
 function action_kelaseh_history_check(array $data): void {
     $user = auth_require_login();
-    $nc = validate_national_code($data['national_code'] ?? null);
-    if (!$nc) json_response(false, ['message' => 'Invalid NC']);
+    $rawNC = to_english_digits($data['national_code'] ?? '');
+    $nc = validate_national_code($rawNC) ?? (preg_match('/^[0-9]{10}$/', $rawNC) ? $rawNC : null);
+    if (!$nc) json_response(false, ['message' => 'کدملی وارد شده نامعتبر است.']);
 
     $filters = ['national_code' => $nc];
     $rows = kelaseh_fetch_rows($user, $filters, 10);
@@ -957,7 +964,7 @@ function action_office_capacities_get(array $data): void {
     if ($user['role'] === 'admin') {
         $cityCode = normalize_city_code($data['city_code'] ?? null) ?? $cityCode;
     }
-    if ($cityCode === '') json_response(false, ['message' => 'کد شهر تنظیم نشده است.'], 422);
+    if ($cityCode === '') json_response(false, ['message' => 'کد اداره تنظیم نشده است.'], 422);
     $stmt = db()->prepare('SELECT branch_no, capacity FROM office_branch_capacities WHERE city_code = ?');
     $stmt->execute([$cityCode]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1068,7 +1075,11 @@ function action_kelaseh_label(array $data): void {
             foreach ($list as $it) {
                 if ((string)($it['code'] ?? '') === $code) continue;
                 if ((string)($it['plaintiff_national_code'] ?? '') !== $pnc) continue;
-                $pOut[] = ['code' => (string)($it['full_code'] ?? $it['code'] ?? ''), 'city' => (string)($it['city_name'] ?? '')];
+                $pOut[] = [
+                    'code' => (string)($it['full_code'] ?? $it['code'] ?? ''),
+                    'city' => (string)($it['city_name'] ?? ''),
+                    'created_at_jalali' => (string)($it['created_at_jalali'] ?? '')
+                ];
                 if (count($pOut) >= 5) break;
             }
         }
@@ -1077,7 +1088,11 @@ function action_kelaseh_label(array $data): void {
             foreach ($list as $it) {
                 if ((string)($it['code'] ?? '') === $code) continue;
                 if ((string)($it['defendant_national_code'] ?? '') !== $dnc) continue;
-                $dOut[] = ['code' => (string)($it['full_code'] ?? $it['code'] ?? ''), 'city' => (string)($it['city_name'] ?? '')];
+                $dOut[] = [
+                    'code' => (string)($it['full_code'] ?? $it['code'] ?? ''),
+                    'city' => (string)($it['city_name'] ?? ''),
+                    'created_at_jalali' => (string)($it['created_at_jalali'] ?? '')
+                ];
                 if (count($dOut) >= 5) break;
             }
         }
@@ -1138,9 +1153,9 @@ function action_office_capacities_update(array $data): void {
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
     if ($user['role'] === 'admin') {
         $cityCode = normalize_city_code($data['city_code'] ?? null) ?? $cityCode;
-        if (!$cityCode) json_response(false, ['message' => 'کد شهر الزامی است.'], 422);
+        if (!$cityCode) json_response(false, ['message' => 'کد اداره الزامی است.'], 422);
     }
-    if ($cityCode === '') json_response(false, ['message' => 'کد شهر تنظیم نشده است.'], 422);
+    if ($cityCode === '') json_response(false, ['message' => 'کد اداره تنظیم نشده است.'], 422);
     $stmt = db()->prepare('SELECT id FROM office_branch_capacities WHERE city_code = ? AND branch_no = ?');
     $stmt->execute([$cityCode, $branch]);
     if ($stmt->fetch()) {
@@ -1157,7 +1172,7 @@ function action_office_stats(): void
     if ($user['role'] !== 'office_admin') json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
 
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
-    if ($cityCode === '') json_response(false, ['message' => 'کد شهر تنظیم نشده است.'], 422);
+    if ($cityCode === '') json_response(false, ['message' => 'کد اداره تنظیم نشده است.'], 422);
 
     $sqlTotals = "SELECT
         COUNT(*) as total,
@@ -1392,7 +1407,7 @@ function action_kelaseh_export_csv(array $data): void
     header('Content-Disposition: attachment; filename="kelaseh_export.csv"');
     $out = fopen('php://output', 'w');
     fwrite($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['کلاسه', 'شهر', 'شعبه', 'ردیف', 'کدملی خواهان', 'کدملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
+    fputcsv($out, ['کلاسه', 'اداره', 'شعبه', 'ردیف', 'کدملی خواهان', 'کدملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
     foreach ($rows as $r) {
         $status = (string)($r['status'] ?? '');
         $statusFa = $status === 'voided' ? 'ابطال' : ($status === 'inactive' ? 'غیرفعال' : 'فعال');
@@ -1432,7 +1447,7 @@ function action_kelaseh_export_print(array $data): void
     echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>لیست پرونده‌ها</title>';
     echo '<style>body{font-family:Tahoma,Arial,sans-serif;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px}th{background:#f3f3f3}</style>';
     echo '</head><body>';
-    echo '<table><thead><tr><th>کلاسه</th><th>شهر</th><th>کاربر</th><th>شعبه</th><th>خواهان</th><th>کدملی خواهان</th><th>خوانده</th><th>تاریخ</th><th>وضعیت</th></tr></thead><tbody>';
+    echo '<table><thead><tr><th>کلاسه</th><th>اداره</th><th>کاربر</th><th>شعبه</th><th>خواهان</th><th>کدملی خواهان</th><th>خوانده</th><th>تاریخ</th><th>وضعیت</th></tr></thead><tbody>';
     foreach ($rows as $r) {
         $fullCode = htmlspecialchars((string)($r['full_code'] ?? $r['code'] ?? ''), ENT_QUOTES, 'UTF-8');
         $city = htmlspecialchars((string)($r['city_name'] ?? $r['city_code'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -1442,6 +1457,17 @@ function action_kelaseh_export_print(array $data): void
         $pnc = htmlspecialchars((string)($r['plaintiff_national_code'] ?? ''), ENT_QUOTES, 'UTF-8');
         $dn = htmlspecialchars((string)($r['defendant_name'] ?? ''), ENT_QUOTES, 'UTF-8');
         $dt = htmlspecialchars((string)($r['created_at_jalali'] ?? $r['created_at'] ?? ''), ENT_QUOTES, 'UTF-8');
+        
+        $manualText = '';
+        if (($r['is_manual'] ?? 0) && ($r['is_manual_branch'] ?? 0)) {
+            $manualText = ' - شعبه و تاریخ دستی';
+        } elseif ($r['is_manual'] ?? 0) {
+            $manualText = ' - تاریخ دستی';
+        } elseif ($r['is_manual_branch'] ?? 0) {
+            $manualText = ' - شعبه دستی';
+        }
+        $dt .= $manualText;
+
         $st = htmlspecialchars((string)($r['status'] ?? ''), ENT_QUOTES, 'UTF-8');
         echo "<tr><td dir=\"ltr\">$fullCode</td><td>$city</td><td>$owner</td><td>$branch</td><td>$pn</td><td dir=\"ltr\">$pnc</td><td>$dn</td><td>$dt</td><td>$st</td></tr>";
     }
@@ -1468,7 +1494,8 @@ function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
     $params = [];
 
     $nationalExact = $national !== '' ? validate_national_code($national) : null;
-    $isGlobalSearch = $nationalExact !== null;
+    // If it's a 10-digit number, we treat it as a global search (even if checksum fails, for history check purposes)
+    $isGlobalSearch = ($nationalExact !== null) || (strlen($national) === 10 && preg_match('/^[0-9]{10}$/', $national));
 
     if (!$isGlobalSearch) {
         if (in_array($user['role'], ['branch_admin', 'user'], true)) {
@@ -1537,6 +1564,7 @@ function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
         $r['full_code'] = (string)($r['code'] ?? '');
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
         $r['is_manual'] = (int)($r['is_manual'] ?? 0);
+        $r['is_manual_branch'] = (int)($r['is_manual_branch'] ?? 0);
     }
     return $rows;
 }
@@ -1788,7 +1816,7 @@ function action_admin_users_create(array $data): void {
     $cityCode = null;
     if ($isOfficeAdmin) {
         $cityCode = resolve_city_code_fk($user['city_code'] ?? null);
-        if (!$cityCode) json_response(false, ['message' => 'کد شهر مدیر اداره معتبر نیست.'], 422);
+        if (!$cityCode) json_response(false, ['message' => 'کد اداره مدیر اداره معتبر نیست.'], 422);
     } else {
         $cityCode = resolve_city_code_fk($data['city_code'] ?? null);
     }
@@ -1897,7 +1925,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
     ensure_user_branches_table();
 
     $cityCode = null;
-    $cityName = 'شهر تست';
+    $cityName = 'اداره تست';
     for ($i = 0; $i < 200; $i++) {
         $candidate = sprintf('%02d', random_int(10, 99));
         $stmt = db()->prepare('SELECT code FROM isfahan_cities WHERE code = ? LIMIT 1');
@@ -1907,7 +1935,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
             break;
         }
     }
-    if (!$cityCode) json_response(false, ['message' => 'امکان ساخت شهر تست وجود ندارد.'], 500);
+    if (!$cityCode) json_response(false, ['message' => 'امکان ساخت اداره تست وجود ندارد.'], 500);
 
     $username = 'test_branch_' . random_int(10000, 99999);
     $passwordPlain = 'TestPass_' . random_int(10000, 99999);
@@ -1995,7 +2023,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         $rows = kelaseh_fetch_rows($testUser, ['national_code' => '', 'from' => null, 'to' => null, 'q' => '', 'owner_id' => 0, 'city_code' => null], 2000);
         $fp = fopen('php://temp', 'w+');
         fwrite($fp, "\xEF\xBB\xBF");
-        fputcsv($fp, ['کلاسه', 'شهر', 'شعبه', 'ردیف', 'کدملی خواهان', 'کدملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
+        fputcsv($fp, ['کلاسه', 'اداره', 'شعبه', 'ردیف', 'کدملی خواهان', 'کدملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
         foreach ($rows as $r) {
             $status = (string)($r['status'] ?? '');
             $statusFa = $status === 'voided' ? 'ابطال' : ($status === 'inactive' ? 'غیرفعال' : 'فعال');
@@ -2130,24 +2158,24 @@ function action_admin_cities_create(array $data): void {
     $code = trim(to_english_digits((string)($data['code'] ?? '')));
     $resolved = resolve_city_code_fk($code);
     if ($resolved !== null) {
-        json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+        json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
     }
-    if (!preg_match('/^[0-9]{1,10}$/', $code)) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    if (!preg_match('/^[0-9]{1,10}$/', $code)) json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
     $name = trim((string)($data['name'] ?? ''));
-    if ($name === '') json_response(false, ['message' => 'نام شهر الزامی است.'], 422);
+    if ($name === '') json_response(false, ['message' => 'نام اداره الزامی است.'], 422);
     
     $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
     $stmt->execute([$code]);
     if ($stmt->fetch()) {
-         json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+         json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
     }
     
     try {
         db()->prepare("INSERT INTO isfahan_cities (code, name) VALUES (?, ?)")->execute([$code, $name]);
     } catch (Throwable $e) {
-        json_response(false, ['message' => 'خطا در ثبت شهر: ' . $e->getMessage()], 500);
+        json_response(false, ['message' => 'خطا در ثبت اداره: ' . $e->getMessage()], 500);
     }
-    json_response(true, ['message' => 'شهر ایجاد شد']);
+    json_response(true, ['message' => 'اداره ایجاد شد']);
 }
 
 function action_admin_cities_update(array $data): void {
@@ -2156,18 +2184,18 @@ function action_admin_cities_update(array $data): void {
 
     $oldCodeRaw = $data['code'] ?? null;
     $newCode = trim(to_english_digits((string)($data['new_code'] ?? '')));
-    if (!preg_match('/^[0-9]{1,10}$/', $newCode)) json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    if (!preg_match('/^[0-9]{1,10}$/', $newCode)) json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
     $name = trim((string)($data['name'] ?? ''));
-    if ($name === '') json_response(false, ['message' => 'نام شهر الزامی است.'], 422);
+    if ($name === '') json_response(false, ['message' => 'نام اداره الزامی است.'], 422);
     
     // Check if new code exists and is not the same as old code
     $oldNormalized = trim(to_english_digits((string)$oldCodeRaw));
     if ($oldNormalized !== $newCode) {
         $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
         $stmt->execute([$newCode]);
-        if ($stmt->fetch()) json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+        if ($stmt->fetch()) json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
         $resolved = resolve_city_code_fk($newCode);
-        if ($resolved !== null) json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+        if ($resolved !== null) json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
     }
 
     try {
@@ -2181,27 +2209,27 @@ function action_admin_cities_update(array $data): void {
         }
     } catch (Throwable $e) {
         if ($e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'Duplicate entry'))) {
-            json_response(false, ['message' => 'این کد شهر قبلاً ثبت شده است.'], 409);
+            json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
         }
         json_response(false, ['message' => 'خطای سیستم: ' . $e->getMessage()], 500);
     }
-    json_response(true, ['message' => 'شهر ویرایش شد']);
+    json_response(true, ['message' => 'اداره ویرایش شد']);
 }
 
 function action_admin_cities_delete(array $data): void {
     auth_require_admin(auth_require_login());
     csrf_require_valid();
     $code = normalize_city_code($data['code'] ?? null) ?? (string)($data['code'] ?? '');
-    if ($code === '') json_response(false, ['message' => 'کد شهر نامعتبر است.'], 422);
+    if ($code === '') json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
     try {
         db()->prepare("DELETE FROM isfahan_cities WHERE code=?")->execute([$code]);
     } catch (Throwable $e) {
         if ($e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'foreign key constraint'))) {
-            json_response(false, ['message' => 'این شهر دارای وابستگی (کاربر/داده) است و قابل حذف نیست.'], 409);
+            json_response(false, ['message' => 'این اداره دارای وابستگی (کاربر/داده) است و قابل حذف نیست.'], 409);
         }
         json_response(false, ['message' => is_debug() ? ('خطای سیستم: ' . $e->getMessage()) : 'خطای سیستم'], 500);
     }
-    json_response(true, ['message' => 'شهر حذف شد']);
+    json_response(true, ['message' => 'اداره حذف شد']);
 }
 
 function action_admin_audit_list(): void {

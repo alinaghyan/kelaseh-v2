@@ -62,7 +62,7 @@ function loadAdminCities() {
         )
         .join('');
       $('#adminCitySelect').html(opts);
-      const opts2 = ['<option value="">همه شهرها</option>']
+      const opts2 = ['<option value="">همه اداره‌ها</option>']
         .concat(
           cities.map((c) => {
             const code = $('<div/>').text(c.code || '').html();
@@ -75,7 +75,7 @@ function loadAdminCities() {
       adminCitiesLoaded = true;
     })
     .fail(() => {
-      showToast('خطا در دریافت لیست شهرها.', 'error');
+      showToast('خطا در دریافت لیست اداره‌ها.', 'error');
     });
 }
 
@@ -105,10 +105,10 @@ function refreshAdminCities() {
           `;
         })
         .join('');
-      $('#adminCitiesTbody').html(rows || `<tr><td colspan="3" class="text-center text-secondary py-3">شهری ثبت نشده است.</td></tr>`);
+      $('#adminCitiesTbody').html(rows || `<tr><td colspan="3" class="text-center text-secondary py-3">اداره‌ای ثبت نشده است.</td></tr>`);
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت شهرها.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت اداره‌ها.';
       showToast(msg, 'error');
     });
 }
@@ -318,8 +318,15 @@ function generateKelasehRows(rows) {
     const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
     
     let manualBadge = '';
-    if (r.is_manual) {
-      manualBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">دستی</span>';
+    const isManualDate = !!r.is_manual;
+    const isManualBranch = !!r.is_manual_branch;
+
+    if (isManualDate && isManualBranch) {
+      manualBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">شعبه و تاریخ دستی</span>';
+    } else if (isManualDate) {
+      manualBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">تاریخ دستی</span>';
+    } else if (isManualBranch) {
+      manualBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">شعبه دستی</span>';
     }
 
     const json = encodeURIComponent(
@@ -537,9 +544,9 @@ function refreshAdminLogs() {
         kelaseh_create: 'ایجاد کلاسه',
         kelaseh_update: 'ویرایش کلاسه',
         kelaseh_set_status: 'تغییر وضعیت کلاسه',
-        admin_city_create: 'افزودن شهر',
-        admin_city_update: 'ویرایش شهر',
-        admin_city_delete: 'حذف شهر',
+        admin_city_create: 'افزودن اداره',
+        admin_city_update: 'ویرایش اداره',
+        admin_city_delete: 'حذف اداره',
         admin_create: 'ایجاد کاربر',
         set_role: 'تغییر نقش',
         activate: 'فعال‌سازی',
@@ -552,7 +559,7 @@ function refreshAdminLogs() {
         user: 'کاربر',
         item: 'داده',
         kelaseh_number: 'پرونده',
-        isfahan_city: 'شهر',
+        isfahan_city: 'اداره',
         app_settings: 'تنظیمات',
       };
 
@@ -854,7 +861,7 @@ function renderKelasehHistoryRows(items, lookupNC) {
       const oppositeRaw = roleInRecord === 'plaintiff' ? (item.defendant_name || '') : (item.plaintiff_name || '');
       const oppositeLabel = roleInRecord === 'plaintiff' ? 'خوانده' : 'خواهان';
       const opposite = $('<div/>').text(toPersianDigits(oppositeRaw ? `${oppositeRaw} (${oppositeLabel})` : '')).html();
-      return `<tr><td><span class="badge ${badgeClass}">${code}</span></td><td>${city}</td><td>${date}</td><td>${opposite}</td></tr>`;
+      return `<tr><td><span class="badge ${badgeClass}" dir="ltr">${code}</span></td><td>${city}</td><td>${date}</td><td>${opposite}</td></tr>`;
     })
     .join('');
 }
@@ -1323,7 +1330,7 @@ $(document).on('click', '#adminUsersTbody .btn-admin-create-branch-under-office'
   const u = JSON.parse(decodeURIComponent(raw));
   const cityCode = u.city_code || '';
   if (!cityCode) {
-    showToast('شهر مدیر اداره مشخص نیست.', 'error');
+    showToast('اداره مدیر اداره مشخص نیست.', 'error');
     return;
   }
 
@@ -1368,13 +1375,13 @@ $(document).on('submit', '#formAdminCityCreate', function (e) {
   const data = Object.fromEntries(new FormData(this));
   api('admin.cities.create', data)
     .done((res) => {
-      showToast(res.message || 'شهر ایجاد شد.', 'success');
+      showToast(res.message || 'اداره ایجاد شد.', 'success');
       this.reset();
       adminCitiesLoaded = false;
       $.when(loadAdminCities(), refreshAdminCities()).done(() => {});
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'افزودن شهر ناموفق بود.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'افزودن اداره ناموفق بود.';
       showToast(msg, 'error');
     });
 });
@@ -1400,7 +1407,7 @@ $(document).on('click', '#adminCitiesTbody .btn-city-save', function () {
 $(document).on('click', '#adminCitiesTbody .btn-city-del', function () {
   const tr = $(this).closest('tr');
   const code = tr.data('code');
-  if (!confirm('این شهر حذف شود؟')) {
+  if (!confirm('این اداره حذف شود؟')) {
     return;
   }
   api('admin.cities.delete', { code })
