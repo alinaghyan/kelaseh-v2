@@ -18,8 +18,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></title>
-  <link rel="stylesheet" href="assets/vendor/bootstrap/css/bootstrap.rtl.min.css" />
-  <link rel="stylesheet" href="assets/css/app.css" />
+  <link rel="stylesheet" href="assets/vendor/bootstrap/css/bootstrap.rtl.min.css?v=5.3" />
+  <link rel="stylesheet" href="assets/css/app.css?v=<?php echo file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : '1'; ?>" />
 </head>
 <body>
   <!-- Modal Office Create User -->
@@ -323,6 +323,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th>نقش</th>
                           <th>فعال</th>
                           <th style="width: 140px;">شعبه</th>
+                          <th>آخرین ورود</th>
                           <th>عملیات</th>
                         </tr>
                       </thead>
@@ -853,19 +854,27 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               <div id="kelasehListSection">
 
               <div class="row g-2 mb-2">
-                <div class="col-12 col-md-4">
+                <div class="col-12 col-md-3">
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">کدملی/ شناسه ملی</span>
                     <input id="kelasehNational" type="text" class="form-control" placeholder="کدملی/شناسه ملی خواهان/خوانده" />
                   </div>
                 </div>
-                <div class="col-6 col-md-3">
+                <div id="kelasehOwnerFilterWrap" class="col-12 col-md-3 d-none">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">مدیر شعبه</span>
+                    <select id="kelasehOwnerFilter" class="form-select">
+                      <option value="0">همه مدیران</option>
+                    </select>
+                  </div>
+                </div>
+                <div class="col-6 col-md-2">
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">از</span>
                     <input id="kelasehFrom" type="text" class="form-control" placeholder="1404/11/12" />
                   </div>
                 </div>
-                <div class="col-6 col-md-3">
+                <div class="col-6 col-md-2">
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">تا</span>
                     <input id="kelasehTo" type="text" class="form-control" placeholder="1404/11/12" />
@@ -876,10 +885,11 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 </div>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 mb-2">
+              <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
                 <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
                 <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
                 <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ کامل لیبل</button>
+                <button id="btnKelasehSelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
 
               <div class="table-responsive">
@@ -891,8 +901,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <th>کلاسه</th>
                       <th style="width: 90px;">شعبه</th>
                       <th style="width: 140px;">اداره</th>
+                      <th>کاربر</th>
                       <th>خواهان</th>
-                      <th>کدملی خواهان</th>
                       <th>خوانده</th>
                       <th>تاریخ</th>
                       <th>وضعیت</th>
@@ -901,6 +911,14 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   </thead>
                   <tbody id="kelasehTbody"></tbody>
                 </table>
+              </div>
+              
+              <div class="d-flex justify-content-between align-items-center mt-3">
+                <div class="text-secondary small" id="kelasehPaginationInfo"></div>
+                <nav aria-label="Pagination">
+                  <ul class="pagination pagination-sm mb-0" id="kelasehPagination">
+                  </ul>
+                </nav>
               </div>
 
               </div>
@@ -1036,8 +1054,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     </div>
   </div>
 
-  <script src="assets/vendor/jquery/jquery.min.js"></script>
-  <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js"></script>
-  <script src="assets/js/app.js"></script>
+  <script src="assets/vendor/jquery/jquery.min.js?v=3.7"></script>
+  <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js?v=5.3"></script>
+  <script src="assets/js/app.js?v=<?php echo file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : '1'; ?>"></script>
 </body>
 </html>

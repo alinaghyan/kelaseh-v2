@@ -45,6 +45,35 @@ function api(action, data) {
   });
 }
 
+function loadBranchManagers() {
+  const isAdmin = currentUser && currentUser.role === 'admin';
+  const isOfficeAdmin = currentUser && currentUser.role === 'office_admin';
+  if (!isAdmin && !isOfficeAdmin) {
+    $('#kelasehOwnerFilterWrap').addClass('d-none');
+    return $.Deferred().resolve().promise();
+  }
+
+  const city_code = isAdmin ? $('#adminKelasehCityFilter').val() : null;
+  return api('admin.users.list', { q: '', city_code })
+    .done((res) => {
+      const users = (res.data && res.data.users) || [];
+      const branchAdmins = users.filter((u) => u.role === 'branch_admin' || u.role === 'user');
+      const opts = ['<option value="0">همه مدیران</option>']
+        .concat(
+          branchAdmins.map((u) => {
+            const name = toPersianDigits(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim() || u.username || '');
+            return `<option value="${u.id}">${name}</option>`;
+          })
+        )
+        .join('');
+      $('#kelasehOwnerFilter').html(opts);
+      $('#kelasehOwnerFilterWrap').removeClass('d-none');
+    })
+    .fail(() => {
+      showToast('خطا در دریافت لیست مدیران شعبه.', 'error');
+    });
+}
+
 function loadAdminCities() {
   if (adminCitiesLoaded) {
     return $.Deferred().resolve().promise();
@@ -286,6 +315,8 @@ function renderPage(page) {
   $('#kelasehListSection').removeClass('d-none');
   $('#btnKelasehRefresh').removeClass('d-none');
   $('#kelasehCardTitle').text('پنل کاربری');
+  
+  loadBranchManagers();
 
   if (isOfficeAdmin) {
     $('#officePanel').removeClass('d-none');
@@ -300,17 +331,16 @@ function renderPage(page) {
   }
 }
 
-function generateKelasehRows(rows) {
+function generateKelasehRows(rows, offset = 0) {
   if (!rows || !rows.length) return '';
   return rows.map((r, idx) => {
-    const rowNo = toPersianDigits(idx + 1);
-    // Use full_code if available (City-Code), otherwise fallback to code
+    const rowNo = toPersianDigits(offset + idx + 1);
     const rawCode = r.full_code || r.code || '';
     const code = $('<div/>').text(toPersianDigits(rawCode)).html();
     const branchNo = toPersianDigits(String(r.branch_no || '').padStart(2, '0'));
     const cityName = $('<div/>').text(toPersianDigits(r.city_name || '')).html();
+    const ownerName = $('<div/>').text(toPersianDigits(r.owner_name || '')).html();
     const plaintiff = $('<div/>').text(toPersianDigits(r.plaintiff_name || '')).html();
-    const plaintiffNC = $('<div/>').text(toPersianDigits(r.plaintiff_national_code || '')).html();
     const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
     const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
     const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
@@ -345,7 +375,6 @@ function generateKelasehRows(rows) {
       })
     );
 
-    // Common buttons for both Today and Search tables
     const actionButtons = `
         <div class="d-flex flex-column gap-1">
             <div class="btn-group btn-group-sm" role="group">
@@ -379,8 +408,8 @@ function generateKelasehRows(rows) {
         <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}</div></td>
         <td class="text-secondary">${branchNo}</td>
         <td class="text-secondary">${cityName}</td>
+        <td class="text-secondary small">${ownerName}</td>
         <td>${plaintiff}</td>
-        <td>${plaintiffNC}</td>
         <td>${defendant}</td>
         <td class="text-secondary">${date}</td>
         <td class="${statusClass}">${statusHtml}</td>
@@ -392,9 +421,55 @@ function generateKelasehRows(rows) {
   }).join('');
 }
 
-function renderKelaseh(rows) {
-  const html = generateKelasehRows(rows);
+let kelasehCurrentPage = 1;
+const kelasehPageSize = 100;
+
+function renderKelaseh(res) {
+  const data = res.data || {};
+  const rows = data.kelaseh || [];
+  const total = data.total || 0;
+  const page = data.page || 1;
+  const limit = data.limit || 100;
+  const offset = (page - 1) * limit;
+
+  const html = generateKelasehRows(rows, offset);
   $('#kelasehTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  
+  // Pagination Info
+  const start = offset + 1;
+  const end = Math.min(offset + rows.length, total);
+  if (total > 0) {
+    $('#kelasehPaginationInfo').text(toPersianDigits(`نمایش ${start} تا ${end} از مجموع ${total} کلاسه`));
+  } else {
+    $('#kelasehPaginationInfo').text('');
+  }
+
+  // Pagination Controls
+  const totalPages = Math.ceil(total / limit);
+  let pagHtml = '';
+  if (totalPages > 1) {
+    const maxVisible = 5;
+    let startPage = Math.max(1, page - 2);
+    let endPage = Math.min(totalPages, startPage + maxVisible - 1);
+    if (endPage - startPage + 1 < maxVisible) {
+      startPage = Math.max(1, endPage - maxVisible + 1);
+    }
+
+    pagHtml += `<li class="page-item ${page === 1 ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page - 1}">قبلی</a></li>`;
+    if (startPage > 1) {
+      pagHtml += `<li class="page-item"><a class="page-link" href="#" data-page="1">۱</a></li>`;
+      if (startPage > 2) pagHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+    }
+    for (let i = startPage; i <= endPage; i++) {
+      pagHtml += `<li class="page-item ${i === page ? 'active' : ''}"><a class="page-link" href="#" data-page="${i}">${toPersianDigits(i)}</a></li>`;
+    }
+    if (endPage < totalPages) {
+      if (endPage < totalPages - 1) pagHtml += `<li class="page-item disabled"><span class="page-link">...</span></li>`;
+      pagHtml += `<li class="page-item"><a class="page-link" href="#" data-page="${totalPages}">${toPersianDigits(totalPages)}</a></li>`;
+    }
+    pagHtml += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">بعدی</a></li>`;
+  }
+  $('#kelasehPagination').html(pagHtml);
 }
 
 function refreshKelasehToday() {
@@ -407,13 +482,17 @@ function refreshKelasehToday() {
     .fail(() => {});
 }
 
-function refreshKelaseh() {
+function refreshKelaseh(page = 1) {
+  kelasehCurrentPage = page;
   const national_code = $('#kelasehNational').val() || '';
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
-  return api('kelaseh.list', { national_code, from, to })
+  const owner_id = $('#kelasehOwnerFilter').val() || 0;
+  const city_code = (currentUser && currentUser.role === 'admin') ? $('#adminKelasehCityFilter').val() : null;
+
+  return api('kelaseh.list', { national_code, from, to, page, limit: kelasehPageSize, owner_id, city_code })
     .done((res) => {
-      renderKelaseh((res.data && res.data.kelaseh) || []);
+      renderKelaseh(res);
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت کلاسه‌ها.';
@@ -1062,6 +1141,26 @@ $(document).on('click', '#kelasehTodayTbody .btn-kelaseh-toggle', function () {
             showToast((xhr.responseJSON && xhr.responseJSON.message) || 'عملیات ناموفق بود.', 'error');
         });
 });
+$(document).on('click', '#kelasehPagination .page-link', function (e) {
+    e.preventDefault();
+    const page = $(this).data('page');
+    if (page) refreshKelaseh(page);
+});
+
+$(document).on('click', '#btnKelasehSelectAll', function () {
+    const checks = $('#kelasehTbody .kelaseh-label-check');
+    const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
+    checks.prop('checked', !allChecked);
+});
+
+$(document).on('change', '#adminKelasehCityFilter', function() {
+    loadBranchManagers();
+});
+
+$(document).on('change', '#kelasehOwnerFilter', function() {
+    refreshKelaseh(1);
+});
+
 $(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
     // Just toggle check, do nothing immediate
 });
@@ -1799,6 +1898,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           const name = $('<div/>').text(toPersianDigits(u.display_name || `${u.first_name || ''} ${u.last_name || ''}`.trim())).html();
           const branchesText = (u.branches || '').toString();
           const branches = $('<div/>').text(branchesText ? toPersianDigits(branchesText.split(',').map((x) => String(x).padStart(2, '0')).join(', ')) : '').html();
+          const lastLogin = $('<div/>').text(toPersianDigits(u.last_login_at_jalali || 'هرگز')).html();
           const json = encodeURIComponent(JSON.stringify(u));
           return `
             <tr data-id="${u.id}" data-json="${json}">
@@ -1806,6 +1906,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
               <td>${name}</td>
               <td>مدیر شعبه</td>
               <td class="text-secondary">${branches}</td>
+              <td class="text-secondary small">${lastLogin}</td>
               <td class="text-end">
                 <button class="btn btn-outline-primary btn-sm btn-admin-edit-user" type="button">ویرایش</button>
                 <button class="btn btn-outline-danger btn-sm btn-admin-delete-user" type="button">حذف</button>

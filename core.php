@@ -375,7 +375,7 @@ function audit_log(int $actorId, string $action, string $entity, ?int $entityId,
 {
     $ip = $_SERVER['REMOTE_ADDR'] ?? '';
     $ua = $_SERVER['HTTP_USER_AGENT'] ?? '';
-    $sql = "INSERT INTO audit_logs (actor_id, action, entity, entity_id, target_user_id, ip, user_agent) VALUES (?, ?, ?, ?, ?, ?, ?)";
+    $sql = "INSERT INTO audit_logs (actor_id, action, entity, entity_id, target_user_id, ip, user_agent, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, NOW())";
     db()->prepare($sql)->execute([$actorId, $action, $entity, $entityId, $targetUserId, $ip, $ua]);
 }
 
@@ -523,7 +523,7 @@ function jalali_now_string(): string
 function finish_login(array $row): void
 {
     $_SESSION['user_id'] = (int)$row['id'];
-    db()->prepare('UPDATE users SET last_login_at = ? WHERE id = ?')->execute([now_mysql(), (int)$row['id']]);
+    db()->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int)$row['id']]);
     audit_log((int)$row['id'], 'login', 'user', (int)$row['id'], (int)$row['id']);
     json_response(true, ['message' => 'ورود موفق.', 'data' => ['csrf_token' => csrf_token(), 'user' => current_user()]]);
 }
@@ -659,6 +659,10 @@ function action_time_now(): void
 
 function action_kelaseh_list(array $data): void {
     $user = auth_require_login();
+    $page = max(1, (int)($data['page'] ?? 1));
+    $limit = max(1, min(500, (int)($data['limit'] ?? 100)));
+    $offset = ($page - 1) * $limit;
+
     $filters = [
         'national_code' => $data['national_code'] ?? '',
         'q' => $data['q'] ?? '',
@@ -668,8 +672,15 @@ function action_kelaseh_list(array $data): void {
         'to' => parse_jalali_full_ymd($data['to'] ?? null),
     ];
     
-    $rows = kelaseh_fetch_rows($user, $filters, 100);
-    json_response(true, ['data' => ['kelaseh' => $rows]]);
+    $result = kelaseh_fetch_rows_paginated($user, $filters, $limit, $offset);
+    json_response(true, [
+        'data' => [
+            'kelaseh' => $result['rows'],
+            'total' => $result['total'],
+            'page' => $page,
+            'limit' => $limit
+        ]
+    ]);
 }
 
 function action_kelaseh_list_today(array $data): void {
@@ -787,39 +798,17 @@ function kelaseh_create_internal(array $user, array $data): array
 
     $selectedBranch = null;
 
+    $searchBranches = $branches;
     if ($requestedBranch > 0) {
-        if (!in_array($requestedBranch, $branches, true)) {
-            throw new HttpError(422, 'شعبه انتخابی مجاز نیست.');
-        }
-
-        $stmt = db()->prepare('SELECT capacity FROM office_branch_capacities WHERE city_code = ? AND branch_no = ?');
-        $stmt->execute([$cityCode, $requestedBranch]);
-        $cap = $stmt->fetchColumn();
-        if ($cap === false) $cap = $defaultCap;
-        $cap = (int)$cap;
-        if ($cap < 1) $cap = $defaultCap;
-
-        $stmt = db()->prepare('SELECT COUNT(*)
-            FROM kelaseh_numbers k
-            JOIN users u ON u.id = k.owner_id
-            WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?)
-              AND k.branch_no = ?
-              AND DATE(k.created_at) = ?
-              AND k.status != "voided"');
-        $stmt->execute([$user['city_code'], $cityCode, $requestedBranch, $today]);
-        $used = (int)$stmt->fetchColumn();
-
-        if ($used >= $cap) {
-            throw new HttpError(429, 'ظرفیت شعبه انتخابی تکمیل شده است.');
-        }
-
-        $selectedBranch = $requestedBranch;
-        $selectedCap = $cap;
-        $notices[] = 'ثبت در شعبه انتخابی ' . sprintf('%02d', $requestedBranch);
+        $searchBranches = array_unique(array_merge([$requestedBranch], $branches));
     }
 
-    foreach ($branches as $b) {
-        if ($selectedBranch !== null) break;
+    $lastFullBranch = null;
+    $finalCode = null;
+    $finalBranch = null;
+    $finalSeq = null;
+
+    foreach ($searchBranches as $b) {
         $stmt = db()->prepare('SELECT capacity FROM office_branch_capacities WHERE city_code = ? AND branch_no = ?');
         $stmt->execute([$cityCode, $b]);
         $cap = $stmt->fetchColumn();
@@ -827,101 +816,75 @@ function kelaseh_create_internal(array $user, array $data): array
         $cap = (int)$cap;
         if ($cap < 1) $cap = $defaultCap;
 
-        $stmt = db()->prepare('SELECT COUNT(*)
-            FROM kelaseh_numbers k
-            JOIN users u ON u.id = k.owner_id
-            WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?)
-              AND k.branch_no = ?
-              AND DATE(k.created_at) = ?
-              AND k.status != "voided"');
-        $stmt->execute([$user['city_code'], $cityCode, $b, $today]);
-        $used = $stmt->fetchColumn();
+        db()->beginTransaction();
+        try {
+            $stmt = db()->prepare("SELECT seq_no FROM {$counterTable} WHERE city_code = ? AND jalali_ymd = ? AND branch_no = ? FOR UPDATE");
+            $stmt->execute([$cityCode, $jalaliYmd, (int)$b]);
+            $cur = $stmt->fetchColumn();
+            
+            if ($cur === false) {
+                $stmt2 = db()->prepare('SELECT COALESCE(MAX(k.seq_no), 0)
+                    FROM kelaseh_numbers k
+                    JOIN users u ON u.id = k.owner_id
+                    WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?)
+                      AND k.branch_no = ?
+                      AND k.jalali_ymd = ?');
+                $stmt2->execute([$user['city_code'], $cityCode, (int)$b, $jalaliYmd]);
+                $cur = (int)$stmt2->fetchColumn();
+            }
 
-        if ((int)$used < $cap) {
-            $selectedBranch = $b;
-            $selectedCap = $cap;
-            break;
+            $seqNo = (int)$cur + 1;
+            if ($seqNo > $cap) {
+                db()->rollBack();
+                if ($requestedBranch > 0 && (int)$b === $requestedBranch) {
+                    $notices[] = 'ظرفیت شعبه ' . sprintf('%02d', $b) . ' تکمیل بود و سیستم به دنبال شعبه جایگزین گشت.';
+                }
+                $lastFullBranch = (int)$b;
+                continue;
+            }
+
+            db()->prepare("INSERT INTO {$counterTable} (city_code, jalali_ymd, branch_no, seq_no, updated_at)
+                VALUES (?, ?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE seq_no = VALUES(seq_no), updated_at = VALUES(updated_at)")
+                ->execute([$cityCode, $jalaliYmd, (int)$b, $seqNo, now_mysql()]);
+
+            $branchNo2 = sprintf('%02d', (int)$b);
+            $seqPart = sprintf('%02d', (int)$seqNo);
+            $cityPart = str_pad((string)$cityCode, 4, '0', STR_PAD_LEFT);
+            
+            $code = $cityPart
+                . '-' . $branchNo2
+                . sprintf('%02d', $j['jy'] % 100)
+                . sprintf('%02d', $j['jm'])
+                . sprintf('%02d', $j['jd'])
+                . $seqPart;
+
+            $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, is_manual, is_manual_branch, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
+            db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$b, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, $isManual, $isManualBranch, $createdAt, $createdAt]);
+            
+            db()->commit();
+            $finalCode = $code;
+            $finalBranch = (int)$b;
+            $finalSeq = $seqNo;
+
+            if ($requestedBranch > 0 && $finalBranch === $requestedBranch) {
+                $notices[] = 'ثبت در شعبه انتخابی ' . sprintf('%02d', $finalBranch);
+            } elseif ($lastFullBranch !== null) {
+                $notices[] = 'ظرفیت شعبه ' . sprintf('%02d', $lastFullBranch) . ' تمام شد و به شعبه ' . $branchNo2 . ' انتقال داد.';
+            } else {
+                $notices[] = 'در حال ثبت و ذخیره در شعبه ' . $branchNo2;
+            }
+
+            return ['code' => $finalCode, 'branch_no' => $finalBranch, 'seq_no' => $finalSeq, 'notices' => $notices];
+
+        } catch (Throwable $e) {
+            if (db()->inTransaction()) db()->rollBack();
+            throw $e;
         }
-
-        $lastFullBranch = $b;
     }
 
-    if ($selectedBranch === null) throw new HttpError(429, 'ظرفیت تکمیل شده است.');
-
-    $pNC = validate_national_code($data['plaintiff_national_code'] ?? null);
-    $pMob = validate_ir_mobile($data['plaintiff_mobile'] ?? null);
-    $pName = trim($data['plaintiff_name'] ?? '');
-    $dNCInput = trim((string)($data['defendant_national_code'] ?? ''));
-    $dMobInput = trim((string)($data['defendant_mobile'] ?? ''));
-    $dName = trim((string)($data['defendant_name'] ?? ''));
-    $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
-    $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
-
-    if (!$pNC || !$pMob) throw new HttpError(422, 'اطلاعات خواهان نامعتبر است.');
-    if ($dNC === null) throw new HttpError(422, 'کد ملی خوانده نامعتبر است.');
-    if ($dMob === null) throw new HttpError(422, 'موبایل خوانده نامعتبر است.');
-
-    $counterTable = kelaseh_daily_counters_table();
-    $jalaliYmd = $j['jalali_ymd'];
-    $jalaliFull = $j['jalali_full_ymd'];
-    $branchNo2 = sprintf('%02d', (int)$selectedBranch);
-    $notices[] = 'در حال ثبت و ذخیره در شعبه ' . $branchNo2;
-    if ($lastFullBranch !== null && $lastFullBranch !== (int)$selectedBranch) {
-        $notices[] = 'ظرفیت شعبه ' . sprintf('%02d', (int)$lastFullBranch) . ' تمام شد و به شعبه ' . $branchNo2 . ' انتقال داد.';
-    }
-
-    $code = null;
-    $seqNo = null;
-    db()->beginTransaction();
-    try {
-        $stmt = db()->prepare("SELECT seq_no FROM {$counterTable} WHERE city_code = ? AND jalali_ymd = ? AND branch_no = ? FOR UPDATE");
-        $stmt->execute([$cityCode, $jalaliYmd, (int)$selectedBranch]);
-        $cur = $stmt->fetchColumn();
-        if ($cur === false) {
-            $stmt2 = db()->prepare('SELECT COALESCE(MAX(k.seq_no), 0)
-                FROM kelaseh_numbers k
-                JOIN users u ON u.id = k.owner_id
-                WHERE (u.city_code = ? OR LPAD(u.city_code, 4, "0") = ?)
-                  AND k.branch_no = ?
-                  AND k.jalali_ymd = ?');
-            $stmt2->execute([$user['city_code'], $cityCode, (int)$selectedBranch, $jalaliYmd]);
-            $cur = (int)$stmt2->fetchColumn();
-        }
-
-        $seqNo = (int)$cur + 1;
-        if ($selectedCap === null) $selectedCap = $defaultCap;
-        if ($seqNo > (int)$selectedCap) {
-            db()->rollBack();
-            throw new HttpError(429, 'ظرفیت تکمیل شده است.');
-        }
-
-        db()->prepare("INSERT INTO {$counterTable} (city_code, jalali_ymd, branch_no, seq_no, updated_at)
-            VALUES (?, ?, ?, ?, ?)
-            ON DUPLICATE KEY UPDATE seq_no = VALUES(seq_no), updated_at = VALUES(updated_at)")
-            ->execute([$cityCode, $jalaliYmd, (int)$selectedBranch, $seqNo, now_mysql()]);
-
-        $seqPart = sprintf('%02d', (int)$seqNo);
-        $cityPart = str_pad((string)$cityCode, 4, '0', STR_PAD_LEFT);
-        
-        // New Format: ct-shyymmddnn (example: 1021-0104111301)
-        // ct=4-digit city, sh=2-digit branch, yy=year, mm=month, dd=day, nn=2-digit sequence
-        $code = $cityPart
-            . '-' . $branchNo2
-            . sprintf('%02d', $j['jy'] % 100)
-            . sprintf('%02d', $j['jm'])
-            . sprintf('%02d', $j['jd'])
-            . $seqPart;
-
-        $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, defendant_name, defendant_national_code, defendant_mobile, status, is_manual, is_manual_branch, created_at, updated_at)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
-        db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$selectedBranch, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $dName, (string)$dNC, (string)$dMob, $isManual, $isManualBranch, $createdAt, $createdAt]);
-        db()->commit();
-    } catch (Throwable $e) {
-        if (db()->inTransaction()) db()->rollBack();
-        throw $e;
-    }
-
-    return ['code' => $code, 'branch_no' => (int)$selectedBranch, 'seq_no' => (int)$seqNo, 'capacity' => (int)$selectedCap, 'notices' => $notices];
+    throw new HttpError(429, 'ظرفیت تمامی شعب مجاز شما تکمیل شده است.');
 }
 
 function action_kelaseh_create(array $data): void {
@@ -1053,7 +1016,20 @@ function action_kelaseh_label(array $data): void {
     
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
-    $rows = $stmt->fetchAll();
+    $fetchedRows = $stmt->fetchAll();
+    
+    // Maintain the order of codes as requested by the user
+    $rowsMap = [];
+    foreach ($fetchedRows as $r) {
+        $rowsMap[(string)$r['code']] = $r;
+    }
+    
+    $rows = [];
+    foreach ($codes as $c) {
+        if (isset($rowsMap[(string)$c])) {
+            $rows[] = $rowsMap[(string)$c];
+        }
+    }
     
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
@@ -1407,13 +1383,14 @@ function action_kelaseh_export_csv(array $data): void
     header('Content-Disposition: attachment; filename="kelaseh_export.csv"');
     $out = fopen('php://output', 'w');
     fwrite($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['کلاسه', 'اداره', 'شعبه', 'ردیف', 'کدملی خواهان', 'کدملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
+    fputcsv($out, ['کلاسه', 'اداره', 'کاربر', 'شعبه', 'ردیف', 'کدملی خواهان', 'کدملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
     foreach ($rows as $r) {
         $status = (string)($r['status'] ?? '');
         $statusFa = $status === 'voided' ? 'ابطال' : ($status === 'inactive' ? 'غیرفعال' : 'فعال');
         fputcsv($out, [
             $r['full_code'] ?? ($r['code'] ?? ''),
             $r['city_name'] ?? ($r['city_code'] ?? ''),
+            $r['owner_name'] ?? '',
             $r['branch_no'] ?? '',
             $r['seq_no'] ?? '',
             $r['plaintiff_national_code'] ?? '',
@@ -1477,7 +1454,7 @@ function action_kelaseh_export_print(array $data): void
     exit;
 }
 
-function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
+function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, int $offset): array
 {
     $national = trim((string)($filters['national_code'] ?? ''));
     $from = $filters['from'] ?? null;
@@ -1486,52 +1463,50 @@ function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
     $ownerIdFilter = (int)($filters['owner_id'] ?? 0);
     $cityFilter = $filters['city_code'] ?? null;
 
-    $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name
-            FROM kelaseh_numbers k
-            JOIN users u ON u.id = k.owner_id
-            LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
-            WHERE 1=1";
+    $baseSql = "FROM kelaseh_numbers k
+                JOIN users u ON u.id = k.owner_id
+                LEFT JOIN isfahan_cities c ON (c.code = u.city_code OR c.code = LPAD(u.city_code, 4, '0'))
+                WHERE 1=1";
     $params = [];
 
     $nationalExact = $national !== '' ? validate_national_code($national) : null;
-    // If it's a 10-digit number, we treat it as a global search (even if checksum fails, for history check purposes)
     $isGlobalSearch = ($nationalExact !== null) || (strlen($national) === 10 && preg_match('/^[0-9]{10}$/', $national));
 
     if (!$isGlobalSearch) {
         if (in_array($user['role'], ['branch_admin', 'user'], true)) {
-            $sql .= " AND k.owner_id = ?";
+            $baseSql .= " AND k.owner_id = ?";
             $params[] = $user['id'];
         } elseif ($user['role'] === 'office_admin') {
-            $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+            $baseSql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
             $params[] = $user['city_code'];
             $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
             if ($ownerIdFilter > 0) {
-                $sql .= " AND k.owner_id = ?";
+                $baseSql .= " AND k.owner_id = ?";
                 $params[] = $ownerIdFilter;
             }
         } elseif ($user['role'] === 'admin') {
             if ($cityFilter) {
-                $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+                $baseSql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
                 $params[] = $cityFilter;
                 $params[] = ltrim((string)$cityFilter, '0') === '' ? '0' : ltrim((string)$cityFilter, '0');
             }
             if ($ownerIdFilter > 0) {
-                $sql .= " AND k.owner_id = ?";
+                $baseSql .= " AND k.owner_id = ?";
                 $params[] = $ownerIdFilter;
             }
         } else {
-            return [];
+            return ['rows' => [], 'total' => 0];
         }
     }
 
     if ($national !== '') {
         $national = to_english_digits($national);
         if (preg_match('/^[0-9]{10}$/', $national)) {
-            $sql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ?)";
+            $baseSql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ?)";
             $params[] = $national;
             $params[] = $national;
         } else {
-            $sql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ?)";
+            $baseSql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ?)";
             $params[] = "%$national%";
             $params[] = "%$national%";
         }
@@ -1540,33 +1515,46 @@ function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
     if ($q !== '') {
         $qEng = to_english_digits($q);
         $like = "%$qEng%";
-        $sql .= " AND (k.code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+        $baseSql .= " AND (k.code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
         array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
     }
 
     if ($from) {
-        $sql .= " AND k.created_at >= ?";
+        $baseSql .= " AND k.created_at >= ?";
         $params[] = "$from 00:00:00";
     }
     if ($to) {
-        $sql .= " AND k.created_at <= ?";
+        $baseSql .= " AND k.created_at <= ?";
         $params[] = "$to 23:59:59";
     }
 
-    $sql .= " ORDER BY k.id DESC LIMIT " . (int)$limit;
+    // Count total
+    $countSql = "SELECT COUNT(*) " . $baseSql;
+    $stmtCount = db()->prepare($countSql);
+    $stmtCount->execute($params);
+    $total = (int)$stmtCount->fetchColumn();
+
+    // Fetch rows
+    $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name " . $baseSql;
+    $sql .= " ORDER BY k.id DESC LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
+    
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     $rows = $stmt->fetchAll();
     foreach ($rows as &$r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
-        $cityCode = $r['city_code'] ?? ($user['city_code'] ?? '');
-        $c = (string)($r['code'] ?? '');
         $r['full_code'] = (string)($r['code'] ?? '');
         $r['owner_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
         $r['is_manual'] = (int)($r['is_manual'] ?? 0);
         $r['is_manual_branch'] = (int)($r['is_manual_branch'] ?? 0);
     }
-    return $rows;
+    return ['rows' => $rows, 'total' => $total];
+}
+
+function kelaseh_fetch_rows(array $user, array $filters, int $limit): array
+{
+    $res = kelaseh_fetch_rows_paginated($user, $filters, $limit, 0);
+    return $res['rows'];
 }
 
 function action_admin_items_list(array $data): void
@@ -1803,6 +1791,7 @@ function action_admin_users_list(array $data): void {
             $cityCaps[$cCode] = $stmtCap->fetchAll(PDO::FETCH_KEY_PAIR);
         }
         $u['branch_capacities'] = $cityCaps[$cCode] ?? [];
+        $u['last_login_at_jalali'] = format_jalali_datetime($u['last_login_at'] ?? null);
     }
     
     json_response(true, ['data' => ['users' => $users]]);
@@ -2247,8 +2236,17 @@ function action_admin_cities_delete(array $data): void {
 
 function action_admin_audit_list(): void {
     auth_require_admin(auth_require_login());
+    
+    // Clean up any zero dates that might cause display issues
+    db()->exec("UPDATE audit_logs SET created_at = NOW() WHERE created_at = '0000-00-00 00:00:00' OR created_at IS NULL");
+    db()->exec("UPDATE users SET last_login_at = NOW() WHERE last_login_at = '0000-00-00 00:00:00'");
+
     $logs = db()->query("SELECT a.*, u.username as actor_key FROM audit_logs a LEFT JOIN users u ON u.id=a.actor_id ORDER BY a.id DESC LIMIT 100")->fetchAll();
-    foreach($logs as &$l) $l['created_at_jalali'] = format_jalali_datetime($l['created_at']);
+    foreach($logs as &$l) {
+        $dt = $l['created_at'] ?? '';
+        if ($dt === '0000-00-00 00:00:00') $dt = '';
+        $l['created_at_jalali'] = format_jalali_datetime($dt);
+    }
     json_response(true, ['data' => ['logs' => $logs]]);
 }
 
