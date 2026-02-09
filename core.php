@@ -793,6 +793,23 @@ function kelaseh_create_internal(array $user, array $data): array
     $branches = array_values(array_unique(array_map('intval', $branches)));
     sort($branches);
 
+    $pNC = validate_national_code($data['plaintiff_national_code'] ?? null);
+    $pMob = validate_ir_mobile($data['plaintiff_mobile'] ?? null);
+    $pName = trim($data['plaintiff_name'] ?? '');
+    $dNCInput = trim((string)($data['defendant_national_code'] ?? ''));
+    $dMobInput = trim((string)($data['defendant_mobile'] ?? ''));
+    $dName = trim((string)($data['defendant_name'] ?? ''));
+    $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
+    $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
+
+    if (!$pNC || !$pMob) throw new HttpError(422, 'اطلاعات خواهان نامعتبر است.');
+    if ($dNC === null) throw new HttpError(422, 'کد ملی خوانده نامعتبر است.');
+    if ($dMob === null) throw new HttpError(422, 'موبایل خوانده نامعتبر است.');
+
+    $counterTable = kelaseh_daily_counters_table();
+    $jalaliYmd = $j['jalali_ymd'];
+    $jalaliFull = $j['jalali_full_ymd'];
+
     ensure_kelaseh_numbers_code_supports_city_prefix();
     ensure_kelaseh_numbers_supports_manual_flag();
 
@@ -1501,14 +1518,15 @@ function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, i
 
     if ($national !== '') {
         $national = to_english_digits($national);
-        if (preg_match('/^[0-9]{10}$/', $national)) {
-            $baseSql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ?)";
-            $params[] = $national;
-            $params[] = $national;
+        $like = "%$national%";
+        
+        // Priority logic: if it looks like a national code (10 digits) or legal ID (11 digits)
+        if (preg_match('/^[0-9]{10,11}$/', $national)) {
+            $baseSql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR k.code LIKE ? OR k.plaintiff_mobile LIKE ? OR k.defendant_mobile LIKE ? OR c.name LIKE ? OR k.branch_no LIKE ?)";
+            array_push($params, $national, $national, $like, $like, $like, $like, $like, $like, $like);
         } else {
-            $baseSql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ?)";
-            $params[] = "%$national%";
-            $params[] = "%$national%";
+            $baseSql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR k.code LIKE ? OR k.plaintiff_mobile LIKE ? OR k.defendant_mobile LIKE ? OR c.name LIKE ? OR k.branch_no LIKE ?)";
+            array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like);
         }
     }
 
@@ -1536,7 +1554,15 @@ function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, i
 
     // Fetch rows
     $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name " . $baseSql;
-    $sql .= " ORDER BY k.id DESC LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
+    
+    $orderSql = "k.id DESC";
+    if ($national !== '' && preg_match('/^[0-9]{10,11}$/', $national)) {
+        // Priority to exact matches on national code or legal ID
+        $orderSql = "CASE WHEN k.plaintiff_national_code = ? OR k.defendant_national_code = ? THEN 0 ELSE 1 END, k.id DESC";
+        array_push($params, $national, $national);
+    }
+    
+    $sql .= " ORDER BY " . $orderSql . " LIMIT " . (int)$limit . " OFFSET " . (int)$offset;
     
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
@@ -1765,6 +1791,13 @@ function action_admin_users_list(array $data): void {
             $where[] = "(u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
             $params[] = $cityCode;
             $params[] = normalize_city_code($cityCode) ?? $cityCode;
+        }
+    } elseif ($user['role'] === 'admin') {
+        $cityFilter = $data['city_code'] ?? null;
+        if ($cityFilter) {
+            $where[] = "(u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+            $params[] = $cityFilter;
+            $params[] = normalize_city_code($cityFilter) ?? $cityFilter;
         }
     }
     if ($q !== '') {

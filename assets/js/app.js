@@ -9,6 +9,35 @@ let currentUser = null;
 let adminCitiesLoaded = false;
 let headerClockTimer = null;
 
+function initDatePickers() {
+  const commonOptions = {
+    format: 'YYYY/MM/DD',
+    autoClose: true,
+    initialValue: false,
+    persianDigit: true,
+    calendar: {
+      persian: {
+        showHint: true,
+        leapThreshold: 12
+      }
+    }
+  };
+
+  if ($.fn.pDatepicker) {
+    $('#kelasehFrom, #kelasehTo, #adminStatsFrom, #adminStatsTo').pDatepicker(commonOptions);
+    
+    $('#kelasehManualDate').pDatepicker({
+      ...commonOptions,
+      onSelect: function(unix) {
+        const date = new persianDate(unix);
+        $('#manual_year').val(date.year());
+        $('#manual_month').val(date.month());
+        $('#manual_day').val(date.date());
+      }
+    });
+  }
+}
+
 function toPersianDigits(str) {
   if (str === null || str === undefined) return '';
   return String(str).replace(/[0-9]/g, function (w) {
@@ -48,12 +77,21 @@ function api(action, data) {
 function loadBranchManagers() {
   const isAdmin = currentUser && currentUser.role === 'admin';
   const isOfficeAdmin = currentUser && currentUser.role === 'office_admin';
+  
   if (!isAdmin && !isOfficeAdmin) {
     $('#kelasehOwnerFilterWrap').addClass('d-none');
     return $.Deferred().resolve().promise();
   }
 
-  const city_code = isAdmin ? $('#adminKelasehCityFilter').val() : null;
+  const city_code = isAdmin ? $('#adminKelasehCityFilterMain').val() : null;
+  
+  // For admin, if no city is selected, hide the manager filter
+  if (isAdmin && !city_code) {
+    $('#kelasehOwnerFilterWrap').addClass('d-none');
+    $('#kelasehOwnerFilter').val('0'); // Reset manager filter
+    return $.Deferred().resolve().promise();
+  }
+
   return api('admin.users.list', { q: '', city_code })
     .done((res) => {
       const users = (res.data && res.data.users) || [];
@@ -101,6 +139,7 @@ function loadAdminCities() {
         )
         .join('');
       $('#adminKelasehCityFilter').html(opts2);
+      $('#adminKelasehCityFilterMain').html(opts2);
       adminCitiesLoaded = true;
     })
     .fail(() => {
@@ -316,7 +355,15 @@ function renderPage(page) {
   $('#btnKelasehRefresh').removeClass('d-none');
   $('#kelasehCardTitle').text('پنل کاربری');
   
-  loadBranchManagers();
+  if (isAdmin) {
+    $('#kelasehCityFilterWrap').removeClass('d-none');
+    loadAdminCities().done(() => {
+      loadBranchManagers();
+    });
+  } else {
+    $('#kelasehCityFilterWrap').addClass('d-none');
+    loadBranchManagers();
+  }
 
   if (isOfficeAdmin) {
     $('#officePanel').removeClass('d-none');
@@ -488,7 +535,7 @@ function refreshKelaseh(page = 1) {
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
   const owner_id = $('#kelasehOwnerFilter').val() || 0;
-  const city_code = (currentUser && currentUser.role === 'admin') ? $('#adminKelasehCityFilter').val() : null;
+  const city_code = (currentUser && currentUser.role === 'admin') ? $('#adminKelasehCityFilterMain').val() : null;
 
   return api('kelaseh.list', { national_code, from, to, page, limit: kelasehPageSize, owner_id, city_code })
     .done((res) => {
@@ -762,6 +809,7 @@ function boot() {
       } else {
         renderUser();
         setView('app');
+        initDatePickers();
         if (!window.location.hash) {
           window.location.hash = '#dashboard';
         }
@@ -814,6 +862,7 @@ $(document).on('submit', '#formLogin', function (e) {
       showToast(res.message || 'ورود انجام شد.', 'success');
       renderUser();
       setView('app');
+      initDatePickers();
       if (!window.location.hash) {
         window.location.hash = '#dashboard';
       }
@@ -855,6 +904,7 @@ $(document).on('click', '#btnLoginOtpVerify', function () {
       showToast(res.message || 'ورود انجام شد.', 'success');
       renderUser();
       setView('app');
+      initDatePickers();
       if (!window.location.hash) {
         window.location.hash = '#dashboard';
       }
@@ -1155,6 +1205,11 @@ $(document).on('click', '#btnKelasehSelectAll', function () {
 
 $(document).on('change', '#adminKelasehCityFilter', function() {
     loadBranchManagers();
+});
+
+$(document).on('change', '#adminKelasehCityFilterMain', function() {
+    loadBranchManagers();
+    refreshKelaseh(1);
 });
 
 $(document).on('change', '#kelasehOwnerFilter', function() {

@@ -19,3 +19,32 @@ table td,
 table th {
   vertical-align: middle;
 }
+
+/* Persian Datepicker adjustments */
+.datepicker-plot-area {
+  font-family: "Vazirmatn", Tahoma, Arial, sans-serif !important;
+  border-radius: 8px !important;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1) !important;
+  border: 1px solid #dee2e6 !important;
+}
+
+.datepicker-plot-area .datepicker-day-view .table-days td.today span {
+  background-color: #0d6efd !important;
+  color: #fff !important;
+}
+
+.datepicker-plot-area .datepicker-day-view .table-days td.selected span {
+  background-color: #6c757d !important;
+  color: #fff !important;
+}
+
+#kelasehManualDate,
+#kelasehFrom,
+#kelasehTo,
+#adminStatsFrom,
+#adminStatsTo {
+  cursor: pointer;
+  background-color: #fff !important;
+}
+
+

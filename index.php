@@ -19,6 +19,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></title>
   <link rel="stylesheet" href="assets/vendor/bootstrap/css/bootstrap.rtl.min.css?v=5.3" />
+  <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css" />
   <link rel="stylesheet" href="assets/css/app.css?v=<?php echo file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : '1'; ?>" />
 </head>
 <body>
@@ -755,11 +756,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         </div>
                         <div class="col-12 col-md-6">
                           <label class="form-label form-label-sm">تاریخ ثبت کلاسه (دستی)</label>
-                          <div class="input-group input-group-sm">
-                            <input name="manual_year" type="number" class="form-control" placeholder="سال (۰۴)" min="0" max="99" />
-                            <input name="manual_month" type="number" class="form-control" placeholder="ماه (۰۱)" min="1" max="12" />
-                            <input name="manual_day" type="number" class="form-control" placeholder="روز (۰۱)" min="1" max="31" />
-                          </div>
+                          <input id="kelasehManualDate" type="text" class="form-control form-control-sm" placeholder="انتخاب تاریخ..." readonly />
+                          <input type="hidden" name="manual_year" id="manual_year" />
+                          <input type="hidden" name="manual_month" id="manual_month" />
+                          <input type="hidden" name="manual_day" id="manual_day" />
                           <div class="form-text small">در صورت خالی بودن، تاریخ امروز درج می‌شود.</div>
                         </div>
                         <div class="col-12 col-md-6">
@@ -854,13 +854,21 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               <div id="kelasehListSection">
 
               <div class="row g-2 mb-2">
-                <div class="col-12 col-md-3">
+                <div class="col-12 col-md-2">
                   <div class="input-group input-group-sm">
-                    <span class="input-group-text">کدملی/ شناسه ملی</span>
-                    <input id="kelasehNational" type="text" class="form-control" placeholder="کدملی/شناسه ملی خواهان/خوانده" />
+                    <span class="input-group-text">جستجو</span>
+                    <input id="kelasehNational" type="text" class="form-control" placeholder="کدملی/نام/کلاسه/موبایل..." />
                   </div>
                 </div>
-                <div id="kelasehOwnerFilterWrap" class="col-12 col-md-3 d-none">
+                <div id="kelasehCityFilterWrap" class="col-12 col-md-2 d-none">
+                  <div class="input-group input-group-sm">
+                    <span class="input-group-text">اداره</span>
+                    <select id="adminKelasehCityFilterMain" class="form-select">
+                      <option value="">همه اداره‌ها</option>
+                    </select>
+                  </div>
+                </div>
+                <div id="kelasehOwnerFilterWrap" class="col-12 col-md-2 d-none">
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">مدیر شعبه</span>
                     <select id="kelasehOwnerFilter" class="form-select">
@@ -1056,6 +1064,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
   <script src="assets/vendor/jquery/jquery.min.js?v=3.7"></script>
   <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js?v=5.3"></script>
+  <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
+  <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
   <script src="assets/js/app.js?v=<?php echo file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : '1'; ?>"></script>
 </body>
 </html>
