@@ -826,7 +826,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <div class="card mt-3">
                   <div class="card-header small py-1 bg-light d-flex justify-content-between align-items-center">
                     <span>ثبت‌های امروز شما</span>
-                    <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل کامل</button>
+                    <div class="btn-group btn-group-sm">
+                      <button id="btnKelasehTodaySelectAll" class="btn btn-outline-primary" type="button">انتخاب همه</button>
+                      <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button">چاپ لیبل کامل</button>
+                    </div>
                   </div>
                   <div class="table-responsive">
                     <table class="table table-sm table-bordered align-middle mb-0">

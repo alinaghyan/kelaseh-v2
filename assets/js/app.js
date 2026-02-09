@@ -1238,6 +1238,12 @@ $(document).on('click', '#btnKelasehPrintLabels', function () {
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
+$(document).on('click', '#btnKelasehTodaySelectAll', function () {
+    const checks = $('#kelasehTodayTbody .kelaseh-label-check');
+    const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
+    checks.prop('checked', !allChecked);
+});
+
 $(document).on('click', '#btnKelasehTodayPrintAllLabels', function () {
   const codes = [];
   
