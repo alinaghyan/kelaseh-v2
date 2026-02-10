@@ -988,8 +988,22 @@ function action_kelaseh_label(array $data): void {
         exit;
     }
     
-    // Fetch details with join to get city information
     $placeholders = implode(',', array_fill(0, count($codes), '?'));
+
+    // Update print status in database
+    try {
+        $printType = count($codes) === 1 ? 'single' : 'bulk';
+        $now = now_mysql();
+        $updateSql = "UPDATE kelaseh_numbers SET print_type = ?, last_printed_at = ? WHERE code IN ($placeholders)";
+        $updateParams = array_merge([$printType, $now], $codes);
+        db()->prepare($updateSql)->execute($updateParams);
+    } catch (Exception $e) {
+        // Silently fail if columns don't exist yet to prevent breaking print
+    } catch (Error $e) {
+        // Handle PHP 7+ Error if Throwable is not used
+    }
+
+    // Fetch details with join to get city information
     $sql = "SELECT k.*, u.city_code, c.name as city_name 
             FROM kelaseh_numbers k 
             JOIN users u ON u.id = k.owner_id 
@@ -1000,10 +1014,12 @@ function action_kelaseh_label(array $data): void {
     $params = $codes;
     if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
          $sql .= " AND k.owner_id = ?";
-         $params[] = $user['id'];
+         $params[] = (int)$user['id'];
     } elseif ($user['role'] === 'office_admin') {
-         $sql .= " AND u.city_code = ?";
-         $params[] = $user['city_code'];
+         $cityCode = $user['city_code'] ?? '';
+         $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+         $params[] = $cityCode;
+         $params[] = str_pad($cityCode, 4, '0', STR_PAD_LEFT);
     }
     
     $stmt = db()->prepare($sql);
@@ -1091,16 +1107,10 @@ function action_kelaseh_label(array $data): void {
     
     $jsonData = json_encode($rows);
     
-    // Replace the JS part that reads localStorage with our data
-    $script = "
-    <script>
-        const injectedData = $jsonData;
-        // Override localStorage logic for this request
-        localStorage.setItem('print_queue', JSON.stringify(injectedData));
-    </script>
-    ";
+    // Inject the data into the HTML via a script that populates localStorage
+    $script = '<script>(function(){ const data = ' . $jsonData . '; localStorage.setItem("print_queue", JSON.stringify(data)); })();</script>';
     
-    // Insert before the existing script or head
+    // Insert before the head
     $html = str_replace('<head>', "<head>$script", $html);
     
     echo $html;

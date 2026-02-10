@@ -666,6 +666,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th>کد ملی خواهان</th>
                           <th>خوانده</th>
                           <th>تاریخ</th>
+                          <th>چاپ</th>
                         </tr>
                       </thead>
                       <tbody id="adminKelasehSearchTbody"></tbody>
@@ -737,6 +738,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th>کد ملی خواهان</th>
                           <th>خوانده</th>
                           <th>تاریخ</th>
+                          <th>چاپ</th>
                           <th>عملیات</th>
                         </tr>
                       </thead>
@@ -946,12 +948,18 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <th>خواهان</th>
                       <th>خوانده</th>
                       <th>تاریخ</th>
+                      <th>چاپ</th>
                       <th>وضعیت</th>
                       <th class="text-end">عملیات</th>
                     </tr>
                   </thead>
                   <tbody id="kelasehTbody"></tbody>
                 </table>
+              </div>
+
+              <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center">
+                <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل‌های انتخاب شده</button>
+                <button id="btnKelasehSelectAllBottom" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
               
               <div class="d-flex justify-content-between align-items-center mt-3">

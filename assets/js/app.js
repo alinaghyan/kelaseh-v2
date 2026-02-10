@@ -395,6 +395,13 @@ function generateKelasehRows(rows, offset = 0) {
     const statusHtml = $('<div/>').text(status).html();
     const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
     
+    let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+    if (r.print_type) {
+      const pType = r.print_type === 'single' ? 'تکی' : 'گروهی';
+      const pColor = r.print_type === 'single' ? 'bg-info' : 'bg-primary';
+      printStatusHtml = `<span class="badge ${pColor} text-white" title="${toPersianDigits(r.last_printed_at || '')}">${pType}</span>`;
+    }
+    
     let manualBadge = '';
     const isManualDate = !!r.is_manual;
     const isManualBranch = !!r.is_manual_branch;
@@ -460,6 +467,7 @@ function generateKelasehRows(rows, offset = 0) {
         <td>${plaintiff}</td>
         <td>${defendant}</td>
         <td class="text-secondary">${date}</td>
+        <td>${printStatusHtml}</td>
         <td class="${statusClass}">${statusHtml}</td>
         <td class="text-end">
           ${actionButtons}
@@ -1084,9 +1092,6 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
       toggleHistorySection();
       refreshKelaseh();
       refreshKelasehToday();
-      if (code) {
-        window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
-      }
 
       if (shouldSendSms && code) {
         if (!to_plaintiff && !to_defendant) {
@@ -1169,6 +1174,16 @@ $(document).on('click', '.btn-kelaseh-label', function () {
     return;
   }
   const payload = JSON.parse(decodeURIComponent(raw));
+  
+  if (payload.status === 'voided') {
+    showToast('پرونده ابطال شده است و امکان چاپ ندارد.', 'error');
+    return;
+  }
+  if (payload.status === 'inactive') {
+    showToast('پرونده غیرفعال است و امکان چاپ ندارد.', 'error');
+    return;
+  }
+  
   const code = payload.code;
   window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
 });
@@ -1240,7 +1255,7 @@ $(document).on('click', '#kelasehPagination .page-link', function (e) {
     if (page) refreshKelaseh(page);
 });
 
-$(document).on('click', '#btnKelasehSelectAll', function () {
+$(document).on('click', '#btnKelasehSelectAll, #btnKelasehSelectAllBottom', function () {
     const checks = $('#kelasehTbody .kelaseh-label-check');
     const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
     checks.prop('checked', !allChecked);
@@ -1263,21 +1278,35 @@ $(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
     // Just toggle check, do nothing immediate
 });
 
-$(document).on('click', '#btnKelasehPrintLabels', function () {
+$(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', function () {
   const codes = [];
+  let excludedCount = 0;
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (raw) {
       const payload = JSON.parse(decodeURIComponent(raw));
-      if (payload.code) codes.push(payload.code);
+      if (payload.status === 'active') {
+        if (payload.code) codes.push(payload.code);
+      } else {
+        excludedCount++;
+      }
     }
   });
 
   if (codes.length === 0) {
-    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
     return;
   }
+  
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیرفعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
@@ -1289,33 +1318,38 @@ $(document).on('click', '#btnKelasehTodaySelectAll', function () {
 
 $(document).on('click', '#btnKelasehTodayPrintAllLabels', function () {
   const codes = [];
+  let excludedCount = 0;
   
   // First check if any checkbox is checked
   const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
-  if (checked.length > 0) {
-    checked.each(function () {
-        const tr = $(this).closest('tr');
-        const raw = tr.attr('data-json');
-        if (raw) {
-          const payload = JSON.parse(decodeURIComponent(raw));
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.status === 'active') {
           if (payload.code) codes.push(payload.code);
+        } else {
+          excludedCount++;
         }
-    });
-  } else {
-    // Fallback: collect all rows if nothing selected
-    $('#kelasehTodayTbody tr').each(function () {
-        const raw = $(this).attr('data-json');
-        if (raw) {
-          const payload = JSON.parse(decodeURIComponent(raw));
-          if (payload.code) codes.push(payload.code);
-        }
-    });
-  }
+      }
+  });
 
   if (codes.length === 0) {
-    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
     return;
   }
+  
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیرفعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
@@ -1881,7 +1915,14 @@ function refreshAdminKelasehSearch() {
         const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
         const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || '')).html();
         
-        return `<tr><td dir="ltr" class="text-end fw-bold">${code}</td><td>${owner}</td><td>${plaintiff}</td><td>${plaintiffNC}</td><td>${defendant}</td><td>${date}</td></tr>`;
+        let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+        if (r.print_type) {
+          const pType = r.print_type === 'single' ? 'تکی' : 'گروهی';
+          const pColor = r.print_type === 'single' ? 'bg-info' : 'bg-primary';
+          printStatusHtml = `<span class="badge ${pColor} text-white" title="${toPersianDigits(r.last_printed_at || '')}">${pType}</span>`;
+        }
+
+        return `<tr><td dir="ltr" class="text-end fw-bold">${code}</td><td>${owner}</td><td>${plaintiff}</td><td>${plaintiffNC}</td><td>${defendant}</td><td>${date}</td><td>${printStatusHtml}</td></tr>`;
       }).join('');
       $('#adminKelasehSearchTbody').html(html || `<tr><td colspan="6" class="text-center text-secondary py-3">موردی یافت نشد.</td></tr>`);
     })
@@ -2041,6 +2082,14 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
       const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
       const codeRaw = r.code || '';
+      
+      let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+      if (r.print_type) {
+        const pType = r.print_type === 'single' ? 'تکی' : 'گروهی';
+        const pColor = r.print_type === 'single' ? 'bg-info' : 'bg-primary';
+        printStatusHtml = `<span class="badge ${pColor} text-white" title="${toPersianDigits(r.last_printed_at || '')}">${pType}</span>`;
+      }
+
       return `
         <tr>
           <td dir="ltr" class="text-end fw-bold">${code}</td>
@@ -2049,6 +2098,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           <td dir="ltr" class="text-end text-secondary">${plaintiffNC}</td>
           <td>${defendant}</td>
           <td class="text-secondary">${date}</td>
+          <td>${printStatusHtml}</td>
           <td class="text-end">
             <div class="btn-group btn-group-sm" role="group">
               <button class="btn btn-outline-secondary btn-office-label" type="button" data-code="${codeRaw}">لیبل</button>
