@@ -185,6 +185,7 @@ function setView(mode) {
   $('#viewLoading').toggleClass('d-none', mode !== 'loading');
   $('#viewAuth').toggleClass('d-none', mode !== 'auth');
   $('#viewApp').toggleClass('d-none', mode !== 'app');
+  $('#mainHeader').toggleClass('d-none', mode === 'auth' || mode === 'loading');
 }
 
 function renderUser() {
@@ -842,19 +843,25 @@ function boot() {
 $(document).on('submit', '#formLogin', function (e) {
   e.preventDefault();
   const formEl = this;
+  const btn = $(formEl).find('#btnLoginSubmit');
   const data = Object.fromEntries(new FormData(formEl));
+
+  btn.prop('disabled', true).find('.btn-text').addClass('d-none');
+  btn.find('.spinner-border').removeClass('d-none');
+
   api('login', { login: data.login, password: data.password })
     .done((res) => {
       csrfToken = (res.data && res.data.csrf_token) || csrfToken;
       if (res.data && Number(res.data.otp_required) === 1) {
         $('#loginOtpSection').removeClass('d-none');
         $('#btnLoginOtpVerify').removeClass('d-none');
+        $('#btnLoginSubmit').addClass('d-none');
         $('#loginOtpInput').val('').trigger('focus');
-        const hint = res.data.mobile_hint ? `کد به ${toPersianDigits(res.data.mobile_hint)} ارسال شد.` : 'کد تایید ارسال شد.';
+        const hint = res.data.mobile_hint ? `کد به ${toPersianDigits(res.data.mobile_hint)} ارسال شد.` : 'کد تأیید ارسال شد.';
         $('#loginOtpHint').text(hint);
         $(formEl).find('[name="login"]').prop('disabled', true);
         $(formEl).find('[name="password"]').prop('disabled', true);
-        showToast(res.message || 'کد تایید ارسال شد.', 'success');
+        showToast(res.message || 'کد تأیید ارسال شد.', 'success');
         return;
       }
 
@@ -887,17 +894,26 @@ $(document).on('submit', '#formLogin', function (e) {
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ورود ناموفق بود.';
       showToast(msg, 'error');
+    })
+    .always(() => {
+      btn.prop('disabled', false).find('.btn-text').removeClass('d-none');
+      btn.find('.spinner-border').addClass('d-none');
     });
 });
 
 $(document).on('click', '#btnLoginOtpVerify', function () {
+  const btn = $(this);
   const otp = $('#loginOtpInput').val() || '';
+
+  btn.prop('disabled', true);
+  
   api('login.otp.verify', { otp })
     .done((res) => {
       csrfToken = (res.data && res.data.csrf_token) || csrfToken;
       currentUser = (res.data && res.data.user) || null;
       $('#loginOtpSection').addClass('d-none');
       $('#btnLoginOtpVerify').addClass('d-none');
+      $('#btnLoginSubmit').removeClass('d-none');
       const form = $('#formLogin');
       form.find('[name="login"]').prop('disabled', false);
       form.find('[name="password"]').prop('disabled', false);
@@ -927,8 +943,9 @@ $(document).on('click', '#btnLoginOtpVerify', function () {
       }
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تایید کد ناموفق بود.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تأیید کد ناموفق بود.';
       showToast(msg, 'error');
+      btn.prop('disabled', false);
     });
 });
 
@@ -1096,16 +1113,42 @@ $(document).on('click', '#btnKelasehExportCsv', function () {
   const national_code = $('#kelasehNational').val() || '';
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
-  const qs = new URLSearchParams({ action: 'kelaseh.export.csv', csrf_token: csrfToken, national_code, from, to });
-  window.location.href = `core.php?${qs.toString()}`;
+  
+  const $form = $('<form>', {
+    action: 'core.php',
+    method: 'POST',
+    target: '_self'
+  }).append(
+    $('<input>', { type: 'hidden', name: 'action', value: 'kelaseh.export.csv' }),
+    $('<input>', { type: 'hidden', name: 'csrf_token', value: csrfToken }),
+    $('<input>', { type: 'hidden', name: 'national_code', value: national_code }),
+    $('<input>', { type: 'hidden', name: 'from', value: from }),
+    $('<input>', { type: 'hidden', name: 'to', value: to })
+  );
+  
+  $('body').append($form);
+  $form.submit().remove();
 });
 
 $(document).on('click', '#btnKelasehExportPdf', function () {
   const national_code = $('#kelasehNational').val() || '';
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
-  const qs = new URLSearchParams({ action: 'kelaseh.export.print', csrf_token: csrfToken, national_code, from, to });
-  window.open(`core.php?${qs.toString()}`, '_blank');
+  
+  const $form = $('<form>', {
+    action: 'core.php',
+    method: 'POST',
+    target: '_blank'
+  }).append(
+    $('<input>', { type: 'hidden', name: 'action', value: 'kelaseh.export.print' }),
+    $('<input>', { type: 'hidden', name: 'csrf_token', value: csrfToken }),
+    $('<input>', { type: 'hidden', name: 'national_code', value: national_code }),
+    $('<input>', { type: 'hidden', name: 'from', value: from }),
+    $('<input>', { type: 'hidden', name: 'to', value: to })
+  );
+  
+  $('body').append($form);
+  $form.submit().remove();
 });
 
 $(document).on('click', '#kelasehTbody .btn-kelaseh-print', function () {

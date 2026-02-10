@@ -57,7 +57,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               </div>
               <div class="col-12">
                  <div class="d-flex align-items-center justify-content-between">
-                   <label class="form-label form-label-sm mb-1">شعب مجاز</label>
+                   <label class="form-label form-label-sm mb-1">شعبه‌های مجاز</label>
                    <div class="form-check form-switch">
                      <input id="officeCreateManualBranches" class="form-check-input" type="checkbox" checked>
                      <label class="form-check-label small" for="officeCreateManualBranches">انتخاب دستی شعب</label>
@@ -91,7 +91,74 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     </div>
   </div>
 
-  <div class="container-fluid py-3" style="max-width: 1400px; margin: 0 auto;">
+  <div id="viewLoading" class="card position-fixed top-50 start-50 translate-middle shadow-sm d-none" style="z-index: 1060; min-width: 250px;">
+    <div class="card-body">
+      <div class="d-flex align-items-center gap-2">
+        <div class="spinner-border spinner-border-sm text-primary" role="status" aria-hidden="true"></div>
+        <div>در حال آماده‌سازی…</div>
+      </div>
+    </div>
+  </div>
+
+  <div id="viewAuth" class="auth-container d-none">
+    <div class="auth-card">
+      <div class="card-body p-4 text-center">
+        <div class="auth-logo-container">
+          <img src="assets/img/logo.png" alt="Logo" class="auth-logo" onerror="this.src='https://img.icons8.com/ios-filled/100/ffffff/camera.png'">
+        </div>
+        <h2 class="auth-title h4"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h2>
+        <p class="auth-subtitle">خوش آمدید، لطفا وارد حساب خود شوید</p>
+
+        <form id="formLogin" class="vstack gap-2 text-start">
+          <div class="auth-input-group form-floating">
+            <span class="auth-input-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M3 14s-1 0-1-1 1-4 6-4 6 3 6 4-1 1-1 1zm5-6a3 3 0 1 0 0-6 3 3 0 0 0 0 6"/>
+              </svg>
+            </span>
+            <input name="login" type="text" class="form-control" id="loginInput" placeholder="نام کاربری" autocomplete="username" required />
+            <label for="loginInput">نام کاربری یا ایمیل</label>
+          </div>
+
+          <div class="auth-input-group form-floating">
+            <span class="auth-input-icon">
+              <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                <path d="M8 1a2 2 0 0 1 2 2v4H6V3a2 2 0 0 1 2-2m3 6V3a3 3 0 0 0-6 0v4a2 2 0 0 0-2 2v5a2 2 0 0 0 2 2h6a2 2 0 0 0 2-2V9a2 2 0 0 0-2-2"/>
+              </svg>
+            </span>
+            <input name="password" type="password" class="form-control" id="passwordInput" placeholder="رمز عبور" autocomplete="current-password" required />
+            <label for="passwordInput">رمز عبور</label>
+          </div>
+
+          <div id="loginOtpSection" class="d-none">
+            <div class="auth-input-group form-floating">
+              <span class="auth-input-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" fill="currentColor" viewBox="0 0 16 16">
+                  <path d="M8 16a8 8 0 1 0 0-16 8 8 0 0 0 0 16m.93-9.412-1 4.705c-.07.34.029.533.308.533.19 0 .452-.084.626-.182.028-.016.041-.01.041.012a.1.1 0 0 1-.03.07 1.9 1.9 0 0 1-.765.499c-.481.187-.999-.087-1.143-.592l-1.203-5.497c-.144-.527.215-.922.819-.922.51 0 .88.167 1.034.525.02.047.025.077.011.077a.17.17 0 0 0-.039-.01c-.16-.032-.392-.063-.518-.063-.279 0-.471.199-.308.53l.93 4.35Z"/>
+                </svg>
+              </span>
+              <input id="loginOtpInput" name="otp" type="text" class="form-control" placeholder="کد تایید" inputmode="numeric" maxlength="8" />
+              <label for="loginOtpInput">کد تایید</label>
+            </div>
+            <div id="loginOtpHint" class="form-text text-center small text-white-50 mb-3"></div>
+          </div>
+
+          <button class="btn btn-primary auth-btn w-100" type="submit" id="btnLoginSubmit">
+            <span class="btn-text">ورود به سیستم</span>
+            <span class="spinner-border spinner-border-sm d-none" role="status" aria-hidden="true"></span>
+          </button>
+          
+          <button id="btnLoginOtpVerify" class="btn btn-outline-light auth-btn w-100 d-none" type="button">تأیید کد و ورود</button>
+        </form>
+
+        <div class="auth-footer">
+          &copy; <?php echo date('Y'); ?> تمامی حقوق محفوظ است
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div id="mainHeader" class="container-fluid py-3 d-none" style="max-width: 1400px; margin: 0 auto;">
     <div class="d-flex flex-column gap-2 mb-3">
       <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
         <div class="d-flex align-items-center gap-3">
@@ -116,47 +183,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
         <li class="nav-item" id="navItemAdminKelasehSearch"><a class="nav-link" href="#admin-kelaseh-search" data-page="admin-kelaseh-search">جستجوی پرونده</a></li>
       </ul>
     </div>
+  </div>
 
+  <div class="container-fluid" style="max-width: 1400px; margin: 0 auto;">
     <div id="toastHost" class="toast-container position-fixed top-0 start-0 p-3"></div>
-
-    <div id="viewLoading" class="card">
-      <div class="card-body">
-        <div class="d-flex align-items-center gap-2">
-          <div class="spinner-border spinner-border-sm" role="status" aria-hidden="true"></div>
-          <div>در حال آماده‌سازی…</div>
-        </div>
-      </div>
-    </div>
-
-    <div id="viewAuth" class="row justify-content-center d-none">
-      <div class="col-12 col-md-6 col-lg-5">
-        <div class="card shadow-sm">
-          <div class="card-body">
-            <div class="text-center mb-4">
-              <img src="assets/img/logo.png" alt="Logo" style="max-height: 120px;" onerror="this.style.display='none'">
-              <h2 class="h5 mt-3"><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></h2>
-            </div>
-            <form id="formLogin" class="vstack gap-2">
-              <div>
-                <label class="form-label">نام کاربری یا ایمیل</label>
-                <input name="login" type="text" class="form-control" autocomplete="username" required />
-              </div>
-              <div>
-                <label class="form-label">رمز عبور</label>
-                <input name="password" type="password" class="form-control" autocomplete="current-password" required />
-              </div>
-              <div id="loginOtpSection" class="d-none">
-                <label class="form-label">کد تایید</label>
-                <input id="loginOtpInput" name="otp" type="text" class="form-control" inputmode="numeric" maxlength="8" placeholder="کد پیامک‌شده" />
-                <div id="loginOtpHint" class="form-text"></div>
-              </div>
-              <button class="btn btn-primary" type="submit">ورود</button>
-              <button id="btnLoginOtpVerify" class="btn btn-outline-primary d-none" type="button">تایید کد و ورود</button>
-            </form>
-          </div>
-        </div>
-      </div>
-    </div>
 
     <div id="viewApp" class="d-none">
       <div class="row g-3" id="appRow">
@@ -497,8 +527,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <div class="col-12">
                             <div class="form-check">
                               <input id="adminSmsOtpEnabled" name="otp_enabled" class="form-check-input" type="checkbox" />
-                              <label class="form-check-label" for="adminSmsOtpEnabled">ارسال کد تایید ورود برای مدیران فعال باشد</label>
-                              <div class="form-text">در صورت فعال بودن، هنگام ورود نقش‌های مدیر کل/مدیر اداره/مدیر شعبه نیاز به کد تایید دارند.</div>
+                              <label class="form-check-label" for="adminSmsOtpEnabled">ارسال کد تأیید ورود برای مدیران فعال باشد</label>
+                              <div class="form-text">در صورت فعال بودن، هنگام ورود نقش‌های مدیر کل/مدیر اداره/مدیر شعبه نیاز به کد تأیید دارند.</div>
                             </div>
                           </div>
 
@@ -506,12 +536,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                             <div class="card p-2 bg-light">
                               <div class="row g-2">
                                 <div class="col-12 col-lg-6">
-                                  <label class="form-label form-label-sm">متن پیامک کد تایید</label>
+                                  <label class="form-label form-label-sm">متن پیامک کد تأیید</label>
                                   <textarea id="adminSmsTplOtp" name="tpl_otp" class="form-control form-control-sm" rows="3"></textarea>
-                                  <div class="form-text">متغیرها: {otp} (کد تایید)، {app_name} (نام سامانه)</div>
+                                  <div class="form-text">متغیرها: {otp} (کد تأیید)، {app_name} (نام سامانه)</div>
                                 </div>
                                 <div class="col-12 col-md-4 col-lg-2">
-                                  <label class="form-label form-label-sm">طول کد تایید</label>
+                                  <label class="form-label form-label-sm">طول کد تأیید</label>
                                   <input id="adminSmsOtpLen" name="otp_len" type="number" class="form-control form-control-sm" min="4" max="8" value="6" />
                                 </div>
                                 <div class="col-12 col-md-4 col-lg-2">
@@ -551,10 +581,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                               {branch_no} (شماره شعبه)،
                               {date} (تاریخ ثبت)،
                               {plaintiff_name} (نام خواهان)،
-                              {plaintiff_national_code} (کدملی خواهان)،
+                              {plaintiff_national_code} (کد ملی خواهان)،
                               {plaintiff_mobile} (موبایل خواهان)،
                               {defendant_name} (نام خوانده)،
-                              {defendant_national_code} (کدملی خوانده)،
+                              {defendant_national_code} (کد ملی خوانده)،
                               {defendant_mobile} (موبایل خوانده)
                             </div>
                           </div>
@@ -620,7 +650,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <div class="tab-pane fade" id="adminKelasehSearch" role="tabpanel">
                   <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">جستجو</span>
-                    <input id="adminKelasehSearchQuery" type="text" class="form-control" placeholder="کلاسه/کدملی/نام" />
+                    <input id="adminKelasehSearchQuery" type="text" class="form-control" placeholder="کلاسه/کد ملی/نام" />
                     <select id="adminKelasehCityFilter" class="form-select" style="max-width: 220px;">
                       <option value="">همه اداره‌ها</option>
                     </select>
@@ -633,7 +663,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th>کلاسه</th>
                           <th>اداره/کاربر</th>
                           <th>خواهان</th>
-                          <th>کدملی خواهان</th>
+                          <th>کد ملی خواهان</th>
                           <th>خوانده</th>
                           <th>تاریخ</th>
                         </tr>
@@ -693,7 +723,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <div class="tab-pane fade" id="officeKelaseh" role="tabpanel">
                    <div class="input-group input-group-sm mb-2">
                     <span class="input-group-text">جستجو</span>
-                    <input id="officeKelasehSearchQuery" type="text" class="form-control" placeholder="کلاسه/کدملی/نام" />
+                    <input id="officeKelasehSearchQuery" type="text" class="form-control" placeholder="کلاسه/کد ملی/نام" />
                     <button id="btnOfficeKelasehSearch" class="btn btn-outline-secondary" type="button">جستجو</button>
                     <button id="btnOfficeKelasehPrintAll" class="btn btn-outline-dark" type="button">چاپ لیست کامل</button>
                   </div>
@@ -704,7 +734,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th>کلاسه</th>
                           <th>کاربر</th>
                           <th>خواهان</th>
-                          <th>کدملی خواهان</th>
+                          <th>کد ملی خواهان</th>
                           <th>خوانده</th>
                           <th>تاریخ</th>
                           <th>عملیات</th>
@@ -841,7 +871,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th style="width: 60px;">شعبه</th>
                           <th style="width: 140px;">اداره</th>
                           <th>خواهان</th>
-                          <th>کدملی خواهان</th>
+                          <th>کد ملی خواهان</th>
                           <th>خوانده</th>
                           <th>تاریخ</th>
                           <th>وضعیت</th>
@@ -860,7 +890,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <div class="col-12 col-md-2">
                   <div class="input-group input-group-sm">
                     <span class="input-group-text">جستجو</span>
-                    <input id="kelasehNational" type="text" class="form-control" placeholder="کدملی/نام/کلاسه/موبایل..." />
+                    <input id="kelasehNational" type="text" class="form-control" placeholder="کد ملی/نام/کلاسه/موبایل..." />
                   </div>
                 </div>
                 <div id="kelasehCityFilterWrap" class="col-12 col-md-2 d-none">
@@ -958,11 +988,11 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <input name="defendant_name" type="text" class="form-control form-control-sm" required />
               </div>
               <div class="col-12 col-md-6">
-                <label class="form-label form-label-sm">کدملی/ شناسه ملی خواهان</label>
+                <label class="form-label form-label-sm">کد ملی/ شناسه ملی خواهان</label>
                 <input name="plaintiff_national_code" type="text" class="form-control form-control-sm" required />
               </div>
               <div class="col-12 col-md-6">
-                <label class="form-label form-label-sm">کدملی/ شناسه ملی خوانده</label>
+                <label class="form-label form-label-sm">کد ملی/ شناسه ملی خوانده</label>
                 <input name="defendant_national_code" type="text" class="form-control form-control-sm" required />
               </div>
               <div class="col-12 col-md-6">
