@@ -185,6 +185,7 @@ function setView(mode) {
   $('#viewLoading').toggleClass('d-none', mode !== 'loading');
   $('#viewAuth').toggleClass('d-none', mode !== 'auth');
   $('#viewApp').toggleClass('d-none', mode !== 'app');
+  $('#mainHeader').toggleClass('d-none', mode === 'auth' || mode === 'loading');
 }
 
 function renderUser() {
@@ -380,8 +381,9 @@ function renderPage(page) {
 
 function generateKelasehRows(rows, offset = 0) {
   if (!rows || !rows.length) return '';
+  const startOffset = parseInt(offset) || 0;
   return rows.map((r, idx) => {
-    const rowNo = toPersianDigits(offset + idx + 1);
+    const rowNo = toPersianDigits(startOffset + idx + 1);
     const rawCode = r.full_code || r.code || '';
     const code = $('<div/>').text(toPersianDigits(rawCode)).html();
     const branchNo = toPersianDigits(String(r.branch_no || '').padStart(2, '0'));
@@ -393,6 +395,20 @@ function generateKelasehRows(rows, offset = 0) {
     const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
     const statusHtml = $('<div/>').text(status).html();
     const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
+    
+    let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+    if (r.print_type) {
+      const pType = r.print_type === 'single' ? 'تکی' : 'گروهی';
+      const pColor = r.print_type === 'single' ? 'bg-info' : 'bg-primary';
+      printStatusHtml = `<span class="badge ${pColor} text-white" title="${toPersianDigits(r.last_printed_at || '')}">${pType}</span>`;
+    }
+
+    let noticeStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+    if (r.last_notice_printed_at) {
+      noticeStatusHtml = `<span class="badge bg-info text-white" title="${toPersianDigits(r.last_notice_printed_at || '')}">چاپ شده</span>`;
+    }
+    
+    const pnc = toPersianDigits(r.plaintiff_national_code || '-');
     
     let manualBadge = '';
     const isManualDate = !!r.is_manual;
@@ -417,6 +433,11 @@ function generateKelasehRows(rows, offset = 0) {
         defendant_national_code: r.defendant_national_code || '',
         plaintiff_mobile: r.plaintiff_mobile || '',
         defendant_mobile: r.defendant_mobile || '',
+        plaintiff_address: r.plaintiff_address || '',
+        defendant_address: r.defendant_address || '',
+        plaintiff_postal_code: r.plaintiff_postal_code || '',
+        defendant_postal_code: r.defendant_postal_code || '',
+        dadnameh: r.dadnameh || '',
         created_at_jalali: r.created_at_jalali || '',
         city_name: r.city_name || ''
       })
@@ -425,10 +446,11 @@ function generateKelasehRows(rows, offset = 0) {
     const actionButtons = `
         <div class="d-flex flex-column gap-1">
             <div class="btn-group btn-group-sm" role="group">
-                <button class="btn btn-outline-secondary btn-kelaseh-label" type="button">چاپ لیبل</button>
-                <button class="btn btn-outline-primary btn-kelaseh-edit" type="button">ویرایش</button>
-                <button class="btn btn-outline-warning btn-kelaseh-toggle" type="button">وضعیت</button>
-                <button class="btn btn-outline-danger btn-kelaseh-void" type="button">ابطال</button>
+                <button class="btn btn-glass btn-glass-info btn-kelaseh-view" type="button">نمایش کامل</button>
+                <button class="btn btn-glass btn-glass-secondary btn-kelaseh-label" type="button">چاپ لیبل</button>
+                <button class="btn btn-glass btn-glass-primary btn-kelaseh-edit" type="button">ویرایش</button>
+                <button class="btn btn-glass btn-glass-warning btn-kelaseh-toggle" type="button">وضعیت</button>
+                <button class="btn btn-glass btn-glass-danger btn-kelaseh-void" type="button">ابطال</button>
             </div>
             <div class="d-flex justify-content-end gap-2 align-items-center">
                 <div class="form-check form-check-inline m-0">
@@ -439,7 +461,7 @@ function generateKelasehRows(rows, offset = 0) {
                     <input class="form-check-input kelaseh-sms-defendant" type="checkbox" />
                     <label class="form-check-label small" style="font-size: 0.7rem;">خوانده</label>
                 </div>
-                <button class="btn btn-outline-success btn-sm py-0 btn-kelaseh-sms" style="font-size: 0.7rem;" type="button">پیامک</button>
+                <button class="btn btn-glass btn-glass-success btn-sm py-0 btn-kelaseh-sms" style="font-size: 0.7rem;" type="button">پیامک</button>
             </div>
         </div>
     `;
@@ -447,9 +469,7 @@ function generateKelasehRows(rows, offset = 0) {
     return `
       <tr data-json="${json}">
         <td>
-           <div class="form-check d-flex justify-content-center m-0">
-              <input class="form-check-input kelaseh-label-check" type="checkbox" id="chk_lbl_${idx}_${r.code}" />
-           </div>
+           <input class="kelaseh-label-check" type="checkbox" style="width: 18px; height: 18px; cursor: pointer;" />
         </td>
         <td class="text-secondary">${rowNo}</td>
         <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}</div></td>
@@ -457,8 +477,11 @@ function generateKelasehRows(rows, offset = 0) {
         <td class="text-secondary">${cityName}</td>
         <td class="text-secondary small">${ownerName}</td>
         <td>${plaintiff}</td>
+        <td class="text-secondary" dir="ltr">${pnc}</td>
         <td>${defendant}</td>
         <td class="text-secondary">${date}</td>
+        <td>${printStatusHtml}</td>
+        <td>${noticeStatusHtml}</td>
         <td class="${statusClass}">${statusHtml}</td>
         <td class="text-end">
           ${actionButtons}
@@ -480,7 +503,7 @@ function renderKelaseh(res) {
   const offset = (page - 1) * limit;
 
   const html = generateKelasehRows(rows, offset);
-  $('#kelasehTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  $('#kelasehTbody').html(html || `<tr><td colspan="14" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
   
   // Pagination Info
   const start = offset + 1;
@@ -524,7 +547,7 @@ function refreshKelasehToday() {
     .done((res) => {
       const rows = (res.data && res.data.kelaseh) || [];
       const html = generateKelasehRows(rows);
-      $('#kelasehTodayTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
+      $('#kelasehTodayTbody').html(html || `<tr><td colspan="14" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
     })
     .fail(() => {});
 }
@@ -842,19 +865,25 @@ function boot() {
 $(document).on('submit', '#formLogin', function (e) {
   e.preventDefault();
   const formEl = this;
+  const btn = $(formEl).find('#btnLoginSubmit');
   const data = Object.fromEntries(new FormData(formEl));
+
+  btn.prop('disabled', true).find('.btn-text').addClass('d-none');
+  btn.find('.spinner-border').removeClass('d-none');
+
   api('login', { login: data.login, password: data.password })
     .done((res) => {
       csrfToken = (res.data && res.data.csrf_token) || csrfToken;
       if (res.data && Number(res.data.otp_required) === 1) {
         $('#loginOtpSection').removeClass('d-none');
         $('#btnLoginOtpVerify').removeClass('d-none');
+        $('#btnLoginSubmit').addClass('d-none');
         $('#loginOtpInput').val('').trigger('focus');
-        const hint = res.data.mobile_hint ? `کد به ${toPersianDigits(res.data.mobile_hint)} ارسال شد.` : 'کد تایید ارسال شد.';
+        const hint = res.data.mobile_hint ? `کد به ${toPersianDigits(res.data.mobile_hint)} ارسال شد.` : 'کد تأیید ارسال شد.';
         $('#loginOtpHint').text(hint);
         $(formEl).find('[name="login"]').prop('disabled', true);
         $(formEl).find('[name="password"]').prop('disabled', true);
-        showToast(res.message || 'کد تایید ارسال شد.', 'success');
+        showToast(res.message || 'کد تأیید ارسال شد.', 'success');
         return;
       }
 
@@ -887,17 +916,26 @@ $(document).on('submit', '#formLogin', function (e) {
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ورود ناموفق بود.';
       showToast(msg, 'error');
+    })
+    .always(() => {
+      btn.prop('disabled', false).find('.btn-text').removeClass('d-none');
+      btn.find('.spinner-border').addClass('d-none');
     });
 });
 
 $(document).on('click', '#btnLoginOtpVerify', function () {
+  const btn = $(this);
   const otp = $('#loginOtpInput').val() || '';
+
+  btn.prop('disabled', true);
+  
   api('login.otp.verify', { otp })
     .done((res) => {
       csrfToken = (res.data && res.data.csrf_token) || csrfToken;
       currentUser = (res.data && res.data.user) || null;
       $('#loginOtpSection').addClass('d-none');
       $('#btnLoginOtpVerify').addClass('d-none');
+      $('#btnLoginSubmit').removeClass('d-none');
       const form = $('#formLogin');
       form.find('[name="login"]').prop('disabled', false);
       form.find('[name="password"]').prop('disabled', false);
@@ -927,8 +965,9 @@ $(document).on('click', '#btnLoginOtpVerify', function () {
       }
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تایید کد ناموفق بود.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تأیید کد ناموفق بود.';
       showToast(msg, 'error');
+      btn.prop('disabled', false);
     });
 });
 
@@ -1067,9 +1106,6 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
       toggleHistorySection();
       refreshKelaseh();
       refreshKelasehToday();
-      if (code) {
-        window.open(`core.php?action=kelaseh.print&code=${encodeURIComponent(code)}`, '_blank');
-      }
 
       if (shouldSendSms && code) {
         if (!to_plaintiff && !to_defendant) {
@@ -1096,16 +1132,42 @@ $(document).on('click', '#btnKelasehExportCsv', function () {
   const national_code = $('#kelasehNational').val() || '';
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
-  const qs = new URLSearchParams({ action: 'kelaseh.export.csv', csrf_token: csrfToken, national_code, from, to });
-  window.location.href = `core.php?${qs.toString()}`;
+  
+  const $form = $('<form>', {
+    action: 'core.php',
+    method: 'POST',
+    target: '_self'
+  }).append(
+    $('<input>', { type: 'hidden', name: 'action', value: 'kelaseh.export.csv' }),
+    $('<input>', { type: 'hidden', name: 'csrf_token', value: csrfToken }),
+    $('<input>', { type: 'hidden', name: 'national_code', value: national_code }),
+    $('<input>', { type: 'hidden', name: 'from', value: from }),
+    $('<input>', { type: 'hidden', name: 'to', value: to })
+  );
+  
+  $('body').append($form);
+  $form.submit().remove();
 });
 
 $(document).on('click', '#btnKelasehExportPdf', function () {
   const national_code = $('#kelasehNational').val() || '';
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
-  const qs = new URLSearchParams({ action: 'kelaseh.export.print', csrf_token: csrfToken, national_code, from, to });
-  window.open(`core.php?${qs.toString()}`, '_blank');
+  
+  const $form = $('<form>', {
+    action: 'core.php',
+    method: 'POST',
+    target: '_blank'
+  }).append(
+    $('<input>', { type: 'hidden', name: 'action', value: 'kelaseh.export.print' }),
+    $('<input>', { type: 'hidden', name: 'csrf_token', value: csrfToken }),
+    $('<input>', { type: 'hidden', name: 'national_code', value: national_code }),
+    $('<input>', { type: 'hidden', name: 'from', value: from }),
+    $('<input>', { type: 'hidden', name: 'to', value: to })
+  );
+  
+  $('body').append($form);
+  $form.submit().remove();
 });
 
 $(document).on('click', '#kelasehTbody .btn-kelaseh-print', function () {
@@ -1126,8 +1188,78 @@ $(document).on('click', '.btn-kelaseh-label', function () {
     return;
   }
   const payload = JSON.parse(decodeURIComponent(raw));
+  
+  if (payload.status === 'voided') {
+    showToast('پرونده ابطال شده است و امکان چاپ ندارد.', 'error');
+    return;
+  }
+  if (payload.status === 'inactive') {
+    showToast('پرونده غیرفعال است و امکان چاپ ندارد.', 'error');
+    return;
+  }
+  
   const code = payload.code;
   window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
+});
+
+$(document).on('click', '.btn-kelaseh-view', function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (!raw) return;
+    const p = JSON.parse(decodeURIComponent(raw));
+    
+    const plaintiffFields = [
+        { label: 'شناسه کلاسه', value: p.code },
+        { label: 'شماره دادنامه', value: p.dadnameh },
+        { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
+        { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
+        { label: 'شماره تماس خواهان', value: p.plaintiff_mobile },
+        { label: 'کد پستی خواهان', value: p.plaintiff_postal_code },
+        { label: 'آدرس خواهان', value: p.plaintiff_address }
+    ];
+
+    const defendantFields = [
+        { label: 'شناسه کلاسه', value: p.code },
+        { label: 'نام و نام خانوادگی خوانده', value: p.defendant_name },
+        { label: 'کد ملی خوانده', value: p.defendant_national_code },
+        { label: 'شماره تماس خوانده', value: p.defendant_mobile },
+        { label: 'کد پستی خوانده', value: p.defendant_postal_code },
+        { label: 'آدرس خوانده', value: p.defendant_address }
+    ];
+
+    const renderColumn = (title, fields, colorClass) => {
+        let itemsHtml = `<div class="col-12 col-md-6"><div class="card h-100 border-${colorClass} border-opacity-25 shadow-sm"><div class="card-header bg-${colorClass} bg-opacity-10 py-2 fw-bold text-${colorClass}">${title}</div><div class="card-body p-2 vstack gap-2">`;
+        fields.forEach(f => {
+            if (f.value) {
+                itemsHtml += `
+                    <div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">
+                        <div class="small text-secondary mb-1">${f.label}:</div>
+                        <div class="fw-bold text-dark">${toPersianDigits(f.value)}</div>
+                        <input type="hidden" value="${f.value}" />
+                    </div>
+                `;
+            }
+        });
+        itemsHtml += `</div></div></div>`;
+        return itemsHtml;
+    };
+
+    let html = renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
+    html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
+
+    $('#kelasehViewContent').html(html);
+    new bootstrap.Modal(document.getElementById('modalKelasehView')).show();
+});
+
+$(document).on('click', '.copyable', function () {
+    const text = $(this).find('input').val();
+    if (!text) return;
+    
+    navigator.clipboard.writeText(text).then(() => {
+        showToast('کپی شد: ' + toPersianDigits(text), 'success');
+    }).catch(err => {
+        // Fallback for older browsers if needed, but clipboard API is standard now
+    });
 });
 
 $(document).on('click', '#kelasehTodayTbody .btn-kelaseh-edit', function () {
@@ -1137,6 +1269,12 @@ $(document).on('click', '#kelasehTodayTbody .btn-kelaseh-edit', function () {
     const payload = JSON.parse(decodeURIComponent(raw));
     
     // Fill the edit form
+    let displayCode = payload.code || '';
+    if (displayCode.includes('-')) {
+        displayCode = displayCode.split('-')[1];
+    }
+    $('#editModalKelasehCode').text(toPersianDigits(displayCode));
+
     $('#formKelasehEdit [name=code]').val(payload.code);
     $('#formKelasehEdit [name=plaintiff_name]').val(payload.plaintiff_name);
     $('#formKelasehEdit [name=defendant_name]').val(payload.defendant_name);
@@ -1144,6 +1282,11 @@ $(document).on('click', '#kelasehTodayTbody .btn-kelaseh-edit', function () {
     $('#formKelasehEdit [name=defendant_national_code]').val(payload.defendant_national_code);
     $('#formKelasehEdit [name=plaintiff_mobile]').val(payload.plaintiff_mobile);
     $('#formKelasehEdit [name=defendant_mobile]').val(payload.defendant_mobile);
+    $('#formKelasehEdit [name=plaintiff_postal_code]').val(payload.plaintiff_postal_code);
+    $('#formKelasehEdit [name=defendant_postal_code]').val(payload.defendant_postal_code);
+    $('#formKelasehEdit [name=dadnameh]').val(payload.dadnameh);
+    $('#formKelasehEdit [name=plaintiff_address]').val(payload.plaintiff_address);
+    $('#formKelasehEdit [name=defendant_address]').val(payload.defendant_address);
     
     new bootstrap.Modal(document.getElementById('modalKelasehEdit')).show();
 });
@@ -1197,7 +1340,7 @@ $(document).on('click', '#kelasehPagination .page-link', function (e) {
     if (page) refreshKelaseh(page);
 });
 
-$(document).on('click', '#btnKelasehSelectAll', function () {
+$(document).on('click', '#btnKelasehSelectAll, #btnKelasehSelectAllBottom', function () {
     const checks = $('#kelasehTbody .kelaseh-label-check');
     const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
     checks.prop('checked', !allChecked);
@@ -1220,7 +1363,39 @@ $(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
     // Just toggle check, do nothing immediate
 });
 
-$(document).on('click', '#btnKelasehPrintLabels', function () {
+$(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', function () {
+  const codes = [];
+  let excludedCount = 0;
+  $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (raw) {
+      const payload = JSON.parse(decodeURIComponent(raw));
+      if (payload.status === 'active') {
+        if (payload.code) codes.push(payload.code);
+      } else {
+        excludedCount++;
+      }
+    }
+  });
+
+  if (codes.length === 0) {
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
+    return;
+  }
+  
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیرفعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  
+  window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
+});
+
+$(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', function () {
   const codes = [];
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
     const tr = $(this).closest('tr');
@@ -1235,7 +1410,30 @@ $(document).on('click', '#btnKelasehPrintLabels', function () {
     showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
     return;
   }
-  window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
+  
+  window.open(`core.php?action=kelaseh.notice&codes=${codes.join(',')}`, '_blank');
+});
+
+$(document).on('click', '#btnKelasehTodayPrintNotice', function () {
+  const codes = [];
+  const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.code) codes.push(payload.code);
+      }
+  });
+
+  if (codes.length === 0) {
+    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    return;
+  }
+  
+  window.open(`core.php?action=kelaseh.notice&codes=${codes.join(',')}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehTodaySelectAll', function () {
@@ -1246,33 +1444,38 @@ $(document).on('click', '#btnKelasehTodaySelectAll', function () {
 
 $(document).on('click', '#btnKelasehTodayPrintAllLabels', function () {
   const codes = [];
+  let excludedCount = 0;
   
   // First check if any checkbox is checked
   const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
-  if (checked.length > 0) {
-    checked.each(function () {
-        const tr = $(this).closest('tr');
-        const raw = tr.attr('data-json');
-        if (raw) {
-          const payload = JSON.parse(decodeURIComponent(raw));
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.status === 'active') {
           if (payload.code) codes.push(payload.code);
+        } else {
+          excludedCount++;
         }
-    });
-  } else {
-    // Fallback: collect all rows if nothing selected
-    $('#kelasehTodayTbody tr').each(function () {
-        const raw = $(this).attr('data-json');
-        if (raw) {
-          const payload = JSON.parse(decodeURIComponent(raw));
-          if (payload.code) codes.push(payload.code);
-        }
-    });
-  }
+      }
+  });
 
   if (codes.length === 0) {
-    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
     return;
   }
+  
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیرفعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
@@ -1307,6 +1510,12 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-edit', function () {
     return;
   }
   const payload = JSON.parse(decodeURIComponent(raw));
+  let displayCode = payload.code || '';
+  if (displayCode.includes('-')) {
+    displayCode = displayCode.split('-')[1];
+  }
+  $('#editModalKelasehCode').text(toPersianDigits(displayCode));
+  
   $('#formKelasehEdit [name=code]').val(payload.code);
   $('#formKelasehEdit [name=plaintiff_name]').val(payload.plaintiff_name);
   $('#formKelasehEdit [name=defendant_name]').val(payload.defendant_name);
@@ -1838,7 +2047,14 @@ function refreshAdminKelasehSearch() {
         const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
         const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || '')).html();
         
-        return `<tr><td dir="ltr" class="text-end fw-bold">${code}</td><td>${owner}</td><td>${plaintiff}</td><td>${plaintiffNC}</td><td>${defendant}</td><td>${date}</td></tr>`;
+        let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+        if (r.print_type) {
+          const pType = r.print_type === 'single' ? 'تکی' : 'گروهی';
+          const pColor = r.print_type === 'single' ? 'bg-info' : 'bg-primary';
+          printStatusHtml = `<span class="badge ${pColor} text-white" title="${toPersianDigits(r.last_printed_at || '')}">${pType}</span>`;
+        }
+
+        return `<tr><td dir="ltr" class="text-end fw-bold">${code}</td><td>${owner}</td><td>${plaintiff}</td><td>${plaintiffNC}</td><td>${defendant}</td><td>${date}</td><td>${printStatusHtml}</td></tr>`;
       }).join('');
       $('#adminKelasehSearchTbody').html(html || `<tr><td colspan="6" class="text-center text-secondary py-3">موردی یافت نشد.</td></tr>`);
     })
@@ -1998,6 +2214,14 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
       const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
       const codeRaw = r.code || '';
+      
+      let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
+      if (r.print_type) {
+        const pType = r.print_type === 'single' ? 'تکی' : 'گروهی';
+        const pColor = r.print_type === 'single' ? 'bg-info' : 'bg-primary';
+        printStatusHtml = `<span class="badge ${pColor} text-white" title="${toPersianDigits(r.last_printed_at || '')}">${pType}</span>`;
+      }
+
       return `
         <tr>
           <td dir="ltr" class="text-end fw-bold">${code}</td>
@@ -2006,6 +2230,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           <td dir="ltr" class="text-end text-secondary">${plaintiffNC}</td>
           <td>${defendant}</td>
           <td class="text-secondary">${date}</td>
+          <td>${printStatusHtml}</td>
           <td class="text-end">
             <div class="btn-group btn-group-sm" role="group">
               <button class="btn btn-outline-secondary btn-office-label" type="button" data-code="${codeRaw}">لیبل</button>

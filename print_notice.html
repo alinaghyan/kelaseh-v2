@@ -1,0 +1,258 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>چاپ ابلاغ</title>
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('assets/fonts/Vazirmatn.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'IranNastaliq';
+            src: url('assets/fonts/IranNastaliq.woff2') format('woff2');
+        }
+        body {
+            font-family: 'Vazirmatn', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm;
+            margin: 10mm auto;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            position: relative;
+        }
+        @media print {
+            body { background: none; padding: 0; }
+            .page { margin: 0; box-shadow: none; border: none; }
+            .no-print { display: none; }
+        }
+        .btn-print-action {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 25px;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-family: 'Vazirmatn', Tahoma;
+            font-size: 1rem;
+        }
+        .btn-print-action:hover {
+            background: #0b5ed7;
+        }
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 30px;
+        }
+        .header-table td {
+            border: none; /* Removed borders for header */
+            padding: 5px;
+            vertical-align: top;
+        }
+        .logo-box {
+            width: 140px;
+            height: auto;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-box img {
+            max-width: 100%;
+            height: auto;
+			padding-right: 88px;
+        }
+        .nastaliq-text {
+            font-family: 'IranNastaliq', serif;
+            font-size: 1.4rem;
+            margin-top: 10px;
+        }
+        .info-box {
+            line-height: 1.8;
+ 			text-align: right;
+  			font-size: 0.9rem;
+  			padding-right: 75px;
+			padding-top: 15px;
+        }
+        .section-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 10px;
+        }
+        .section-table td {
+            border: 1px solid #000;
+            padding: 8px;
+        }
+        .label-cell {
+            width: 80px;
+            background-color: #fdfdfd;
+            font-weight: bold;
+            text-align: center;
+            font-size: 0.9rem;
+        }
+        .content-cell {
+            padding-right: 15px;
+            font-size: 0.95rem;
+        }
+        .notice-body-table {
+            width: 100%;
+            border-collapse: collapse;
+        }
+        .notice-body-table td {
+            border: 1px solid #000;
+            padding: 10px;
+        }
+        .signature-box {
+            width: 180px;
+            vertical-align: top;
+            padding: 5px;
+            font-size: 0.85rem;
+        }
+    </style>
+</head>
+<body>
+    <button class="btn-print-action no-print" onclick="window.print()">چاپ / ذخیره ابلاغیه</button>
+    <div id="print-container"></div>
+
+    <script>
+        function toPersianDigits(str) {
+            if (!str) return '';
+            const id = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+            return str.toString().replace(/[0-9]/g, function (w) {
+                return id[w];
+            });
+        }
+
+        function render() {
+            const data = JSON.parse(localStorage.getItem('print_queue') || '[]');
+            const container = document.getElementById('print-container');
+            
+            if (data.length === 0) {
+                container.innerHTML = '<div style="padding: 20px; background: white; border-radius: 8px; text-align: center;">هیچ داده‌ای برای چاپ یافت نشد.</div>';
+                return;
+            }
+
+            container.innerHTML = data.map(row => {
+                // Logic: Extract only the 10-digit identifier (exclude city code)
+                let displayCode = row.code || '';
+                if (displayCode.includes('-')) {
+                    displayCode = displayCode.split('-')[1];
+                }
+
+                // Dadnameh Logic: BranchNo / Last 3 digits of displayCode
+                const branchNo = row.branch_no || '00';
+                const last3 = displayCode.slice(-3);
+                const generatedDadnameh = `${branchNo}/${last3}`;
+
+                return `
+                <div class="page">
+                    <table class="header-table">
+                        <tr>
+                            <!-- Right Column: Logo and Branch -->
+                            <td style="width: 35%; text-align: center;">
+                                <div class="logo-box">
+                                    <img src="assets/img/logo.png" alt="لوگو وزارت"> 
+                                </div>
+								<div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></div>
+                                
+                            </td>
+                            <!-- Middle Column: Title -->
+                            <td style="width: 30%; text-align: center; vertical-align: middle;">
+                                <h2  style="margin: 0; font-size: 1.4rem;"> ابلاغ رای <br> خواهان / خوانده </h2>
+                            </td>
+                            <!-- Left Column: Info -->
+                            <td style="width: 35%">
+                                <div class="info-box">
+                                    <div>کلاسه پرونده: <strong>${toPersianDigits(displayCode)}</strong></div>
+									<div>دادنامه: <strong>${toPersianDigits(generatedDadnameh)}</strong></div>
+                                    <div>تاریخ:             </strong></div>
+									<div>شعبه: <strong>${toPersianDigits(row.branch_no || '')}</strong></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+
+                    <table class="section-table">
+                        <tr>
+                            <td class="label-cell" rowspan="3">خواهان</td>
+                            <td class="content-cell" colspan="2">آدرس: <strong>${row.plaintiff_address || ''}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="content-cell" style="width: 50%;">نام و نام خانوادگی: <strong>${row.plaintiff_name || ''}</strong></td>
+                            <td class="content-cell">کد پستی: <strong>${toPersianDigits(row.plaintiff_postal_code || '')}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="content-cell" colspan="2">موبایل: <strong>${toPersianDigits(row.plaintiff_mobile || '')}</strong></td>
+                        </tr>
+                    </table>
+
+                    <table class="section-table">
+                        <tr>
+                            <td class="label-cell" rowspan="3">خوانده</td>
+                            <td class="content-cell" colspan="2">آدرس: <strong>${row.defendant_address || ''}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="content-cell" style="width: 50%;">نام و نام خانوادگی: <strong>${row.defendant_name || ''}</strong></td>
+                            <td class="content-cell">کد پستی: <strong>${toPersianDigits(row.defendant_postal_code || '')}</strong></td>
+                        </tr>
+                        <tr>
+                            <td class="content-cell" colspan="2">موبایل: <strong>${toPersianDigits(row.defendant_mobile || '')}</strong></td>
+                        </tr>
+                    </table>
+
+                    <table class="notice-body-table">
+                        <!-- Notification for Plaintiff -->
+                        <tr>
+                            <td class="label-cell" style="height: 100px;">ابلاغ خواهان</td>
+                            <td style="line-height: 2;">
+                                <strong>${row.plaintiff_name || ''}</strong> (خواهان)<br>
+                                هیأت تشخیص اداره تعاون، کار و رفاه اجتماعی  <strong>${row.city_name || ''}
+                            </td>
+                            <td class="signature-box">
+                                تاریخ و امضا:
+                            </td>
+                        </tr>
+                        <!-- Notification for Defendant -->
+                        <tr>
+                            <td class="label-cell" style="height: 100px;">ابلاغ خوانده</td>
+                            <td style="line-height: 2;">
+                                <strong>${row.defendant_name || ''}</strong> (خوانده)<br>
+                                هیأت تشخیص اداره تعاون، کار و رفاه اجتماعی  <strong>${row.city_name || ''}
+                            </td>
+                            <td class="signature-box">
+                                تاریخ و امضا:
+                            </td>
+                        </tr>
+                        <!-- Process Server Certification -->
+                        <tr>
+                            <td class="label-cell" style="height: 120px;">گواهی مأمور ابلاغ</td>
+                            <td style="line-height: 2;">
+                                <strong>${row.owner_name || '(مدیر شعبه)'}</strong><br>
+                                ابلاغ رأی هیأت تشخیص  اداره تعاون،کارورفاه اجتماعی <strong>${row.city_name || ''}</strong> به خواهان و خوانده صورت گرفت.
+                            </td>
+                            <td class="signature-box">
+                               تاریخ و امضا:
+                            </td>
+                        </tr>
+                    </table>
+                </div>
+                `;
+            }).join('<div style="page-break-after: always;"></div>');
+        }
+
+        window.onload = render;
+    </script>
+</body>
+</html>
