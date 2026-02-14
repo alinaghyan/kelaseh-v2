@@ -24,7 +24,7 @@ function initDatePickers() {
   };
 
   if ($.fn.pDatepicker) {
-    $('#kelasehFrom, #kelasehTo, #adminStatsFrom, #adminStatsTo').pDatepicker(commonOptions);
+    $('#kelasehFrom, #kelasehTo, #adminStatsFrom, #adminStatsTo, .date-picker').pDatepicker(commonOptions);
     
     $('#kelasehManualDate').pDatepicker({
       ...commonOptions,
@@ -155,6 +155,8 @@ function refreshAdminCities() {
         .map((c) => {
           const code = toPersianDigits(c.code || '');
           const name = toPersianDigits(c.name || '');
+          const address = c.address || '';
+          const postal = toPersianDigits(c.postal_code || '');
           return `
             <tr data-code="${c.code}">
               <td>
@@ -162,6 +164,12 @@ function refreshAdminCities() {
               </td>
               <td>
                 <input class="form-control form-control-sm city-name" type="text" value="${c.name}" />
+              </td>
+              <td>
+                <input class="form-control form-control-sm city-address" type="text" value="${address}" placeholder="آدرس" />
+              </td>
+              <td>
+                <input class="form-control form-control-sm city-postal" type="text" value="${c.postal_code || ''}" placeholder="کد پستی" />
               </td>
               <td class="text-end">
                 <div class="btn-group btn-group-sm" role="group">
@@ -173,7 +181,7 @@ function refreshAdminCities() {
           `;
         })
         .join('');
-      $('#adminCitiesTbody').html(rows || `<tr><td colspan="3" class="text-center text-secondary py-3">اداره‌ای ثبت نشده است.</td></tr>`);
+      $('#adminCitiesTbody').html(rows || `<tr><td colspan="5" class="text-center text-secondary py-3">اداره‌ای ثبت نشده است.</td></tr>`);
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت اداره‌ها.';
@@ -220,6 +228,10 @@ function renderUser() {
   // Actually, the nav item visibility is controlled here.
   $('#navItemAdmin').toggleClass('d-none', !isAdmin);
   $('#navItemAdminKelasehSearch').toggleClass('d-none', !isAdmin);
+  
+  const isBranchAdmin = currentUser.role === 'branch_admin';
+  $('#navItemHeyat').toggleClass('d-none', !isBranchAdmin);
+  
   $('#headerNav a[data-page="create"]').closest('li').toggleClass('d-none', isOfficeAdmin || isAdmin);
 }
 
@@ -279,7 +291,7 @@ function startHeaderClock() {
 
 function getPageFromHash() {
   const raw = (window.location.hash || '').replace('#', '').trim();
-  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin' || raw === 'admin-kelaseh-search') {
+  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin' || raw === 'admin-kelaseh-search' || raw === 'heyat') {
     return raw;
   }
   return 'dashboard';
@@ -301,6 +313,7 @@ function renderPage(page) {
   $('#kelasehCreateSection').addClass('d-none');
   $('#kelasehListSection').addClass('d-none');
   $('#btnKelasehRefresh').addClass('d-none');
+  $('#heyatPanel').addClass('d-none');
   $('#colRight').removeClass('d-none');
 
   if (page === 'profile') {
@@ -347,6 +360,24 @@ function renderPage(page) {
     $('#kelasehCreateSection').removeClass('d-none');
     $('#kelasehCardTitle').text('ایجاد شماره کلاسه');
     updateKelasehBranchSelect();
+    return;
+  }
+
+  if (page === 'heyat') {
+    if (currentUser.role === 'branch_admin') {
+        $('#heyatPanel').removeClass('d-none');
+        // If we want to hide the right col or keep it? Usually keep it.
+        $('#cardKelaseh').addClass('d-none'); // Hide main list
+        
+        // Update City Prefix
+        if (currentUser.city_code) {
+             const prefix = String(currentUser.city_code).padStart(4, '0');
+             $('#heyatCityCodePrefix').text(toPersianDigits(prefix));
+             $('#heyatCityCodePrefix').data('raw', prefix);
+        }
+    } else {
+        window.location.hash = '#dashboard';
+    }
     return;
   }
 
@@ -439,7 +470,12 @@ function generateKelasehRows(rows, offset = 0) {
         defendant_postal_code: r.defendant_postal_code || '',
         dadnameh: r.dadnameh || '',
         created_at_jalali: r.created_at_jalali || '',
-        city_name: r.city_name || ''
+        city_name: r.city_name || '',
+        representatives_govt: r.representatives_govt || '',
+        representatives_worker: r.representatives_worker || '',
+        representatives_employer: r.representatives_employer || '',
+        plaintiff_request: r.plaintiff_request || '',
+        verdict_text: r.verdict_text || ''
       })
     );
 
@@ -447,7 +483,7 @@ function generateKelasehRows(rows, offset = 0) {
         <div class="d-flex flex-column gap-1">
             <div class="btn-group btn-group-sm" role="group">
                 <button class="btn btn-glass btn-glass-info btn-kelaseh-view" type="button">نمایش کامل</button>
-                <button class="btn btn-glass btn-glass-secondary btn-kelaseh-label" type="button">چاپ لیبل</button>
+                <!-- <button class="btn btn-glass btn-glass-secondary btn-kelaseh-label" type="button">چاپ لیبل</button> -->
                 <button class="btn btn-glass btn-glass-primary btn-kelaseh-edit" type="button">ویرایش</button>
                 <button class="btn btn-glass btn-glass-warning btn-kelaseh-toggle" type="button">وضعیت</button>
                 <button class="btn btn-glass btn-glass-danger btn-kelaseh-void" type="button">ابطال</button>
@@ -481,8 +517,8 @@ function generateKelasehRows(rows, offset = 0) {
         <td>${defendant}</td>
         <td class="text-secondary">${date}</td>
         <td>${printStatusHtml}</td>
-        <td>${noticeStatusHtml}</td>
-        <td class="${statusClass}">${statusHtml}</td>
+        <!-- <td>${noticeStatusHtml}</td> -->
+        <!-- <td class="${statusClass}">${statusHtml}</td> -->
         <td class="text-end">
           ${actionButtons}
         </td>
@@ -1288,6 +1324,12 @@ $(document).on('click', '#kelasehTodayTbody .btn-kelaseh-edit', function () {
     $('#formKelasehEdit [name=plaintiff_address]').val(payload.plaintiff_address);
     $('#formKelasehEdit [name=defendant_address]').val(payload.defendant_address);
     
+    $('#formKelasehEdit [name=representatives_govt]').val(payload.representatives_govt || '');
+    $('#formKelasehEdit [name=representatives_worker]').val(payload.representatives_worker || '');
+    $('#formKelasehEdit [name=representatives_employer]').val(payload.representatives_employer || '');
+    $('#formKelasehEdit [name=plaintiff_request]').val(payload.plaintiff_request || '');
+    $('#formKelasehEdit [name=verdict_text]').val(payload.verdict_text || '');
+    
     new bootstrap.Modal(document.getElementById('modalKelasehEdit')).show();
 });
 
@@ -1393,6 +1435,25 @@ $(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', 
   }
   
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
+});
+
+$(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom', function () {
+  const codes = [];
+  $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (raw) {
+      const payload = JSON.parse(decodeURIComponent(raw));
+      if (payload.code) codes.push(payload.code);
+    }
+  });
+
+  if (codes.length === 0) {
+    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    return;
+  }
+  
+  window.open(`core.php?action=kelaseh.print.minutes&codes=${codes.join(',')}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', function () {
@@ -1760,7 +1821,9 @@ $(document).on('click', '#adminCitiesTbody .btn-city-save', function () {
   const code = tr.data('code'); // Original code
   const newCode = tr.find('.city-code').val();
   const name = tr.find('.city-name').val();
-  api('admin.cities.update', { code, new_code: newCode, name })
+  const address = tr.find('.city-address').val();
+  const postal_code = tr.find('.city-postal').val();
+  api('admin.cities.update', { code, new_code: newCode, name, address, postal_code })
     .done((res) => {
       showToast(res.message || 'ذخیره شد.', 'success');
       adminCitiesLoaded = false;
@@ -2346,6 +2409,167 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       api('office.capacities.update', { branch_no: branch, capacity: cap })
         .done(res => showToast(res.message, 'success'))
         .fail(xhr => showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در ذخیره', 'error'));
+  });
+
+  // Heyat Tashkhis Logic
+  
+  // Search Logic
+  $(document).on('input', '#heyatCodeInput', function() {
+      const suffix = $(this).val();
+      const suggestions = $('#heyatCodeSuggestions');
+      
+      if (suffix.length < 4) {
+          suggestions.hide().empty();
+          return;
+      }
+      
+      const prefix = $('#heyatCityCodePrefix').data('raw') || String(currentUser?.city_code || '').padStart(4, '0');
+      const query = prefix + '-' + suffix;
+      
+      api('kelaseh.list', { q: query, limit: 10 })
+        .done(res => {
+            const list = (res.data && res.data.kelaseh) || [];
+            if (!list.length) {
+                suggestions.html('<div class="dropdown-item disabled small text-muted">موردی یافت نشد</div>').show();
+                return;
+            }
+            
+            const items = list.map(item => {
+                const code = item.full_code || item.code;
+                const txt = `${toPersianDigits(code)} - ${toPersianDigits(item.plaintiff_name || '')} / ${toPersianDigits(item.defendant_name || '')}`;
+                const json = encodeURIComponent(JSON.stringify(item));
+                return `<li><a class="dropdown-item small heyat-search-item" href="#" data-json="${json}">${txt}</a></li>`;
+            }).join('');
+            suggestions.html(items).show();
+        });
+  });
+
+  // Hide suggestions on blur
+  $(document).on('blur', '#heyatCodeInput', function() {
+      setTimeout(() => $('#heyatCodeSuggestions').hide(), 200);
+  });
+  
+  $(document).on('focus', '#heyatCodeInput', function() {
+       if ($(this).val().length >= 4) $(this).trigger('input');
+  });
+
+  // Select Item
+  $(document).on('click', '.heyat-search-item', function(e) {
+      e.preventDefault();
+      const raw = $(this).data('json');
+      if (!raw) return;
+      
+      const item = JSON.parse(decodeURIComponent(raw));
+      const fullCode = item.full_code || item.code || '';
+      
+      // Extract suffix
+      let suffix = fullCode;
+      if (fullCode.includes('-')) {
+          const prefix = $('#heyatCityCodePrefix').data('raw') || String(currentUser?.city_code || '').padStart(4, '0');
+          if (fullCode.startsWith(prefix + '-')) {
+              suffix = fullCode.substring(prefix.length + 1);
+          } else {
+             // Fallback
+             const parts = fullCode.split('-');
+             if (parts.length > 1) suffix = parts.slice(1).join('-');
+          }
+      }
+      
+      $('#heyatCodeInput').val(suffix);
+      $('#heyatFullCode').val(fullCode);
+      $('#heyatCodeSuggestions').hide();
+      
+      // Fill Form
+      const f = $('#formHeyatTashkhis');
+      f[0].reset(); // Clear first
+      
+      f.find('[name="notice_number"]').val(item.notice_number || '');
+      f.find('[name="plaintiff_name"]').val(item.plaintiff_name || '');
+      f.find('[name="defendant_name"]').val(item.defendant_name || '');
+      f.find('[name="plaintiff_national_code"]').val(item.plaintiff_national_code || '');
+      f.find('[name="defendant_national_code"]').val(item.defendant_national_code || '');
+      f.find('[name="plaintiff_address"]').val(item.plaintiff_address || '');
+      f.find('[name="plaintiff_postal_code"]').val(item.plaintiff_postal_code || '');
+      f.find('[name="defendant_address"]').val(item.defendant_address || '');
+      f.find('[name="defendant_postal_code"]').val(item.defendant_postal_code || '');
+
+      // Fetch full details including sessions
+      api('kelaseh.get.by_code', { code: fullCode })
+        .done(res => {
+            if (res.data) {
+                const d = res.data;
+                const sessions = d.sessions || {};
+                
+                // Populate sessions
+                Object.keys(sessions).forEach(key => {
+                    const s = sessions[key];
+                    f.find(`[name="sessions[${key}][date]"]`).val(s.meeting_date || '');
+                    f.find(`[name="sessions[${key}][plaintiff_request]"]`).val(s.plaintiff_request || '');
+                    f.find(`[name="sessions[${key}][verdict_text]"]`).val(s.verdict_text || '');
+                    f.find(`[name="sessions[${key}][reps_govt]"]`).val(s.reps_govt || '');
+                    f.find(`[name="sessions[${key}][reps_worker]"]`).val(s.reps_worker || '');
+                    f.find(`[name="sessions[${key}][reps_employer]"]`).val(s.reps_employer || '');
+                    
+                    // Update label
+                    if (s.meeting_date) {
+                        const labelId = f.find(`[name="sessions[${key}][date]"]`).data('label-target');
+                        if (labelId) $(labelId).text(toPersianDigits(s.meeting_date));
+                    }
+                });
+            }
+            showToast('اطلاعات پرونده بارگذاری شد.', 'info');
+        })
+        .fail(() => {
+            showToast('خطا در دریافت اطلاعات تکمیلی.', 'error');
+        });
+  });
+
+  // Date Label Updater
+  $(document).on('change', '.session-date-input', function() {
+      const target = $(this).data('label-target');
+      if (target) {
+          $(target).text(toPersianDigits($(this).val()));
+      }
+  });
+
+  // Save Heyat Form
+  $(document).on('submit', '#formHeyatTashkhis', function(e) {
+      e.preventDefault();
+      
+      const suffix = $('#heyatCodeInput').val();
+      const prefix = $('#heyatCityCodePrefix').data('raw') || String(currentUser?.city_code || '').padStart(4, '0');
+      
+      // Always rebuild fullCode on submit
+      let fullCode = $('#heyatFullCode').val();
+      if (!fullCode || !fullCode.endsWith(suffix)) {
+          fullCode = prefix + '-' + suffix;
+          $('#heyatFullCode').val(fullCode);
+      }
+      
+      const form = this;
+      
+      // Check existence first
+      api('kelaseh.get.by_code', { code: fullCode })
+        .done(res => {
+            if (res.data) {
+                // Exists -> Save
+                const data = Object.fromEntries(new FormData(form));
+                api('heyat.tashkhis.save', data)
+                    .done(r => showToast(r.message || 'اطلاعات ثبت شد.', 'success'))
+                    .fail(x => showToast((x.responseJSON && x.responseJSON.message) || 'خطا در ثبت.', 'error'));
+            } else {
+                // Not found
+                if (confirm('کلاسه وارد شده وجود ندارد.\nآیا کلاسه جدید ثبت شود؟')) {
+                    // Yes -> Go to create
+                    window.location.hash = '#create';
+                } else {
+                    // No -> Do nothing
+                }
+            }
+        })
+        .fail(() => {
+             showToast('خطا در بررسی وضعیت پرونده.', 'error');
+        });
   });
 
   $(boot);

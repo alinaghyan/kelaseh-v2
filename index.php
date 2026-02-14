@@ -177,6 +177,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
       <ul id="headerNav" class="nav nav-pills d-none">
         <li class="nav-item"><a class="nav-link" href="#create" data-page="create">ایجاد شماره کلاسه</a></li>
+        <li class="nav-item d-none" id="navItemHeyat"><a class="nav-link" href="#heyat" data-page="heyat">هیات تشخیص</a></li>
         <li class="nav-item"><a class="nav-link" href="#dashboard" data-page="dashboard">پنل کاربری</a></li>
         <li class="nav-item"><a class="nav-link" href="#profile" data-page="profile">پروفایل</a></li>
         <li class="nav-item" id="navItemAdmin"><a class="nav-link" href="#admin" data-page="admin">پنل مدیر کل</a></li>
@@ -212,6 +213,142 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                    <div>شمسی (تهران)</div>
                 </div>
               </div>
+            </div>
+          </div>
+
+          <div id="heyatPanel" class="card mt-3 d-none">
+            <div class="card-header bg-primary text-white">پنل هیات تشخیص</div>
+            <div class="card-body">
+               <form id="formHeyatTashkhis">
+                  <div class="row g-3">
+                     <!-- Row 1: Code & Notice -->
+                     <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">کلاسه پرونده</label>
+                        <div class="input-group input-group-sm position-relative">
+                            <span class="input-group-text bg-light text-secondary" id="heyatCityCodePrefix">----</span>
+                            <input name="code_suffix" id="heyatCodeInput" type="text" class="form-control" placeholder="شماره کلاسه..." required maxlength="10" dir="ltr" />
+                            <input type="hidden" name="code" id="heyatFullCode" />
+                            <div id="heyatCodeSuggestions" class="dropdown-menu w-100 shadow-sm" style="display: none; max-height: 200px; overflow-y: auto; margin: 50px;"></div>
+                        </div>
+                        <div class="form-text small">پس از وارد کردن ۴ رقم، جستجو انجام می‌شود.</div>
+                     </div>
+                     <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">شماره دعوتنامه (دادنامه)</label>
+                        <input name="notice_number" type="text" class="form-control form-control-sm" />
+                     </div>
+                     
+                     <!-- Row 2: Two Boxes for Plaintiff & Defendant -->
+                     <div class="col-12 col-md-6">
+                          <div class="card bg-light-subtle border-info border-opacity-25 h-100">
+                            <div class="card-header bg-info bg-opacity-10 py-2 fw-bold text-info">مشخصات خواهان</div>
+                            <div class="card-body p-3 vstack gap-2">
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">نام و نام خانوادگی خواهان</label>
+                                    <input name="plaintiff_name" type="text" class="form-control form-control-sm" />
+                                </div>
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">کد ملی خواهان</label>
+                                    <input name="plaintiff_national_code" type="text" class="form-control form-control-sm" maxlength="10" />
+                                </div>
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">آدرس خواهان</label>
+                                    <textarea name="plaintiff_address" class="form-control form-control-sm" rows="2"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">کد پستی خواهان</label>
+                                    <input name="plaintiff_postal_code" type="text" class="form-control form-control-sm" maxlength="10" />
+                                </div>
+                            </div>
+                          </div>
+                     </div>
+                     
+                     <div class="col-12 col-md-6">
+                          <div class="card bg-light-subtle border-warning border-opacity-25 h-100">
+                            <div class="card-header bg-warning bg-opacity-10 py-2 fw-bold text-warning">مشخصات خوانده</div>
+                            <div class="card-body p-3 vstack gap-2">
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">نام و نام خانوادگی خوانده</label>
+                                    <input name="defendant_name" type="text" class="form-control form-control-sm" />
+                                </div>
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">کد ملی خوانده</label>
+                                    <input name="defendant_national_code" type="text" class="form-control form-control-sm" maxlength="10" />
+                                </div>
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">آدرس خوانده (اختیاری)</label>
+                                    <textarea name="defendant_address" class="form-control form-control-sm" rows="2"></textarea>
+                                </div>
+                                <div>
+                                    <label class="form-label form-label-sm mb-1">کد پستی خوانده</label>
+                                    <input name="defendant_postal_code" type="text" class="form-control form-control-sm" maxlength="10" />
+                                </div>
+                            </div>
+                          </div>
+                     </div>
+
+                     <!-- Sessions Accordion -->
+                     <div class="col-12">
+                        <label class="form-label form-label-sm fw-bold border-bottom w-100 pb-1 mb-2">جلسات رسیدگی</label>
+                        <div class="accordion" id="accordionSessions">
+                           <?php 
+                             $sessions = [
+                               ['id'=>'session1', 'label'=>'جلسه اول'],
+                               ['id'=>'session2', 'label'=>'جلسه دوم'],
+                               ['id'=>'session3', 'label'=>'جلسه سوم'],
+                               ['id'=>'session4', 'label'=>'جلسه چهارم'],
+                               ['id'=>'session5', 'label'=>'جلسه پنجم'],
+                               ['id'=>'resolution', 'label'=>'حل اختلاف'],
+                             ];
+                             foreach($sessions as $idx => $s):
+                               $isFirst = $idx === 0;
+                           ?>
+                           <div class="accordion-item">
+                             <h2 class="accordion-header">
+                               <button class="accordion-button <?php echo $isFirst ? '' : 'collapsed'; ?> p-2 bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<?php echo $s['id']; ?>" aria-expanded="<?php echo $isFirst ? 'true' : 'false'; ?>">
+                                 <span class="fw-bold ms-2"><?php echo $s['label']; ?></span>
+                                 <span class="small text-secondary ms-2" id="labelDate<?php echo $s['id']; ?>"></span>
+                               </button>
+                             </h2>
+                             <div id="collapse<?php echo $s['id']; ?>" class="accordion-collapse collapse <?php echo $isFirst ? 'show' : ''; ?>" data-bs-parent="#accordionSessions">
+                               <div class="accordion-body p-2">
+                                  <div class="row g-2">
+                                     <div class="col-12 col-md-3">
+                                        <label class="form-label form-label-sm">تاریخ جلسه</label>
+                                        <input name="sessions[<?php echo $s['id']; ?>][date]" class="form-control form-control-sm date-picker session-date-input" data-label-target="#labelDate<?php echo $s['id']; ?>" />
+                                     </div>
+                                     <div class="col-12 col-md-9">
+                                        <label class="form-label form-label-sm">خواسته خواهان</label>
+                                        <textarea name="sessions[<?php echo $s['id']; ?>][plaintiff_request]" class="form-control form-control-sm" rows="2"></textarea>
+                                     </div>
+                                     <div class="col-12">
+                                        <label class="form-label form-label-sm">متن رای</label>
+                                        <textarea name="sessions[<?php echo $s['id']; ?>][verdict_text]" class="form-control form-control-sm" rows="2"></textarea>
+                                     </div>
+                                     <div class="col-12 col-md-4">
+                                        <label class="form-label form-label-sm">نمایندگان دولت</label>
+                                        <textarea name="sessions[<?php echo $s['id']; ?>][reps_govt]" class="form-control form-control-sm" rows="1"></textarea>
+                                     </div>
+                                     <div class="col-12 col-md-4">
+                                        <label class="form-label form-label-sm">نمایندگان کارگران</label>
+                                        <textarea name="sessions[<?php echo $s['id']; ?>][reps_worker]" class="form-control form-control-sm" rows="1"></textarea>
+                                     </div>
+                                     <div class="col-12 col-md-4">
+                                        <label class="form-label form-label-sm">نمایندگان کارفرما</label>
+                                        <textarea name="sessions[<?php echo $s['id']; ?>][reps_employer]" class="form-control form-control-sm" rows="1"></textarea>
+                                     </div>
+                                  </div>
+                               </div>
+                             </div>
+                           </div>
+                           <?php endforeach; ?>
+                        </div>
+                     </div>
+                     
+                     <div class="col-12 text-end mt-3">
+                        <button type="submit" class="btn btn-success">ثبت اطلاعات هیات تشخیص</button>
+                     </div>
+                  </div>
+               </form>
             </div>
           </div>
 
@@ -374,6 +511,14 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <label class="form-label form-label-sm">نام اداره</label>
                         <input name="name" type="text" class="form-control form-control-sm" required />
                       </div>
+                      <div class="col-12 col-md-6">
+                        <label class="form-label form-label-sm">آدرس</label>
+                        <input name="address" type="text" class="form-control form-control-sm" />
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">کد پستی</label>
+                        <input name="postal_code" type="text" class="form-control form-control-sm" />
+                      </div>
                       <div class="col-12 col-md-3">
                         <button class="btn btn-primary btn-sm w-100" type="submit">افزودن</button>
                       </div>
@@ -391,6 +536,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <tr>
                           <th style="width: 90px;">کد</th>
                           <th>نام</th>
+                          <th>آدرس</th>
+                          <th>کد پستی</th>
                           <th class="text-end" style="width: 220px;">عملیات</th>
                         </tr>
                       </thead>
@@ -914,8 +1061,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <th>خوانده</th>
                       <th>تاریخ</th>
                       <th>چاپ لیبل</th>
-                      <th>چاپ ابلاغیه</th>
-                      <th>وضعیت</th>
+                      <!-- <th>چاپ ابلاغیه</th> -->
+                      <!-- <th>وضعیت</th> -->
                       <th class="text-end">عملیات</th>
                         </tr>
                       </thead>
@@ -972,6 +1119,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
                 <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ کامل لیبل</button>
                 <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ ابلاغ</button>
+                <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ صورتجلسه</button>
                 <button id="btnKelasehSelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
 
@@ -990,8 +1138,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <th>خوانده</th>
                       <th>تاریخ</th>
                       <th>چاپ لیبل</th>
-                      <th>چاپ ابلاغیه</th>
-                      <th>وضعیت</th>
+                      <!-- <th>چاپ ابلاغیه</th> -->
+                      <!-- <th>وضعیت</th> -->
                       <th class="text-end">عملیات</th>
                     </tr>
                   </thead>
@@ -1002,6 +1150,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center">
                 <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل‌های انتخاب شده</button>
                 <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ ابلاغ‌های انتخاب شده</button>
+                <button id="btnKelasehPrintMinutesBottom" class="btn btn-outline-warning btn-sm" type="button">چاپ صورتجلسه انتخاب شده</button>
                 <button id="btnKelasehSelectAllBottom" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
               
@@ -1115,6 +1264,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     </div>
                   </div>
                 </div>
+              </div>
+              
+              <div class="col-12">
+                   <div class="card border-secondary border-opacity-25 shadow-sm">
+                        <!-- Removed extra fields -->
+                   </div>
               </div>
             </div>
           </div>

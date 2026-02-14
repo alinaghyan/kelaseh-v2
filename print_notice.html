@@ -12,8 +12,12 @@
             font-family: 'IranNastaliq';
             src: url('assets/fonts/IranNastaliq.woff2') format('woff2');
         }
+        @font-face {
+            font-family: 'B Zar';
+            src: local('B Zar'), local('BZar'), url('assets/fonts/BZar.ttf') format('truetype');
+        }
         body {
-            font-family: 'Vazirmatn', Tahoma, Arial, sans-serif;
+            font-family: 'B Zar', 'Vazirmatn', Tahoma, Arial, sans-serif;
             margin: 0;
             padding: 20px;
             background-color: #f0f0f0;
@@ -30,8 +34,17 @@
         }
         @media print {
             body { background: none; padding: 0; }
-            .page { margin: 0; box-shadow: none; border: none; }
+            .page { margin: 0; box-shadow: none; border: none; width: 100%; height: auto; }
             .no-print { display: none; }
+        }
+        table {
+            table-layout: fixed;
+            width: 100%;
+        }
+        td {
+            overflow-wrap: break-word;
+            word-wrap: break-word;
+            word-break: break-word;
         }
         .btn-print-action {
             position: fixed;
@@ -70,7 +83,7 @@
             justify-content: center;
         }
         .logo-box img {
-            max-width: 100%;
+            width: 178px;
             height: auto;
 			padding-right: 88px;
         }
@@ -165,12 +178,13 @@
                                 <div class="logo-box">
                                     <img src="assets/img/logo.png" alt="لوگو وزارت"> 
                                 </div>
-								<div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></div>
+								
                                 
                             </td>
                             <!-- Middle Column: Title -->
-                            <td style="width: 30%; text-align: center; vertical-align: middle;">
-                                <h2  style="margin: 0; font-size: 1.4rem;"> ابلاغ رای <br> خواهان / خوانده </h2>
+                            <td style="width: 30%; text-align: center; ">
+                                <div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></div>
+                                <h2  style="margin: 0; font-size: 20px; font-family: 'Vazirmatn';"> ابلاغ رای <br> خواهان / خوانده </h2>
                             </td>
                             <!-- Left Column: Info -->
                             <td style="width: 35%">
@@ -186,29 +200,34 @@
 
                     <table class="section-table">
                         <tr>
-                            <td class="label-cell" rowspan="3">خواهان</td>
+                            <td class="label-cell" rowspan="2">خواهان</td>
+                            <td class="content-cell" style="width: 40%;">نام و نام خانوادگی: <strong>${row.plaintiff_name || ''}</strong></td>
+                            <td class="content-cell" style="width: 30%;">کد ملی: <strong>${toPersianDigits(row.plaintiff_national_code || '')}</strong></td>
+                            <td class="content-cell" style="width: 30%;">موبایل: <strong>${toPersianDigits(row.plaintiff_mobile || '')}</strong></td>
+                        </tr>
+                        <tr>
                             <td class="content-cell" colspan="2">آدرس: <strong>${row.plaintiff_address || ''}</strong></td>
-                        </tr>
-                        <tr>
-                            <td class="content-cell" style="width: 50%;">نام و نام خانوادگی: <strong>${row.plaintiff_name || ''}</strong></td>
                             <td class="content-cell">کد پستی: <strong>${toPersianDigits(row.plaintiff_postal_code || '')}</strong></td>
-                        </tr>
-                        <tr>
-                            <td class="content-cell" colspan="2">موبایل: <strong>${toPersianDigits(row.plaintiff_mobile || '')}</strong></td>
                         </tr>
                     </table>
 
                     <table class="section-table">
                         <tr>
-                            <td class="label-cell" rowspan="3">خوانده</td>
-                            <td class="content-cell" colspan="2">آدرس: <strong>${row.defendant_address || ''}</strong></td>
+                            <td class="label-cell" rowspan="2">خوانده</td>
+                            <td class="content-cell" style="width: 40%;">نام و نام خانوادگی / نام شرکت: <strong>${row.defendant_name || ''}</strong></td>
+                            <td class="content-cell" style="width: 30%;">کد ملی: <strong>${toPersianDigits(row.defendant_national_code || '')}</strong></td>
+                            <td class="content-cell" style="width: 30%;">موبایل: <strong>${toPersianDigits(row.defendant_mobile || '')}</strong></td>
                         </tr>
                         <tr>
-                            <td class="content-cell" style="width: 50%;">نام و نام خانوادگی: <strong>${row.defendant_name || ''}</strong></td>
+                            <td class="content-cell" colspan="2">آدرس: <strong>${row.defendant_address || ''}</strong></td>
                             <td class="content-cell">کد پستی: <strong>${toPersianDigits(row.defendant_postal_code || '')}</strong></td>
                         </tr>
+                    </table>
+
+                    <table class="section-table">
                         <tr>
-                            <td class="content-cell" colspan="2">موبایل: <strong>${toPersianDigits(row.defendant_mobile || '')}</strong></td>
+                            <td class="label-cell">خواسته خواهان</td>
+                            <td class="content-cell">${row.plaintiff_request || ''}</td>
                         </tr>
                     </table>
 
@@ -218,7 +237,7 @@
                             <td class="label-cell" style="height: 100px;">ابلاغ خواهان</td>
                             <td style="line-height: 2;">
                                 <strong>${row.plaintiff_name || ''}</strong> (خواهان)<br>
-                                هیأت تشخیص اداره تعاون، کار و رفاه اجتماعی  <strong>${row.city_name || ''}
+                               
                             </td>
                             <td class="signature-box">
                                 تاریخ و امضا:
@@ -229,18 +248,35 @@
                             <td class="label-cell" style="height: 100px;">ابلاغ خوانده</td>
                             <td style="line-height: 2;">
                                 <strong>${row.defendant_name || ''}</strong> (خوانده)<br>
-                                هیأت تشخیص اداره تعاون، کار و رفاه اجتماعی  <strong>${row.city_name || ''}
+                               
                             </td>
                             <td class="signature-box">
                                 تاریخ و امضا:
                             </td>
                         </tr>
+                        <!-- Meeting Info -->
+                        <tr>
+                            <td class="label-cell">زمان جلسه</td>
+                            <td class="content-cell" colspan="2" style="padding: 10px;">
+                                <div style="display: flex; justify-content: space-around;">
+                                    <span>ساعت: ...........................</span>
+                                    <span>روز: ...........................</span>
+                                    <span>مورخ: ...........................</span>
+                                </div>
+                            </td>
+                        </tr>
+                        <tr>
+                            <td class="label-cell">مکان جلسه</td>
+                            <td class="content-cell">هیات تشخیص اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></td>
+                            <td class="signature-box">شعبه: <strong>${toPersianDigits(row.branch_no || '')}</strong></td>
+                        </tr>
                         <!-- Process Server Certification -->
                         <tr>
                             <td class="label-cell" style="height: 120px;">گواهی مأمور ابلاغ</td>
                             <td style="line-height: 2;">
-                                <strong>${row.owner_name || '(مدیر شعبه)'}</strong><br>
-                                ابلاغ رأی هیأت تشخیص  اداره تعاون،کارورفاه اجتماعی <strong>${row.city_name || ''}</strong> به خواهان و خوانده صورت گرفت.
+                                <strong>اینجانب &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; در تاریخ&nbsp;&nbsp;و ساعت</strong><br>
+                                <strong>ابلاغ نامه را به آقای/خانم      ابلاغ نمودم.</strong>
+                               
                             </td>
                             <td class="signature-box">
                                تاریخ و امضا:

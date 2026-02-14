@@ -1,0 +1,264 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>چاپ صورتجلسه هیات تشخیص</title>
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('assets/fonts/Vazirmatn.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'IranNastaliq';
+            src: url('assets/fonts/IranNastaliq.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'B Zar';
+            src: local('B Zar'), local('BZar'), url('assets/fonts/BZar.ttf') format('truetype');
+        }
+        body {
+            font-family: 'B Zar', 'Vazirmatn', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            font-size: 12pt;
+            background-color: #f0f0f0;
+        }
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            margin: 10mm auto;
+            background: white;
+            padding: 15mm;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            position: relative;
+            page-break-after: always;
+        }
+        @media print {
+            body { background: none; padding: 0; }
+            .page { margin: 0; box-shadow: none; border: none; width: 100%; height: auto; }
+            .no-print { display: none; }
+        }
+        
+        /* Header Styles */
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 20px;
+        }
+        .header-table td {
+            border: none;
+            padding: 5px;
+            vertical-align: top;
+        }
+        .logo-box {
+            width: 140px;
+            height: auto;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-box img {
+            width: 178px;
+            height: auto;
+            padding-right: 88px;
+        }
+        .nastaliq-text {
+            font-family: 'IranNastaliq', serif;
+            font-size: 1.4rem;
+            margin-top: 10px;
+            text-align: center;
+        }
+        .info-box {
+            line-height: 1.8;
+            text-align: right;
+            font-size: 0.9rem;
+            padding-right: 75px;
+            padding-top: 15px;
+        }
+        
+        /* Content Styles */
+        .content {
+            line-height: 2;
+            text-align: justify;
+            margin-bottom: 20px;
+            font-family: 'B Nazanin', Tahoma;
+            font-size: 12pt;
+        }
+        .box {
+            border: 1px solid #000;
+            padding: 10px;
+            min-height: 600px;
+            position: relative;
+        }
+        .verdict-title {
+            text-align: center;
+            font-weight: bold;
+            margin: 10px 0;
+            font-size: 14pt;
+        }
+        .footer {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+            text-align: center;
+            font-weight: bold;
+            font-size: 12pt;
+        }
+        .footer > div {
+            width: 30%;
+        }
+        .reps-list {
+            font-weight: normal;
+            font-size: 11pt;
+            margin-top: 10px;
+            white-space: pre-line;
+        }
+        .btn-print-action {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 25px;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-family: 'Vazirmatn', Tahoma;
+            font-size: 1rem;
+        }
+        .btn-print-action:hover {
+            background: #0b5ed7;
+        }
+    </style>
+</head>
+<body>
+    <button class="btn-print-action no-print" onclick="window.print()">چاپ / ذخیره</button>
+    <div id="pages-container"></div>
+
+    <script>
+        function toPersianDigits(str) {
+            if (!str && str !== 0) return '';
+            const id = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+            return String(str).replace(/[0-9]/g, function (w) {
+                return id[w];
+            });
+        }
+
+        function render() {
+            const dataStr = localStorage.getItem('print_queue');
+            if (!dataStr) {
+                document.getElementById('pages-container').innerHTML = '<div style="text-align:center;padding:50px;">داده‌ای برای چاپ وجود ندارد.</div>';
+                return;
+            }
+            const data = JSON.parse(dataStr);
+            const container = document.getElementById('pages-container');
+            
+            data.forEach(item => {
+                const page = document.createElement('div');
+                page.className = 'page';
+                
+                let displayCode = item.code || '';
+                if (displayCode.includes('-')) {
+                    displayCode = displayCode.split('-')[1];
+                }
+                const branchNo = item.branch_no || '00';
+                const last3 = displayCode.slice(-3);
+                const generatedDadnameh = `${branchNo}/${last3}`;
+                
+                const cityTitle = item.city_name || 'استان اصفهان';
+                const date = item.created_at_jalali ? item.created_at_jalali.split(' ')[0] : '................';
+                
+                const pName = item.plaintiff_name || '................';
+                const dName = item.defendant_name || '................';
+                const verdict = item.verdict_text || '';
+                const request = item.plaintiff_request || '';
+                
+                const repGovt = item.representatives_govt || '';
+                const repWorker = item.representatives_worker || '';
+                const repEmployer = item.representatives_employer || '';
+
+                const formatReps = (str) => {
+                    if (!str) return '';
+                    try {
+                        const parsed = JSON.parse(str);
+                        if (Array.isArray(parsed)) return parsed.join('<br>');
+                    } catch(e) {}
+                    return str.replace(/,/g, '<br>');
+                };
+
+                const meetingDate = item.meeting_date_jalali ? toPersianDigits(item.meeting_date_jalali) : '...........';
+                const sessionName = item.session_name ? `(${item.session_name})` : '';
+                const dateDisplay = item.meeting_date_jalali ? `${meetingDate} ${sessionName}` : '...........';
+
+                page.innerHTML = `
+                    <table class="header-table">
+                        <tr>
+                            <!-- Right Column: Logo -->
+                            <td style="width: 35%; text-align: center;">
+                                <div class="logo-box">
+                                    <img src="assets/img/logo.png" alt="لوگو وزارت"> 
+                                </div>
+                            </td>
+                            <!-- Middle Column: Title -->
+                            <td style="width: 30%; text-align: center;">
+                                <div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${cityTitle}</strong></div>
+                                <h2 style="margin: 0; font-size: 20px; font-family: 'Vazirmatn';">صورتجلسه هیات تشخیص</h2>
+                            </td>
+                            <!-- Left Column: Info -->
+                            <td style="width: 35%">
+                                <div class="info-box">
+                                    <div>کلاسه پرونده: <strong>${toPersianDigits(displayCode)}</strong></div>
+                                    <div>دادنامه: <strong>${toPersianDigits(generatedDadnameh)}</strong></div>
+                                    <div>تاریخ: <strong>${toPersianDigits(date)}</strong></div>
+                                    <div>شعبه: <strong>${toPersianDigits(branchNo)}</strong></div>
+                                </div>
+                            </td>
+                        </tr>
+                    </table>
+                    
+                    <div class="box">
+                        <div class="content" style="overflow-wrap: break-word;">
+                            بموجب دعوتنامه شماره ........... مورخ ........... جلسه هیات تشخیص سازمان کار و امور اجتماعی <strong>${cityTitle}</strong> بمنظور رسیدگی به پرونده
+                            آقا/خانم <strong>${pName}</strong> بطرفیت <strong>${dName}</strong>
+                            اعتراض خواهان <span style="display:inline-block;width:15px;height:15px;border:1px solid #000;vertical-align:middle;"></span> خوانده <span style="display:inline-block;width:15px;height:15px;border:1px solid #000;vertical-align:middle;"></span> هر دو <span style="display:inline-block;width:15px;height:15px;border:1px solid #000;vertical-align:middle;"></span>
+                           <br> رای ساعت ...... روز ...... مورخ <strong>${dateDisplay}</strong> با حضور امضاء کنندگان زیر تشکیل گردید:
+                            <br>
+                            هیات پس از بررسی محتویات پرونده ختم رسیدگی را اعلام و با استعانت از خداوند متعال به شرح آتی مبادرت به صدور رای می نماید.
+                            ${request ? `<br><br><strong>خواسته خواهان:</strong><br>${request}` : ''}
+                        </div>
+                        
+                        <div class="verdict-title">(رای)</div>
+                        <div class="content" style="min-height: 150px; white-space: pre-wrap; overflow-wrap: break-word;">${verdict}</div>
+
+                        <div class="footer" style="position: absolute; bottom: 10px; width: calc(100% - 20px);">
+                            <div>
+                                نمایندگان دولت
+                                <br><br><br>
+                                <div class="reps-list">${repGovt}</div>
+                            </div>
+                            <div>
+                                نمایندگان کارگران
+                                <br><br><br>
+                                <div class="reps-list">${repWorker}</div>
+                            </div>
+                            <div>
+                                نمایندگان کارفرمایان
+                                <br><br><br>
+                                <div class="reps-list">${repEmployer}</div>
+                            </div>
+                        </div>
+                    </div>
+                `;
+                container.appendChild(page);
+            });
+        }
+        
+        window.addEventListener('load', render);
+    </script>
+</body>
+</html>
