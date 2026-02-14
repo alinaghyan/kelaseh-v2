@@ -1270,7 +1270,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                    <div class="card border-secondary border-opacity-25 shadow-sm">
                         <!-- Removed extra fields -->
                    </div>
-              </div>
+
+
+
+
             </div>
           </div>
           <div class="modal-footer">

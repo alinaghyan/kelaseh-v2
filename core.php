@@ -1490,7 +1490,7 @@ function action_kelaseh_print_minutes(array $data): void {
         exit;
     }
 
-    $html = file_get_contents(__DIR__ . '/print_minutes.html');
+    $html = file_get_contents(__DIR__ . '/print_notice.html');
     if ($html === false) {
         echo "قالب چاپ یافت نشد.";
         exit;
@@ -2782,6 +2782,7 @@ function handle_request(): void
             case 'kelaseh.export.print': action_kelaseh_export_print($data); break;
             
             case 'kelaseh.search.by_nc': action_kelaseh_search_by_nc($data); break;
+            case 'kelaseh.get': action_kelaseh_get_by_code($data); break;
             case 'kelaseh.get.by_code': action_kelaseh_get_by_code($data); break;
             case 'heyat.tashkhis.save': action_heyat_tashkhis_save($data); break;
 

@@ -1242,49 +1242,120 @@ $(document).on('click', '.btn-kelaseh-view', function () {
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (!raw) return;
-    const p = JSON.parse(decodeURIComponent(raw));
+    const initialP = JSON.parse(decodeURIComponent(raw));
     
-    const plaintiffFields = [
-        { label: 'شناسه کلاسه', value: p.code },
-        { label: 'شماره دادنامه', value: p.dadnameh },
-        { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
-        { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
-        { label: 'شماره تماس خواهان', value: p.plaintiff_mobile },
-        { label: 'کد پستی خواهان', value: p.plaintiff_postal_code },
-        { label: 'آدرس خواهان', value: p.plaintiff_address }
-    ];
+    // Show loading... (optional, or just wait)
+    
+    api('kelaseh.get', { code: initialP.code })
+        .done((res) => {
+            const p = res.data;
+            
+            const plaintiffFields = [
+                { label: 'شناسه کلاسه', value: p.code },
+                { label: 'شماره دادنامه', value: p.dadnameh },
+                { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
+                { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
+                { label: 'شماره تماس خواهان', value: p.plaintiff_mobile },
+                { label: 'کد پستی خواهان', value: p.plaintiff_postal_code },
+                { label: 'آدرس خواهان', value: p.plaintiff_address }
+            ];
 
-    const defendantFields = [
-        { label: 'شناسه کلاسه', value: p.code },
-        { label: 'نام و نام خانوادگی خوانده', value: p.defendant_name },
-        { label: 'کد ملی خوانده', value: p.defendant_national_code },
-        { label: 'شماره تماس خوانده', value: p.defendant_mobile },
-        { label: 'کد پستی خوانده', value: p.defendant_postal_code },
-        { label: 'آدرس خوانده', value: p.defendant_address }
-    ];
+            const defendantFields = [
+                { label: 'شناسه کلاسه', value: p.code },
+                { label: 'نام و نام خانوادگی خوانده', value: p.defendant_name },
+                { label: 'کد ملی خوانده', value: p.defendant_national_code },
+                { label: 'شماره تماس خوانده', value: p.defendant_mobile },
+                { label: 'کد پستی خوانده', value: p.defendant_postal_code },
+                { label: 'آدرس خوانده', value: p.defendant_address }
+            ];
 
-    const renderColumn = (title, fields, colorClass) => {
-        let itemsHtml = `<div class="col-12 col-md-6"><div class="card h-100 border-${colorClass} border-opacity-25 shadow-sm"><div class="card-header bg-${colorClass} bg-opacity-10 py-2 fw-bold text-${colorClass}">${title}</div><div class="card-body p-2 vstack gap-2">`;
-        fields.forEach(f => {
-            if (f.value) {
-                itemsHtml += `
-                    <div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">
-                        <div class="small text-secondary mb-1">${f.label}:</div>
-                        <div class="fw-bold text-dark">${toPersianDigits(f.value)}</div>
-                        <input type="hidden" value="${f.value}" />
-                    </div>
-                `;
+            const renderColumn = (title, fields, colorClass) => {
+                let itemsHtml = `<div class="col-12 col-md-6"><div class="card h-100 border-${colorClass} border-opacity-25 shadow-sm"><div class="card-header bg-${colorClass} bg-opacity-10 py-2 fw-bold text-${colorClass}">${title}</div><div class="card-body p-2 vstack gap-2">`;
+                fields.forEach(f => {
+                    if (f.value) {
+                        itemsHtml += `
+                            <div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">
+                                <div class="small text-secondary mb-1">${f.label}:</div>
+                                <div class="fw-bold text-dark">${toPersianDigits(f.value)}</div>
+                                <input type="hidden" value="${f.value}" />
+                            </div>
+                        `;
+                    }
+                });
+                itemsHtml += `</div></div></div>`;
+                return itemsHtml;
+            };
+
+            let html = '<div class="row g-3">';
+            html += renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
+            html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
+            
+            // Render Sessions
+            if (p.sessions && Object.keys(p.sessions).length > 0) {
+                const sessionNames = {
+                    'session1': 'جلسه اول', 'session2': 'جلسه دوم', 'session3': 'جلسه سوم', 
+                    'session4': 'جلسه چهارم', 'session5': 'جلسه پنجم', 'resolution': 'حل اختلاف'
+                };
+                const sessionKeys = ['session1', 'session2', 'session3', 'session4', 'session5', 'resolution'];
+                
+                let sessionsHtml = '';
+                sessionKeys.forEach(key => {
+                    if (p.sessions[key]) {
+                        const s = p.sessions[key];
+                        // Relaxed condition: show if any field has content, OR if it's just created (even if empty, maybe user wants to see it exists?)
+                        // Actually, let's show if at least one field is non-empty.
+                        const hasContent = s.meeting_date || s.plaintiff_request || s.verdict_text || s.reps_govt || s.reps_worker || s.reps_employer;
+                        
+                        if (!hasContent) return;
+                        
+                        sessionsHtml += `
+                            <div class="border rounded p-3 bg-white mb-3">
+                                <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">${sessionNames[key] || key}</h6>
+                                <div class="row g-3">
+                                    <div class="col-md-4">
+                                        <div class="small text-secondary">تاریخ جلسه:</div>
+                                        <div class="fw-bold">${toPersianDigits(s.meeting_date || '-')}</div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="small text-secondary">خواسته خواهان:</div>
+                                        <div class="fw-bold text-break" style="white-space: pre-wrap;">${toPersianDigits(s.plaintiff_request || '-')}</div>
+                                    </div>
+                                    <div class="col-12">
+                                        <div class="small text-secondary">متن رای:</div>
+                                        <div class="fw-bold text-break" style="white-space: pre-wrap;">${toPersianDigits(s.verdict_text || '-')}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="small text-secondary">نمایندگان دولت:</div>
+                                        <div class="fw-bold small text-break">${toPersianDigits(s.reps_govt || '-')}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="small text-secondary">نمایندگان کارگران:</div>
+                                        <div class="fw-bold small text-break">${toPersianDigits(s.reps_worker || '-')}</div>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <div class="small text-secondary">نمایندگان کارفرما:</div>
+                                        <div class="fw-bold small text-break">${toPersianDigits(s.reps_employer || '-')}</div>
+                                    </div>
+                                </div>
+                            </div>
+                        `;
+                    }
+                });
+                
+                if (sessionsHtml) {
+                    html += `<div class="col-12"><div class="card border-success border-opacity-25 shadow-sm"><div class="card-header bg-success bg-opacity-10 py-2 fw-bold text-success">جلسات رسیدگی (هیات تشخیص)</div><div class="card-body p-2 vstack gap-2">${sessionsHtml}</div></div></div>`;
+                }
             }
+            
+            html += '</div>';
+
+            $('#kelasehViewContent').html(html);
+            new bootstrap.Modal(document.getElementById('modalKelasehView')).show();
+        })
+        .fail((xhr) => {
+            const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت اطلاعات پرونده.';
+            showToast(msg, 'error');
         });
-        itemsHtml += `</div></div></div>`;
-        return itemsHtml;
-    };
-
-    let html = renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
-    html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
-
-    $('#kelasehViewContent').html(html);
-    new bootstrap.Modal(document.getElementById('modalKelasehView')).show();
 });
 
 $(document).on('click', '.copyable', function () {
@@ -1439,17 +1510,26 @@ $(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', 
 
 $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom', function () {
   const codes = [];
+  let excludedCount = 0;
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (raw) {
       const payload = JSON.parse(decodeURIComponent(raw));
-      if (payload.code) codes.push(payload.code);
+      if (payload.status === 'active') {
+        if (payload.code) codes.push(payload.code);
+      } else {
+        excludedCount++;
+      }
     }
   });
 
   if (codes.length === 0) {
-    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
     return;
   }
   
@@ -2475,13 +2555,13 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           }
       }
       
-      $('#heyatCodeInput').val(suffix);
-      $('#heyatFullCode').val(fullCode);
-      $('#heyatCodeSuggestions').hide();
-      
       // Fill Form
       const f = $('#formHeyatTashkhis');
       f[0].reset(); // Clear first
+
+      $('#heyatCodeInput').val(suffix);
+      $('#heyatFullCode').val(fullCode);
+      $('#heyatCodeSuggestions').hide();
       
       f.find('[name="notice_number"]').val(item.notice_number || '');
       f.find('[name="plaintiff_name"]').val(item.plaintiff_name || '');
