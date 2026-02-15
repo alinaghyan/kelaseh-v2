@@ -1422,7 +1422,7 @@ function action_kelaseh_notice(array $data): void {
         exit;
     }
 
-    $html = file_get_contents(__DIR__ . '/print_notice.html');
+    $html = file_get_contents(__DIR__ . '/print_minutes.html');
     $jsonData = json_encode($rows);
     $script = '<script>(function(){ const data = ' . $jsonData . '; localStorage.setItem("print_queue", JSON.stringify(data)); })();</script>';
     $html = str_replace('<head>', "<head>$script", $html);

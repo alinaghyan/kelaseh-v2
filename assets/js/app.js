@@ -1244,8 +1244,6 @@ $(document).on('click', '.btn-kelaseh-view', function () {
     if (!raw) return;
     const initialP = JSON.parse(decodeURIComponent(raw));
     
-    // Show loading... (optional, or just wait)
-    
     api('kelaseh.get', { code: initialP.code })
         .done((res) => {
             const p = res.data;
@@ -1272,15 +1270,15 @@ $(document).on('click', '.btn-kelaseh-view', function () {
             const renderColumn = (title, fields, colorClass) => {
                 let itemsHtml = `<div class="col-12 col-md-6"><div class="card h-100 border-${colorClass} border-opacity-25 shadow-sm"><div class="card-header bg-${colorClass} bg-opacity-10 py-2 fw-bold text-${colorClass}">${title}</div><div class="card-body p-2 vstack gap-2">`;
                 fields.forEach(f => {
-                    if (f.value) {
-                        itemsHtml += `
-                            <div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">
-                                <div class="small text-secondary mb-1">${f.label}:</div>
-                                <div class="fw-bold text-dark">${toPersianDigits(f.value)}</div>
-                                <input type="hidden" value="${f.value}" />
-                            </div>
-                        `;
-                    }
+                    // Always render fields even if empty, but show placeholder if empty
+                    const val = f.value ? toPersianDigits(f.value) : '<span class="text-muted small fst-italic">ثبت نشده</span>';
+                    itemsHtml += `
+                        <div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">
+                            <div class="small text-secondary mb-1">${f.label}:</div>
+                            <div class="fw-bold text-dark">${val}</div>
+                            <input type="hidden" value="${f.value || ''}" />
+                        </div>
+                    `;
                 });
                 itemsHtml += `</div></div></div>`;
                 return itemsHtml;
@@ -1302,8 +1300,6 @@ $(document).on('click', '.btn-kelaseh-view', function () {
                 sessionKeys.forEach(key => {
                     if (p.sessions[key]) {
                         const s = p.sessions[key];
-                        // Relaxed condition: show if any field has content, OR if it's just created (even if empty, maybe user wants to see it exists?)
-                        // Actually, let's show if at least one field is non-empty.
                         const hasContent = s.meeting_date || s.plaintiff_request || s.verdict_text || s.reps_govt || s.reps_worker || s.reps_employer;
                         
                         if (!hasContent) return;
@@ -1350,7 +1346,32 @@ $(document).on('click', '.btn-kelaseh-view', function () {
             html += '</div>';
 
             $('#kelasehViewContent').html(html);
-            new bootstrap.Modal(document.getElementById('modalKelasehView')).show();
+            const modalEl = document.getElementById('modalKelasehView');
+            if (modalEl) {
+                if (modalEl.parentElement !== document.body) {
+                    document.body.appendChild(modalEl);
+                }
+                document.querySelectorAll('.modal.show').forEach((el) => {
+                    const inst = bootstrap.Modal.getInstance(el);
+                    if (inst) inst.hide();
+                });
+                document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+                document.body.classList.remove('modal-open');
+                document.body.style.removeProperty('overflow');
+                document.body.style.removeProperty('padding-right');
+                try {
+                    bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                } catch (e) {
+                    console.error(e);
+                    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+                    document.body.classList.remove('modal-open');
+                    document.body.style.removeProperty('overflow');
+                    document.body.style.removeProperty('padding-right');
+                    showToast('خطا در باز کردن پنجره نمایش کامل.', 'error');
+                }
+            } else {
+                console.error('Modal element #modalKelasehView not found!');
+            }
         })
         .fail((xhr) => {
             const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت اطلاعات پرونده.';
@@ -1533,7 +1554,7 @@ $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom'
     return;
   }
   
-  window.open(`core.php?action=kelaseh.print.minutes&codes=${codes.join(',')}`, '_blank');
+  window.open(`core.php?action=kelaseh.notice&codes=${codes.join(',')}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', function () {
@@ -1552,7 +1573,7 @@ $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', 
     return;
   }
   
-  window.open(`core.php?action=kelaseh.notice&codes=${codes.join(',')}`, '_blank');
+  window.open(`core.php?action=kelaseh.print.minutes&codes=${codes.join(',')}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehTodayPrintNotice', function () {

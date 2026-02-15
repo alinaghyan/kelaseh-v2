@@ -440,3 +440,11 @@ table th {
   background-color: #e0e0e0;
   color: #424242;
 }
+
+#modalKelasehView {
+  z-index: 20000 !important;
+}
+
+.modal-backdrop {
+  z-index: 19990 !important;
+}
