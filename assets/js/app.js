@@ -8,6 +8,7 @@ let csrfToken = '';
 let currentUser = null;
 let adminCitiesLoaded = false;
 let headerClockTimer = null;
+let kelasehCreateBusy = false;
 
 function initDatePickers() {
   const commonOptions = {
@@ -35,6 +36,10 @@ function initDatePickers() {
         $('#manual_day').val(date.date());
       }
     });
+    $('#kelasehManualDateClear').on('click', function () {
+      $('#kelasehManualDate').val('');
+      $('#manual_year, #manual_month, #manual_day').val('');
+    });
   }
 }
 
@@ -44,6 +49,17 @@ function toPersianDigits(str) {
     const persian = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
     return persian[w];
   });
+}
+
+function escapeHtml(str) {
+  if (str === null || str === undefined) return '';
+  const s = String(str);
+  return s
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
 }
 
 function showToast(message, type) {
@@ -140,6 +156,16 @@ function loadAdminCities() {
         .join('');
       $('#adminKelasehCityFilter').html(opts2);
       $('#adminKelasehCityFilterMain').html(opts2);
+      const modalCityOpts = ['<option value="" disabled selected>انتخاب اداره…</option>']
+        .concat(
+          cities.map((c) => {
+            const code = $('<div/>').text(c.code || '').html();
+            const name = $('<div/>').text(c.name || '').html();
+            return `<option value="${code}">${name}</option>`;
+          })
+        )
+        .join('');
+      $('#adminModalCitySelect').html(modalCityOpts);
       adminCitiesLoaded = true;
     })
     .fail(() => {
@@ -453,6 +479,13 @@ function generateKelasehRows(rows, offset = 0) {
       manualBadge = '<span class="badge bg-warning text-dark ms-1" style="font-size: 0.6rem;">شعبه دستی</span>';
     }
 
+    var statusLabel = '';
+    if (r.status === 'voided') {
+      statusLabel = '<br><span class="badge bg-danger" style="font-size: 0.65rem;">ابطال</span>';
+    } else if (r.status === 'inactive') {
+      statusLabel = '<br><span class="badge bg-secondary" style="font-size: 0.65rem;">غیرفعال</span>';
+    }
+
     const json = encodeURIComponent(
       JSON.stringify({
         code: r.code || '',
@@ -482,7 +515,7 @@ function generateKelasehRows(rows, offset = 0) {
     const actionButtons = `
         <div class="d-flex flex-column gap-1">
             <div class="btn-group btn-group-sm" role="group">
-                <button class="btn btn-glass btn-glass-info btn-kelaseh-view" type="button">نمایش کامل</button>
+                <button class="btn btn-glass btn-glass-info btn-kelaseh-view" type="button" data-code="${(r.code || r.full_code || '').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">نمایش مشخصات</button>
                 <!-- <button class="btn btn-glass btn-glass-secondary btn-kelaseh-label" type="button">چاپ لیبل</button> -->
                 <button class="btn btn-glass btn-glass-primary btn-kelaseh-edit" type="button">ویرایش</button>
                 <button class="btn btn-glass btn-glass-warning btn-kelaseh-toggle" type="button">وضعیت</button>
@@ -502,13 +535,14 @@ function generateKelasehRows(rows, offset = 0) {
         </div>
     `;
 
+    var rowCode = (r.code || r.full_code || '').replace(/"/g, '&quot;');
     return `
-      <tr data-json="${json}">
+      <tr data-json="${json}" data-code="${rowCode}">
         <td>
            <input class="kelaseh-label-check" type="checkbox" style="width: 18px; height: 18px; cursor: pointer;" />
         </td>
         <td class="text-secondary">${rowNo}</td>
-        <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}</div></td>
+        <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}${statusLabel}</div></td>
         <td class="text-secondary">${branchNo}</td>
         <td class="text-secondary">${cityName}</td>
         <td class="text-secondary small">${ownerName}</td>
@@ -1122,11 +1156,15 @@ $(document).on('input', '.national-check', function() {
 
 $(document).on('submit', '#formKelasehCreate', function (e) {
   e.preventDefault();
+  if (kelasehCreateBusy) return;
+  kelasehCreateBusy = true;
   const submitter = (e.originalEvent && e.originalEvent.submitter) || null;
   const shouldSendSms = submitter && submitter.id === 'btnKelasehCreateAndSms';
   const to_plaintiff = $('#kelasehSmsPlaintiff').is(':checked') ? 1 : 0;
   const to_defendant = $('#kelasehSmsDefendant').is(':checked') ? 1 : 0;
   const data = Object.fromEntries(new FormData(this));
+  const $form = $(this);
+  $form.find('button[type="submit"]').prop('disabled', true);
   showToast('در حال ثبت پرونده…', 'info');
   api('kelaseh.create', data)
     .done((res) => {
@@ -1146,21 +1184,33 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
       if (shouldSendSms && code) {
         if (!to_plaintiff && !to_defendant) {
           showToast('برای ارسال پیامک، خواهان یا خوانده را انتخاب کنید.', 'error');
+          $form.find('button[type="submit"]').prop('disabled', false);
+          kelasehCreateBusy = false;
           return;
         }
         api('kelaseh.sms.send', { code, to_plaintiff, to_defendant })
           .done((r2) => {
             showToast(r2.message || 'پیامک ارسال شد.', 'success');
+            $form.find('button[type="submit"]').prop('disabled', false);
+            kelasehCreateBusy = false;
           })
           .fail((xhr) => {
             const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ارسال پیامک ناموفق بود.';
             showToast(msg, 'error');
+            $form.find('button[type="submit"]').prop('disabled', false);
+            kelasehCreateBusy = false;
           });
+      }
+      if (!shouldSendSms || !code) {
+        $form.find('button[type="submit"]').prop('disabled', false);
+        kelasehCreateBusy = false;
       }
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ثبت پرونده ناموفق بود.';
       showToast(msg, 'error');
+      $form.find('button[type="submit"]').prop('disabled', false);
+      kelasehCreateBusy = false;
     });
 });
 
@@ -1238,124 +1288,131 @@ $(document).on('click', '.btn-kelaseh-label', function () {
   window.open(`core.php?action=kelaseh.label&code=${encodeURIComponent(code)}`, '_blank');
 });
 
-$(document).on('click', '.btn-kelaseh-view', function () {
-    const tr = $(this).closest('tr');
-    const raw = tr.attr('data-json');
-    if (!raw) return;
-    const initialP = JSON.parse(decodeURIComponent(raw));
-    
-    api('kelaseh.get', { code: initialP.code })
-        .done((res) => {
+$(document).on('click', '.btn-kelaseh-view', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    var code = $(this).attr('data-code') || $(this).data('code') || '';
+    if (!code) {
+        var tr = $(this).closest('tr');
+        code = tr.attr('data-code') || '';
+        if (!code && tr.attr('data-json')) {
+            try {
+                var initialP = JSON.parse(decodeURIComponent(tr.attr('data-json')));
+                code = (initialP && (initialP.code || initialP.full_code)) ? (initialP.code || initialP.full_code) : '';
+            } catch (err) { /* ignore */ }
+        }
+    }
+    if (!code) {
+        showToast('شناسه کلاسه یافت نشد.', 'error');
+        return false;
+    }
+    code = String(code).trim();
+
+    api('kelaseh.get', { code: code })
+        .done(function (res) {
+            if (!res || !res.data) {
+                showToast(res && res.message ? res.message : 'اطلاعات پرونده در دسترس نیست.', 'error');
+                return;
+            }
             const p = res.data;
-            
-            const plaintiffFields = [
-                { label: 'شناسه کلاسه', value: p.code },
-                { label: 'شماره دادنامه', value: p.dadnameh },
-                { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
-                { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
-                { label: 'شماره تماس خواهان', value: p.plaintiff_mobile },
-                { label: 'کد پستی خواهان', value: p.plaintiff_postal_code },
-                { label: 'آدرس خواهان', value: p.plaintiff_address }
-            ];
+            let html = '';
 
-            const defendantFields = [
-                { label: 'شناسه کلاسه', value: p.code },
-                { label: 'نام و نام خانوادگی خوانده', value: p.defendant_name },
-                { label: 'کد ملی خوانده', value: p.defendant_national_code },
-                { label: 'شماره تماس خوانده', value: p.defendant_mobile },
-                { label: 'کد پستی خوانده', value: p.defendant_postal_code },
-                { label: 'آدرس خوانده', value: p.defendant_address }
-            ];
+            try {
+                var plaintiffFields = [
+                    { label: 'شناسه کلاسه', value: p.code },
+                    { label: 'شماره دادنامه', value: p.dadnameh },
+                    { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
+                    { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
+                    { label: 'شماره تماس خواهان', value: p.plaintiff_mobile },
+                    { label: 'کد پستی خواهان', value: p.plaintiff_postal_code },
+                    { label: 'آدرس خواهان', value: p.plaintiff_address }
+                ];
 
-            const renderColumn = (title, fields, colorClass) => {
-                let itemsHtml = `<div class="col-12 col-md-6"><div class="card h-100 border-${colorClass} border-opacity-25 shadow-sm"><div class="card-header bg-${colorClass} bg-opacity-10 py-2 fw-bold text-${colorClass}">${title}</div><div class="card-body p-2 vstack gap-2">`;
-                fields.forEach(f => {
-                    // Always render fields even if empty, but show placeholder if empty
-                    const val = f.value ? toPersianDigits(f.value) : '<span class="text-muted small fst-italic">ثبت نشده</span>';
-                    itemsHtml += `
-                        <div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">
-                            <div class="small text-secondary mb-1">${f.label}:</div>
-                            <div class="fw-bold text-dark">${val}</div>
-                            <input type="hidden" value="${f.value || ''}" />
-                        </div>
-                    `;
-                });
-                itemsHtml += `</div></div></div>`;
-                return itemsHtml;
-            };
+                var defendantFields = [
+                    { label: 'شناسه کلاسه', value: p.code },
+                    { label: 'نام و نام خانوادگی خوانده', value: p.defendant_name },
+                    { label: 'کد ملی خوانده', value: p.defendant_national_code },
+                    { label: 'شماره تماس خوانده', value: p.defendant_mobile },
+                    { label: 'کد پستی خوانده', value: p.defendant_postal_code },
+                    { label: 'آدرس خوانده', value: p.defendant_address }
+                ];
 
-            let html = '<div class="row g-3">';
-            html += renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
-            html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
-            
-            // Render Sessions
-            if (p.sessions && Object.keys(p.sessions).length > 0) {
-                const sessionNames = {
-                    'session1': 'جلسه اول', 'session2': 'جلسه دوم', 'session3': 'جلسه سوم', 
+                function renderColumn(title, fields, colorClass) {
+                    var out = '<div class="col-12 col-md-6"><div class="card h-100 border-' + colorClass + ' border-opacity-25 shadow-sm"><div class="card-header bg-' + colorClass + ' bg-opacity-10 py-2 fw-bold text-' + colorClass + '">' + escapeHtml(title) + '</div><div class="card-body p-2 vstack gap-2">';
+                    for (var i = 0; i < fields.length; i++) {
+                        var f = fields[i];
+                        var val = (f.value !== undefined && f.value !== null && f.value !== '') ? toPersianDigits(String(f.value)) : '<span class="text-muted small fst-italic">ثبت نشده</span>';
+                        var safeVal = escapeHtml(f.value || '');
+                        out += '<div class="p-2 border rounded bg-white copyable" style="cursor: pointer;" title="کلیک برای کپی">';
+                        out += '<div class="small text-secondary mb-1">' + escapeHtml(f.label) + ':</div>';
+                        out += '<div class="fw-bold text-dark">' + val + '</div>';
+                        out += '<input type="hidden" value="' + safeVal + '" />';
+                        out += '</div>';
+                    }
+                    out += '</div></div></div>';
+                    return out;
+                }
+
+                html = '<div class="row g-3">';
+                html += renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
+                html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
+
+                var sessions = p.sessions && typeof p.sessions === 'object' ? p.sessions : {};
+                var sessionNames = {
+                    'session1': 'جلسه اول', 'session2': 'جلسه دوم', 'session3': 'جلسه سوم',
                     'session4': 'جلسه چهارم', 'session5': 'جلسه پنجم', 'resolution': 'حل اختلاف'
                 };
-                const sessionKeys = ['session1', 'session2', 'session3', 'session4', 'session5', 'resolution'];
-                
-                let sessionsHtml = '';
-                sessionKeys.forEach(key => {
-                    if (p.sessions[key]) {
-                        const s = p.sessions[key];
-                        const hasContent = s.meeting_date || s.plaintiff_request || s.verdict_text || s.reps_govt || s.reps_worker || s.reps_employer;
-                        
-                        if (!hasContent) return;
-                        
-                        sessionsHtml += `
-                            <div class="border rounded p-3 bg-white mb-3">
-                                <h6 class="fw-bold text-primary mb-3 border-bottom pb-2">${sessionNames[key] || key}</h6>
-                                <div class="row g-3">
-                                    <div class="col-md-4">
-                                        <div class="small text-secondary">تاریخ جلسه:</div>
-                                        <div class="fw-bold">${toPersianDigits(s.meeting_date || '-')}</div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="small text-secondary">خواسته خواهان:</div>
-                                        <div class="fw-bold text-break" style="white-space: pre-wrap;">${toPersianDigits(s.plaintiff_request || '-')}</div>
-                                    </div>
-                                    <div class="col-12">
-                                        <div class="small text-secondary">متن رای:</div>
-                                        <div class="fw-bold text-break" style="white-space: pre-wrap;">${toPersianDigits(s.verdict_text || '-')}</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="small text-secondary">نمایندگان دولت:</div>
-                                        <div class="fw-bold small text-break">${toPersianDigits(s.reps_govt || '-')}</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="small text-secondary">نمایندگان کارگران:</div>
-                                        <div class="fw-bold small text-break">${toPersianDigits(s.reps_worker || '-')}</div>
-                                    </div>
-                                    <div class="col-md-4">
-                                        <div class="small text-secondary">نمایندگان کارفرما:</div>
-                                        <div class="fw-bold small text-break">${toPersianDigits(s.reps_employer || '-')}</div>
-                                    </div>
-                                </div>
-                            </div>
-                        `;
+                var sessionKeys = ['session1', 'session2', 'session3', 'session4', 'session5', 'resolution'];
+                var sessionsHtml = '';
+                for (var k = 0; k < sessionKeys.length; k++) {
+                    var key = sessionKeys[k];
+                    if (sessions[key]) {
+                        var s = sessions[key];
+                        var hasContent = !!(s.meeting_date || s.plaintiff_request || s.verdict_text || s.reps_govt || s.reps_worker || s.reps_employer);
+                        if (!hasContent) continue;
+                        sessionsHtml += '<div class="border rounded p-3 bg-white mb-3">';
+                        sessionsHtml += '<h6 class="fw-bold text-primary mb-3 border-bottom pb-2">' + escapeHtml(sessionNames[key] || key) + '</h6>';
+                        sessionsHtml += '<div class="row g-3">';
+                        sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">تاریخ جلسه:</div><div class="fw-bold">' + toPersianDigits(s.meeting_date || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-12"><div class="small text-secondary">خواسته خواهان:</div><div class="fw-bold text-break" style="white-space: pre-wrap;">' + toPersianDigits(s.plaintiff_request || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-12"><div class="small text-secondary">متن رای:</div><div class="fw-bold text-break" style="white-space: pre-wrap;">' + toPersianDigits(s.verdict_text || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">نمایندگان دولت:</div><div class="fw-bold small text-break">' + toPersianDigits(s.reps_govt || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">نمایندگان کارگران:</div><div class="fw-bold small text-break">' + toPersianDigits(s.reps_worker || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">نمایندگان کارفرما:</div><div class="fw-bold small text-break">' + toPersianDigits(s.reps_employer || '-') + '</div></div>';
+                        sessionsHtml += '</div></div>';
                     }
-                });
-                
-                if (sessionsHtml) {
-                    html += `<div class="col-12"><div class="card border-success border-opacity-25 shadow-sm"><div class="card-header bg-success bg-opacity-10 py-2 fw-bold text-success">جلسات رسیدگی (هیات تشخیص)</div><div class="card-body p-2 vstack gap-2">${sessionsHtml}</div></div></div>`;
                 }
+                html += '<div class="col-12"><div class="card border-success border-opacity-25 shadow-sm"><div class="card-header bg-success bg-opacity-10 py-2 fw-bold text-success">جلسات رسیدگی (هیات تشخیص)</div><div class="card-body p-2 vstack gap-2">';
+                if (sessionsHtml) {
+                    html += sessionsHtml;
+                } else {
+                    html += '<p class="text-muted small mb-0">هنوز جلسه‌ای ثبت نشده است.</p>';
+                }
+                html += '</div></div></div>';
+                html += '</div>';
+            } catch (err) {
+                console.error(err);
+                showToast('خطا در آماده‌سازی نمایش اطلاعات.', 'error');
+                return;
             }
-            
-            html += '</div>';
 
-            $('#kelasehViewContent').html(html);
-            const modalEl = document.getElementById('modalKelasehView');
+            var contentEl = document.getElementById('kelasehViewContent');
+            if (!contentEl) {
+                showToast('عنصر نمایش محتوا یافت نشد.', 'error');
+                return;
+            }
+            contentEl.innerHTML = html;
+
+            var modalEl = document.getElementById('modalKelasehView');
             if (modalEl) {
                 if (modalEl.parentElement !== document.body) {
                     document.body.appendChild(modalEl);
                 }
-                document.querySelectorAll('.modal.show').forEach((el) => {
-                    const inst = bootstrap.Modal.getInstance(el);
+                document.querySelectorAll('.modal.show').forEach(function (el) {
+                    var inst = bootstrap.Modal.getInstance(el);
                     if (inst) inst.hide();
                 });
-                document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+                document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
                 document.body.classList.remove('modal-open');
                 document.body.style.removeProperty('overflow');
                 document.body.style.removeProperty('padding-right');
@@ -1363,18 +1420,18 @@ $(document).on('click', '.btn-kelaseh-view', function () {
                     bootstrap.Modal.getOrCreateInstance(modalEl).show();
                 } catch (e) {
                     console.error(e);
-                    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+                    document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
                     document.body.classList.remove('modal-open');
                     document.body.style.removeProperty('overflow');
                     document.body.style.removeProperty('padding-right');
-                    showToast('خطا در باز کردن پنجره نمایش کامل.', 'error');
+                    showToast('خطا در باز کردن پنجره نمایش مشخصات.', 'error');
                 }
             } else {
-                console.error('Modal element #modalKelasehView not found!');
+                showToast('پنجره نمایش مشخصات یافت نشد.', 'error');
             }
         })
-        .fail((xhr) => {
-            const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت اطلاعات پرونده.';
+        .fail(function (xhr) {
+            var msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت اطلاعات پرونده.';
             showToast(msg, 'error');
         });
 });
@@ -1529,6 +1586,7 @@ $(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', 
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
+/* چاپ رای → kelaseh.notice */
 $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom', function () {
   const codes = [];
   let excludedCount = 0;
@@ -1536,12 +1594,14 @@ $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom'
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (raw) {
-      const payload = JSON.parse(decodeURIComponent(raw));
-      if (payload.status === 'active') {
-        if (payload.code) codes.push(payload.code);
-      } else {
-        excludedCount++;
-      }
+      try {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.status === 'active') {
+          if (payload.code) codes.push(payload.code);
+        } else {
+          excludedCount++;
+        }
+      } catch (e) { /* skip row */ }
     }
   });
 
@@ -1553,18 +1613,20 @@ $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom'
     }
     return;
   }
-  
-  window.open(`core.php?action=kelaseh.notice&codes=${codes.join(',')}`, '_blank');
+  window.open(`core.php?action=kelaseh.notice&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
+/* چاپ دعوت نامه → kelaseh.print.minutes */
 $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', function () {
   const codes = [];
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (raw) {
-      const payload = JSON.parse(decodeURIComponent(raw));
-      if (payload.code) codes.push(payload.code);
+      try {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.code) codes.push(payload.code);
+      } catch (e) { /* skip row */ }
     }
   });
 
@@ -1572,10 +1634,31 @@ $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', 
     showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
     return;
   }
-  
-  window.open(`core.php?action=kelaseh.print.minutes&codes=${codes.join(',')}`, '_blank');
+  window.open(`core.php?action=kelaseh.print.minutes&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
+/* چاپ ابلاغ رای → kelaseh.notice2 */
+$(document).on('click', '#btnKelasehPrintVerdictNotice, #btnKelasehPrintVerdictNoticeBottom', function () {
+  const codes = [];
+  $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (raw) {
+      try {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.code) codes.push(payload.code);
+      } catch (e) { /* skip row */ }
+    }
+  });
+
+  if (codes.length === 0) {
+    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    return;
+  }
+  window.open(`core.php?action=kelaseh.notice2&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
+});
+
+/* امروز: چاپ دعوت نامه → kelaseh.print.minutes */
 $(document).on('click', '#btnKelasehTodayPrintNotice', function () {
   const codes = [];
   const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
@@ -1585,8 +1668,10 @@ $(document).on('click', '#btnKelasehTodayPrintNotice', function () {
       const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
       const raw = tr.attr('data-json');
       if (raw) {
-        const payload = JSON.parse(decodeURIComponent(raw));
-        if (payload.code) codes.push(payload.code);
+        try {
+          const payload = JSON.parse(decodeURIComponent(raw));
+          if (payload.code) codes.push(payload.code);
+        } catch (e) { /* skip */ }
       }
   });
 
@@ -1594,8 +1679,30 @@ $(document).on('click', '#btnKelasehTodayPrintNotice', function () {
     showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
     return;
   }
-  
-  window.open(`core.php?action=kelaseh.notice&codes=${codes.join(',')}`, '_blank');
+  window.open(`core.php?action=kelaseh.print.minutes&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
+});
+
+$(document).on('click', '#btnKelasehTodayPrintVerdictNotice', function () {
+  const codes = [];
+  const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        try {
+          const payload = JSON.parse(decodeURIComponent(raw));
+          if (payload.code) codes.push(payload.code);
+        } catch (e) { /* skip */ }
+      }
+  });
+
+  if (codes.length === 0) {
+    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    return;
+  }
+  window.open(`core.php?action=kelaseh.notice2&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehTodaySelectAll', function () {
@@ -1855,22 +1962,83 @@ $(document).on('click', '#btnAdminUsersRefresh', function () {
   refreshAdminUsers();
 });
 
-$(document).on('click', '#adminUsersTbody .btn-admin-create-branch-under-office', function () {
+$(document).on('click', '.btn-admin-create-branch-under-office', function () {
   const raw = $(this).closest('tr').attr('data-json');
   if (!raw) return;
   const u = JSON.parse(decodeURIComponent(raw));
   const cityCode = u.city_code || '';
-  if (!cityCode) {
-    showToast('اداره مدیر اداره مشخص نیست.', 'error');
-    return;
+  if (currentUser && currentUser.role === 'admin') {
+    const modalEl = document.getElementById('modalAdminCreateBranchUser');
+    if (modalEl) {
+      if ($('#adminModalCitySelect').is(':empty')) {
+        loadAdminCities();
+      }
+      $('#adminModalCitySelect').val(String(cityCode));
+      if ($('#adminModalCreateBranchList').is(':empty')) {
+        let html = '';
+        for (let i = 1; i <= 15; i++) {
+          html += `
+          <div class="col-6 col-md-4 col-lg-3">
+              <div class="border rounded p-2 h-100">
+                  <div class="form-check mb-1">
+                      <input class="form-check-input branch-check" type="checkbox" value="${i}" id="adm_create_br_${i}">
+                      <label class="form-check-label small" for="adm_create_br_${i}">شعبه ${i}</label>
+                  </div>
+                  <input type="number" class="form-control form-control-sm branch-capacity" data-branch="${i}" value="15" min="1" max="999" placeholder="ظرفیت" disabled>
+              </div>
+          </div>`;
+        }
+        $('#adminModalCreateBranchList').html(html);
+      }
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
+  } else {
+    const modalEl = document.getElementById('modalOfficeCreateUser');
+    if (modalEl) {
+      bootstrap.Modal.getOrCreateInstance(modalEl).show();
+    }
   }
+});
 
-  $('#adminRoleSelect').val('branch_admin').trigger('change');
-  $('#adminCitySelect').val(String(cityCode)).trigger('change');
-  document.getElementById('formAdminCreateUser')?.scrollIntoView({ behavior: 'smooth', block: 'start' });
-  setTimeout(() => {
-    $('#formAdminCreateUser [name="username"]').trigger('focus');
-  }, 250);
+$(document).on('change', '#adminModalCreateBranchList .branch-check', function () {
+  const capInput = $(this).closest('div.border').find('.branch-capacity');
+  capInput.prop('disabled', !this.checked);
+});
+
+$(document).on('submit', '#formAdminCreateUserModal', function (e) {
+  e.preventDefault();
+  const form = $(this);
+  const data = {
+    role: 'branch_admin',
+    first_name: form.find('[name="first_name"]').val(),
+    last_name: form.find('[name="last_name"]').val(),
+    username: form.find('[name="username"]').val(),
+    mobile: form.find('[name="mobile"]').val(),
+    password: form.find('[name="password"]').val(),
+    city_code: form.find('[name="city_code"]').val()
+  };
+  const branches = [];
+  const branchCaps = {};
+  $('#adminModalCreateBranchList .branch-check:checked').each(function () {
+    const b = $(this).val();
+    const cap = $(this).closest('div.border').find('.branch-capacity').val();
+    branches.push(b);
+    branchCaps[b] = cap;
+  });
+  data.branches = branches;
+  data.branch_caps = branchCaps;
+  api('admin.users.create', data)
+    .done((res) => {
+      showToast(res.message || 'کاربر ایجاد شد.', 'success');
+      form[0].reset();
+      $('#adminModalCreateBranchList input[type="checkbox"]').prop('checked', false).trigger('change');
+      bootstrap.Modal.getInstance(document.getElementById('modalAdminCreateBranchUser')).hide();
+      refreshAdminUsers();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ایجاد کاربر ناموفق بود.';
+      showToast(msg, 'error');
+    });
 });
 
 $(document).on('click', '#btnAdminRunBranchAdminTest', function () {
@@ -2108,7 +2276,31 @@ $(document).on('click', '.btn-admin-edit-user', function () {
     $('#adminEditBranchList').html(html);
 
     updateAdminEditUserFields();
-    new bootstrap.Modal('#modalAdminEditUser').show();
+    var modalEl = document.getElementById('modalAdminEditUser');
+    if (modalEl) {
+        if (modalEl.parentElement !== document.body) {
+            document.body.appendChild(modalEl);
+        }
+        document.querySelectorAll('.modal.show').forEach(function (el) {
+            var inst = bootstrap.Modal.getInstance(el);
+            if (inst) inst.hide();
+        });
+        document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
+        document.body.classList.remove('modal-open');
+        document.body.style.removeProperty('overflow');
+        document.body.style.removeProperty('padding-right');
+        try {
+            bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } catch (e) {
+            document.querySelectorAll('.modal-backdrop').forEach(function (b) { b.remove(); });
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+            showToast('خطا در باز کردن پنجره ویرایش کاربر.', 'error');
+        }
+    } else {
+        showToast('پنجره ویرایش کاربر یافت نشد.', 'error');
+    }
 });
 
 $(document).on('change', '#adminEditBranchList .branch-check', function() {
@@ -2307,7 +2499,12 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
   });
 
   function refreshOfficeCapacities() {
-      api('office.capacities.get', {})
+      const payload = {};
+      if (currentUser && currentUser.role === 'admin') {
+          const cc = $('#adminKelasehCityFilterMain').val() || '';
+          if (cc) payload.city_code = cc;
+      }
+      api('office.capacities.get', payload)
         .done(res => {
             const list = res.data.capacities || [];
             const rows = list.map(item => {
@@ -2506,8 +2703,12 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       const branch = btn.data('branch');
       const input = btn.closest('tr').find('.office-cap-input');
       const cap = input.val();
-      
-      api('office.capacities.update', { branch_no: branch, capacity: cap })
+      const payload = { branch_no: branch, capacity: cap };
+      if (currentUser && currentUser.role === 'admin') {
+          const cc = $('#adminKelasehCityFilterMain').val() || '';
+          if (cc) payload.city_code = cc;
+      }
+      api('office.capacities.update', payload)
         .done(res => showToast(res.message, 'success'))
         .fail(xhr => showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در ذخیره', 'error'));
   });

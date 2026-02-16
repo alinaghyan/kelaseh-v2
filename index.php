@@ -935,11 +935,14 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         </div>
                         <div class="col-12 col-md-6">
                           <label class="form-label form-label-sm">تاریخ ثبت کلاسه (دستی)</label>
-                          <input id="kelasehManualDate" type="text" class="form-control form-control-sm" placeholder="انتخاب تاریخ..." readonly />
+                          <div class="input-group input-group-sm">
+                            <input id="kelasehManualDate" type="text" class="form-control form-control-sm" placeholder="انتخاب تاریخ..." readonly />
+                            <button id="kelasehManualDateClear" type="button" class="btn btn-outline-secondary" title="حذف تاریخ">×</button>
+                          </div>
                           <input type="hidden" name="manual_year" id="manual_year" />
                           <input type="hidden" name="manual_month" id="manual_month" />
                           <input type="hidden" name="manual_day" id="manual_day" />
-                          <div class="form-text small">در صورت خالی بودن، تاریخ امروز درج می‌شود.</div>
+                          <div class="form-text small">در صورت خالی بودن، تاریخ امروز درج می‌شود. برای حذف تاریخ انتخاب‌شده دکمه «×» را بزنید.</div>
                         </div>
 
                         <!-- Plaintiff Details -->
@@ -1043,7 +1046,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <div class="btn-group btn-group-sm">
                       <button id="btnKelasehTodaySelectAll" class="btn btn-outline-primary" type="button">انتخاب همه</button>
                       <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button">چاپ لیبل کامل</button>
-                      <button id="btnKelasehTodayPrintNotice" class="btn btn-outline-info" type="button">چاپ ابلاغ</button>
+                      <button id="btnKelasehTodayPrintNotice" class="btn btn-outline-info" type="button">چاپ دعوت نامه</button>
+                      <button id="btnKelasehTodayPrintVerdictNotice" class="btn btn-outline-primary" type="button">چاپ ابلاغ</button>
                     </div>
                   </div>
                   <div class="table-responsive">
@@ -1118,8 +1122,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
                 <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
                 <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ کامل لیبل</button>
-                <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ ابلاغ</button>
-                <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ صورتجلسه</button>
+                <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
+                <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
+                <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
                 <button id="btnKelasehSelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
 
@@ -1149,8 +1154,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
               <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center">
                 <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل‌های انتخاب شده</button>
-                <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ ابلاغ‌های انتخاب شده</button>
-                <button id="btnKelasehPrintMinutesBottom" class="btn btn-outline-warning btn-sm" type="button">چاپ صورتجلسه انتخاب شده</button>
+                <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه انتخاب شده</button>
+                <button id="btnKelasehPrintVerdictNoticeBottom" class="btn btn-outline-primary btn-sm" type="button">ابلاغ رای انتخاب شده</button>
+                <button id="btnKelasehPrintMinutesBottom" class="btn btn-outline-warning btn-sm" type="button">چاپ رای انتخاب شده</button>
                 <button id="btnKelasehSelectAllBottom" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
               
@@ -1213,15 +1219,15 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   <div class="card-body p-3 vstack gap-2">
                     <div>
                       <label class="form-label form-label-sm">نام و نام خانوادگی خواهان</label>
-                      <input name="plaintiff_name" type="text" class="form-control form-control-sm border-info border-opacity-25" required />
+                      <input name="plaintiff_name" type="text" class="form-control form-control-sm border-info border-opacity-25" />
                     </div>
                     <div>
                       <label class="form-label form-label-sm">کد ملی خواهان</label>
-                      <input name="plaintiff_national_code" type="text" class="form-control form-control-sm border-info border-opacity-25" required />
+                      <input name="plaintiff_national_code" type="text" class="form-control form-control-sm border-info border-opacity-25" />
                     </div>
                     <div>
                       <label class="form-label form-label-sm">شماره تماس خواهان</label>
-                      <input name="plaintiff_mobile" type="text" class="form-control form-control-sm border-info border-opacity-25" required />
+                      <input name="plaintiff_mobile" type="text" class="form-control form-control-sm border-info border-opacity-25" />
                     </div>
                     <div>
                       <label class="form-label form-label-sm">کد پستی خواهان</label>
@@ -1289,7 +1295,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     <div class="modal-dialog modal-lg modal-dialog-centered">
       <div class="modal-content">
         <div class="modal-header">
-          <h5 class="modal-title">مشاهده کامل اطلاعات پرونده</h5>
+          <h5 class="modal-title">نمایش مشخصات پرونده</h5>
           <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
         </div>
         <div class="modal-body">
@@ -1382,6 +1388,57 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
             <button type="submit" class="btn btn-primary">ذخیره تغییرات</button>
           </div>
         </form>
+      </div>
+    </div>
+  </div>
+
+  <div class="modal fade" id="modalAdminCreateBranchUser" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title fs-6">ایجاد مدیر شعبه (مدیر کل)</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <form id="formAdminCreateUserModal">
+            <input type="hidden" name="role" value="branch_admin">
+            <div class="row g-2">
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">نام</label>
+                <input type="text" class="form-control form-control-sm" name="first_name" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">نام خانوادگی</label>
+                <input type="text" class="form-control form-control-sm" name="last_name" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">ایمیل/نام کاربری</label>
+                <input type="text" class="form-control form-control-sm" name="username" required>
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">شماره موبایل</label>
+                <input type="text" class="form-control form-control-sm" name="mobile" required maxlength="11">
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">رمز عبور</label>
+                <input type="password" class="form-control form-control-sm" name="password" required minlength="6">
+              </div>
+              <div class="col-12 col-md-6">
+                <label class="form-label form-label-sm">اداره</label>
+                <select id="adminModalCitySelect" name="city_code" class="form-select form-select-sm" required></select>
+              </div>
+              <div class="col-12">
+                 <div class="d-flex align-items-center justify-content-between">
+                   <label class="form-label form-label-sm mb-1">شعبه‌های مجاز</label>
+                 </div>
+                 <div id="adminModalCreateBranchList" class="row g-2"></div>
+              </div>
+            </div>
+            <div class="mt-3 text-end">
+              <button type="submit" class="btn btn-primary btn-sm">ایجاد</button>
+            </div>
+          </form>
+        </div>
       </div>
     </div>
   </div>

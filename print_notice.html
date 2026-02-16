@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>چاپ ابلاغ</title>
+    <title>چاپ دعوت نامه</title>
     <style>
         @font-face {
             font-family: 'Vazirmatn';
@@ -32,11 +32,58 @@
             box-sizing: border-box;
             position: relative;
         }
-        @media print {
-            body { background: none; padding: 0; }
-            .page { margin: 0; box-shadow: none; border: none; width: 100%; height: auto; }
-            .no-print { display: none; }
-        }
+		@media print {
+
+			@page {
+				size: A4;
+				margin: 0;
+			}
+
+			html, body {
+				width: 210mm;
+				height: 297mm;
+				margin: 0 !important;
+				padding: 0 !important;
+				background: white;
+			}
+
+			.page {
+				width: 210mm;
+				height: 297mm;
+				margin: 0 !important;
+				padding: 15mm;
+				box-sizing: border-box;
+				page-break-after: avoid;
+				box-shadow: none !important;
+			}
+			.header-table td {
+			border: none !important;
+			padding: 5px;
+			vertical-align: top;
+			}
+
+			.box {
+				min-height: auto !important;
+			}
+
+			.footer {
+				position: absolute;
+				bottom: 20mm;
+				width: calc(100% - 30mm);
+			}
+
+			.no-print {
+				display: none !important;
+			}
+
+			.header-table,
+			.header-table td,
+			.header-table th {
+				border: none !important;
+			}
+		}
+
+
         table {
             table-layout: fixed;
             width: 100%;
@@ -64,16 +111,22 @@
         .btn-print-action:hover {
             background: #0b5ed7;
         }
-        .header-table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-        }
-        .header-table td {
-            border: none; /* Removed borders for header */
-            padding: 5px;
-            vertical-align: top;
-        }
+		.header-table,
+		.header-table td,
+		.header-table th {
+			border: none !important;
+		}
+
+		.header-table {
+			width: 100%;
+			border-collapse: collapse;
+			margin-bottom: 30px;
+		}
+
+		.header-table td {
+			padding: 5px;
+			vertical-align: top;
+		}
         .logo-box {
             width: 140px;
             height: auto;
@@ -90,7 +143,7 @@
         .nastaliq-text {
             font-family: 'IranNastaliq', serif;
             font-size: 1.4rem;
-            margin-top: 10px;
+            
         }
         .info-box {
             line-height: 1.8;
@@ -136,7 +189,7 @@
     </style>
 </head>
 <body>
-    <button class="btn-print-action no-print" onclick="window.print()">چاپ / ذخیره ابلاغیه</button>
+    <button class="btn-print-action no-print" onclick="window.print()">چاپ / ذخیره دعوت نامه</button>
     <div id="print-container"></div>
 
     <script>
@@ -178,19 +231,19 @@
                                 <div class="logo-box">
                                     <img src="assets/img/logo.png" alt="لوگو وزارت"> 
                                 </div>
+								<div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></div>
 								
                                 
                             </td>
                             <!-- Middle Column: Title -->
                             <td style="width: 30%; text-align: center; ">
-                                <div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></div>
-                                <h2  style="margin: 0; font-size: 20px; font-family: 'Vazirmatn';"> ابلاغ رای <br> خواهان / خوانده </h2>
+                                
+                                <h2  style="margin: 0; font-size: 28px; font-family: 'B Zar';">  دعوتنامه <br> خواهان / خوانده </h2>
                             </td>
                             <!-- Left Column: Info -->
                             <td style="width: 35%">
                                 <div class="info-box">
                                     <div>کلاسه پرونده: <strong>${toPersianDigits(displayCode)}</strong></div>
-									<div>دادنامه: <strong>${toPersianDigits(generatedDadnameh)}</strong></div>
                                     <div>تاریخ:             </strong></div>
 									<div>شعبه: <strong>${toPersianDigits(row.branch_no || '')}</strong></div>
                                 </div>
@@ -225,10 +278,28 @@
                     </table>
 
                     <table class="section-table">
+                        <!-- Meeting Info -->
                         <tr>
-                            <td class="label-cell">خواسته خواهان</td>
-                            <td class="content-cell">${row.plaintiff_request || ''}</td>
+                            <td class="label-cell">زمان جلسه</td>
+                            <td class="content-cell" colspan="2" style="padding: 10px;">
+                                <div style="display: flex; justify-content: space-around;">
+                                    <span>ساعت: ...........................</span>
+                                    <span>تاریخ: ...........................</span>
+                                    <span>اتاق: ...........................</span>
+									<span>شعبه: <strong>${toPersianDigits(row.branch_no || '')}</span>
+                                </div>
+                            </td>
                         </tr>
+
+                            <td class="label-cell">مکان جلسه</td>
+                            <td class="content-cell" colspan="2" style="padding: 10px;">
+                                <div style=" justify-content: space-around;">
+                                    <span>آدرس : ${row.city_address || ''} <br> هیات تشخیص اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></span>
+
+                                </div>
+                            </td>
+                        </tr>
+
                     </table>
 
                     <table class="notice-body-table">
@@ -254,22 +325,7 @@
                                 تاریخ و امضا:
                             </td>
                         </tr>
-                        <!-- Meeting Info -->
-                        <tr>
-                            <td class="label-cell">زمان جلسه</td>
-                            <td class="content-cell" colspan="2" style="padding: 10px;">
-                                <div style="display: flex; justify-content: space-around;">
-                                    <span>ساعت: ...........................</span>
-                                    <span>روز: ...........................</span>
-                                    <span>مورخ: ...........................</span>
-                                </div>
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label-cell">مکان جلسه</td>
-                            <td class="content-cell">هیات تشخیص اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></td>
-                            <td class="signature-box">شعبه: <strong>${toPersianDigits(row.branch_no || '')}</strong></td>
-                        </tr>
+
                         <!-- Process Server Certification -->
                         <tr>
                             <td class="label-cell" style="height: 120px;">گواهی مأمور ابلاغ</td>

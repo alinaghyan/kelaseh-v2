@@ -441,10 +441,15 @@ table th {
   color: #424242;
 }
 
-#modalKelasehView {
-  z-index: 20000 !important;
+#modalKelasehView,
+#modalKelasehEdit {
+  z-index: 1055 !important;
 }
 
 .modal-backdrop {
-  z-index: 19990 !important;
+  z-index: 1040 !important;
+}
+
+.modal-backdrop.show {
+  opacity: var(--bs-backdrop-opacity, 0.5);
 }

@@ -3,19 +3,19 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>چاپ صورتجلسه هیات تشخیص</title>
+    <title>دادنامه هیات تشخیص</title>
     <style>
         @font-face {
             font-family: 'Vazirmatn';
-            src: url('assets/fonts/Vazirmatn.woff2') format('woff2');
+            src: url('/assets/fonts/Vazirmatn.woff2') format('woff2');
         }
         @font-face {
             font-family: 'IranNastaliq';
-            src: url('assets/fonts/IranNastaliq.woff2') format('woff2');
+            src: url('/assets/fonts/IranNastaliq.woff2') format('woff2');
         }
         @font-face {
             font-family: 'B Zar';
-            src: local('B Zar'), local('BZar'), url('assets/fonts/BZar.ttf') format('truetype');
+            src: local('B Zar'), local('BZar'), url('/assets/fonts/BZar.ttf') format('truetype');
         }
         body {
             font-family: 'B Zar', 'Vazirmatn', Tahoma, Arial, sans-serif;
@@ -35,10 +35,67 @@
             position: relative;
             page-break-after: always;
         }
-        @media print {
-            body { background: none; padding: 0; }
-            .page { margin: 0; box-shadow: none; border: none; width: 100%; height: auto; }
-            .no-print { display: none; }
+		@media print {
+
+			@page {
+				size: A4;
+				margin: 0;
+			}
+
+			html, body {
+				width: 210mm;
+				height: 297mm;
+				margin: 0 !important;
+				padding: 0 !important;
+				background: white;
+			}
+
+			.page {
+				width: 210mm;
+				height: 297mm;
+				margin: 0 !important;
+				padding: 15mm;
+				box-sizing: border-box;
+				page-break-after: avoid;
+				box-shadow: none !important;
+			}
+
+			.box {
+				min-height: auto !important;
+			}
+
+			.footer {
+				position: absolute;
+				bottom: 20mm;
+				width: calc(100% - 30mm);
+			}
+
+			.no-print {
+				display: none !important;
+			}
+						table, td, th, .box {
+				border: 1.5px solid #000 !important;
+			}
+
+			.section-table td,
+			.notice-body-table td {
+				border: 1.5px solid #000 !important;
+			}
+		}
+
+
+    .box {
+        min-height: auto;
+    }
+
+    .footer {
+            margin-top: 50px;
+            display: flex;
+            justify-content: space-between;
+            text-align: center;
+            font-weight: bold;
+            font-size: 12pt;
+    }
         }
         
         /* Header Styles */
@@ -84,7 +141,7 @@
             line-height: 2;
             text-align: justify;
             margin-bottom: 20px;
-            font-family: 'B Nazanin', Tahoma;
+            font-family: 'B Zar', Tahoma;
             font-size: 12pt;
         }
         .box {
@@ -100,12 +157,7 @@
             font-size: 14pt;
         }
         .footer {
-            margin-top: 50px;
-            display: flex;
-            justify-content: space-between;
-            text-align: center;
-            font-weight: bold;
-            font-size: 12pt;
+    	position: relative !important;
         }
         .footer > div {
             width: 30%;
@@ -199,23 +251,23 @@
                     <table class="header-table">
                         <tr>
                             <!-- Right Column: Logo -->
-                            <td style="width: 35%; text-align: center;">
+                            <td style="width: 33.33%; text-align: center;">
                                 <div class="logo-box">
                                     <img src="assets/img/logo.png" alt="لوگو وزارت"> 
                                 </div>
+								<div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${cityTitle}</strong></div>
+
                             </td>
                             <!-- Middle Column: Title -->
-                            <td style="width: 30%; text-align: center;">
-                                <div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${cityTitle}</strong></div>
-                                <h2 style="margin: 0; font-size: 20px; font-family: 'Vazirmatn';">صورتجلسه هیات تشخیص</h2>
+                            <td style="width: 33.33%; text-align: center;">
+                                <h2 style="margin: 0; font-size: 28px; font-family: 'B Zar';">دادنامه <br> هیات تشخیص</h2>
                             </td>
                             <!-- Left Column: Info -->
-                            <td style="width: 35%">
+                            <td style="width: 33.33%">
                                 <div class="info-box">
-                                    <div>کلاسه پرونده: <strong>${toPersianDigits(displayCode)}</strong></div>
+									<div>کلاسه پرونده: <strong>${toPersianDigits(displayCode)}</strong></div>
                                     <div>دادنامه: <strong>${toPersianDigits(generatedDadnameh)}</strong></div>
-                                    <div>تاریخ: <strong>${toPersianDigits(date)}</strong></div>
-                                    <div>شعبه: <strong>${toPersianDigits(branchNo)}</strong></div>
+                                    <div>تاریخ: <strong></strong></div>
                                 </div>
                             </td>
                         </tr>
@@ -232,22 +284,22 @@
                             ${request ? `<br><br><strong>خواسته خواهان:</strong><br>${request}` : ''}
                         </div>
                         
-                        <div class="verdict-title">(رای)</div>
+                        <div class="verdict-title">(رای هیات تشخیص)</div>
                         <div class="content" style="min-height: 150px; white-space: pre-wrap; overflow-wrap: break-word;">${verdict}</div>
 
                         <div class="footer" style="position: absolute; bottom: 10px; width: calc(100% - 20px);">
                             <div>
-                                نمایندگان دولت
+                                نماینده دولت
                                 <br><br><br>
                                 <div class="reps-list">${repGovt}</div>
                             </div>
                             <div>
-                                نمایندگان کارگران
+                                نماینده کارگر
                                 <br><br><br>
                                 <div class="reps-list">${repWorker}</div>
                             </div>
                             <div>
-                                نمایندگان کارفرمایان
+                                نماینده کارفرما
                                 <br><br><br>
                                 <div class="reps-list">${repEmployer}</div>
                             </div>
