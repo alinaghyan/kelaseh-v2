@@ -177,7 +177,7 @@
         }
         
         items.forEach(item => {
-            const code = toPersianDigits(item.full_code || item.code);
+            const code = toPersianDigits(item.new_case_code || item.full_code || item.code);
             const pName = item.plaintiff_name || '-';
             const dName = item.defendant_name || '-';
             const date = toPersianDigits(item.created_at_jalali || '-');

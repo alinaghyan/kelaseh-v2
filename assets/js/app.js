@@ -27,8 +27,7 @@ function initDatePickers() {
   if ($.fn.pDatepicker) {
     $('#kelasehFrom, #kelasehTo, #adminStatsFrom, #adminStatsTo, .date-picker').pDatepicker(commonOptions);
     
-    $('#kelasehManualDate').pDatepicker({
-      ...commonOptions,
+    var manualOptions = $.extend({}, commonOptions, {
       onSelect: function(unix) {
         const date = new persianDate(unix);
         $('#manual_year').val(date.year());
@@ -36,6 +35,7 @@ function initDatePickers() {
         $('#manual_day').val(date.date());
       }
     });
+    $('#kelasehManualDate').pDatepicker(manualOptions);
     $('#kelasehManualDateClear').on('click', function () {
       $('#kelasehManualDate').val('');
       $('#manual_year, #manual_month, #manual_day').val('');
@@ -81,12 +81,13 @@ function showToast(message, type) {
 }
 
 function api(action, data) {
+  var payload = $.extend({}, (data || {}), { action: action });
   return $.ajax({
     url: 'core.php',
     method: 'POST',
-    data: { ...data, action },
+    data: payload,
     headers: csrfToken ? { 'X-CSRF-Token': csrfToken } : {},
-    dataType: 'json',
+    dataType: 'json'
   });
 }
 
@@ -443,6 +444,8 @@ function generateKelasehRows(rows, offset = 0) {
     const rowNo = toPersianDigits(startOffset + idx + 1);
     const rawCode = r.full_code || r.code || '';
     const code = $('<div/>').text(toPersianDigits(rawCode)).html();
+    const rawNewCode = r.new_case_code || '';
+    const newCode = $('<div/>').text(toPersianDigits(rawNewCode)).html();
     const branchNo = toPersianDigits(String(r.branch_no || '').padStart(2, '0'));
     const cityName = $('<div/>').text(toPersianDigits(r.city_name || '')).html();
     const ownerName = $('<div/>').text(toPersianDigits(r.owner_name || '')).html();
@@ -490,6 +493,7 @@ function generateKelasehRows(rows, offset = 0) {
       JSON.stringify({
         code: r.code || '',
         full_code: r.full_code || '',
+        new_case_code: r.new_case_code || '',
         status: r.status || 'active',
         plaintiff_name: r.plaintiff_name || '',
         defendant_name: r.defendant_name || '',
@@ -543,14 +547,13 @@ function generateKelasehRows(rows, offset = 0) {
         </td>
         <td class="text-secondary">${rowNo}</td>
         <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}${statusLabel}</div></td>
+        <td><div class="fw-semibold" dir="ltr">${newCode}</div></td>
         <td class="text-secondary">${branchNo}</td>
         <td class="text-secondary">${cityName}</td>
         <td class="text-secondary small">${ownerName}</td>
         <td>${plaintiff}</td>
         <td class="text-secondary" dir="ltr">${pnc}</td>
         <td>${defendant}</td>
-        <td class="text-secondary">${date}</td>
-        <td>${printStatusHtml}</td>
         <!-- <td>${noticeStatusHtml}</td> -->
         <!-- <td class="${statusClass}">${statusHtml}</td> -->
         <td class="text-end">
@@ -573,7 +576,7 @@ function renderKelaseh(res) {
   const offset = (page - 1) * limit;
 
   const html = generateKelasehRows(rows, offset);
-  $('#kelasehTbody').html(html || `<tr><td colspan="14" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  $('#kelasehTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
   
   // Pagination Info
   const start = offset + 1;
@@ -617,7 +620,7 @@ function refreshKelasehToday() {
     .done((res) => {
       const rows = (res.data && res.data.kelaseh) || [];
       const html = generateKelasehRows(rows);
-      $('#kelasehTodayTbody').html(html || `<tr><td colspan="14" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
+      $('#kelasehTodayTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
     })
     .fail(() => {});
 }
@@ -1118,7 +1121,7 @@ function refreshKelasehHistoryFor(nationalCode, role) {
     .done((res) => {
       const pList = (res.data && res.data.plaintiff) || [];
       const dList = (res.data && res.data.defendant) || [];
-      const allCases = [...pList, ...dList];
+      const allCases = pList.concat(dList);
       // Sort by ID descending (most recent first)
       allCases.sort((a, b) => (b.id || 0) - (a.id || 0));
       
@@ -1319,7 +1322,6 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
 
             try {
                 var plaintiffFields = [
-                    { label: 'شناسه کلاسه', value: p.code },
                     { label: 'شماره دادنامه', value: p.dadnameh },
                     { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
                     { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
@@ -1329,7 +1331,6 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 ];
 
                 var defendantFields = [
-                    { label: 'شناسه کلاسه', value: p.code },
                     { label: 'نام و نام خانوادگی خوانده', value: p.defendant_name },
                     { label: 'کد ملی خوانده', value: p.defendant_national_code },
                     { label: 'شماره تماس خوانده', value: p.defendant_mobile },
@@ -1354,6 +1355,14 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 }
 
                 html = '<div class="row g-3">';
+                var oldCode = $('<div/>').text(toPersianDigits(p.code || '-')).html();
+                var newCode = $('<div/>').text(toPersianDigits(p.new_case_code || '-')).html();
+                var createdAt = $('<div/>').text(toPersianDigits(p.created_at_jalali || '')).html();
+                html += '<div class="col-12"><div class="card border-secondary border-opacity-25 shadow-sm"><div class="card-body p-2">';
+                html += '<div class="small text-secondary mb-1">تاریخ و ساعت ایجاد شناسه:</div><div class="fw-bold text-primary">' + createdAt + '</div>';
+                html += '<div class="small text-secondary mt-2">شناسه قدیم:</div><div class="fw-bold" dir="ltr">' + oldCode + '</div>';
+                html += '<div class="small text-secondary mt-2">شناسه جدید:</div><div class="fw-bold" dir="ltr">' + newCode + '</div>';
+                html += '</div></div></div>';
                 html += renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
                 html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
 
@@ -1586,6 +1595,35 @@ $(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', 
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
+$(document).on('click', '#btnKelasehPrintLabelsNew, #btnKelasehPrintLabelsBottomNew', function () {
+  const codes = [];
+  let excludedCount = 0;
+  $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (raw) {
+      const payload = JSON.parse(decodeURIComponent(raw));
+      if (payload.status === 'active') {
+        if (payload.new_case_code) codes.push(payload.new_case_code);
+      } else {
+        excludedCount++;
+      }
+    }
+  });
+  if (codes.length === 0) {
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
+    return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیرفعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  window.open(`core.php?action=kelaseh.label.new&codes=${codes.join(',')}`, '_blank');
+});
+
 /* چاپ رای → kelaseh.notice */
 $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom', function () {
   const codes = [];
@@ -1748,6 +1786,36 @@ $(document).on('click', '#btnKelasehTodayPrintAllLabels', function () {
   window.open(`core.php?action=kelaseh.label&codes=${codes.join(',')}`, '_blank');
 });
 
+$(document).on('click', '#btnKelasehTodayPrintAllLabelsNew', function () {
+  const codes = [];
+  let excludedCount = 0;
+  const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.status === 'active') {
+          if (payload.new_case_code) codes.push(payload.new_case_code);
+        } else {
+          excludedCount++;
+        }
+      }
+  });
+  if (codes.length === 0) {
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
+    return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیرفعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  window.open(`core.php?action=kelaseh.label.new&codes=${codes.join(',')}`, '_blank');
+});
 $(document).on('click', '#kelasehTbody .btn-kelaseh-sms', function () {
   const tr = $(this).closest('tr');
   const raw = tr.attr('data-json');
@@ -1792,6 +1860,7 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-edit', function () {
   $('#formKelasehEdit [name=defendant_national_code]').val(payload.defendant_national_code);
   $('#formKelasehEdit [name=plaintiff_mobile]').val(payload.plaintiff_mobile);
   $('#formKelasehEdit [name=defendant_mobile]').val(payload.defendant_mobile);
+  $('#editModalKelasehNewCode').text(toPersianDigits(payload.new_case_code || '-'));
   const modal = new bootstrap.Modal(document.getElementById('modalKelasehEdit'));
   modal.show();
 });
@@ -2165,6 +2234,25 @@ $(document).on('click', '#adminUsersTbody .btn-save-user', function () {
 
 $(document).on('click', '#btnAdminLogsRefresh', function () {
   refreshAdminLogs();
+});
+
+$(document).on('click', '#btnAdminBackfillNewCaseCode', function () {
+  if (!confirm('آیا از تولید کلاسه جدید برای پرونده‌های قدیمی مطمئن هستید؟ این عملیات ممکن است زمان‌بر باشد.')) {
+    return;
+  }
+  const btn = $(this);
+  btn.prop('disabled', true).text('در حال اجرا...');
+  api('admin.kelaseh.backfill_new_case_code', {})
+    .done((res) => {
+      showToast(res.message || 'عملیات با موفقیت انجام شد.', 'success');
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در اجرای عملیات.';
+      showToast(msg, 'error');
+    })
+    .always(() => {
+      btn.prop('disabled', false).text('تولید کلاسه جدید برای پرونده‌های قدیمی');
+    });
 });
 
 $(document).on('click', '#btnAdminStatsRefresh', function () {
@@ -2725,7 +2813,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           return;
       }
       
-      const prefix = $('#heyatCityCodePrefix').data('raw') || String(currentUser?.city_code || '').padStart(4, '0');
+      const prefix = $('#heyatCityCodePrefix').data('raw') || String((currentUser && currentUser.city_code) ? currentUser.city_code : '').padStart(4, '0');
       const query = prefix + '-' + suffix;
       
       api('kelaseh.list', { q: query, limit: 10 })
@@ -2762,14 +2850,14 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       if (!raw) return;
       
       const item = JSON.parse(decodeURIComponent(raw));
-      const fullCode = item.full_code || item.code || '';
+      const fullCode = item.new_case_code || item.full_code || item.code || '';
+      const cityPrefix = fullCode.includes('-') ? fullCode.split('-')[0] : ($('#heyatCityCodePrefix').data('raw') || String((currentUser && currentUser.city_code) ? currentUser.city_code : '').padStart(4, '0'));
       
       // Extract suffix
       let suffix = fullCode;
       if (fullCode.includes('-')) {
-          const prefix = $('#heyatCityCodePrefix').data('raw') || String(currentUser?.city_code || '').padStart(4, '0');
-          if (fullCode.startsWith(prefix + '-')) {
-              suffix = fullCode.substring(prefix.length + 1);
+          if (fullCode.startsWith(cityPrefix + '-')) {
+              suffix = fullCode.substring(cityPrefix.length + 1);
           } else {
              // Fallback
              const parts = fullCode.split('-');
@@ -2781,9 +2869,14 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       const f = $('#formHeyatTashkhis');
       f[0].reset(); // Clear first
 
+      $('#heyatCityCodePrefix').text(toPersianDigits(cityPrefix)).data('raw', cityPrefix);
       $('#heyatCodeInput').val(suffix);
       $('#heyatFullCode').val(fullCode);
       $('#heyatCodeSuggestions').hide();
+      
+      // Show old/new codes box if exists
+      $('#heyatOldCodeDisplay').text(toPersianDigits(item.code || '-'));
+      $('#heyatNewCodeDisplay').text(toPersianDigits(item.new_case_code || '-'));
       
       f.find('[name="notice_number"]').val(item.notice_number || '');
       f.find('[name="plaintiff_name"]').val(item.plaintiff_name || '');
@@ -2839,7 +2932,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       e.preventDefault();
       
       const suffix = $('#heyatCodeInput').val();
-      const prefix = $('#heyatCityCodePrefix').data('raw') || String(currentUser?.city_code || '').padStart(4, '0');
+      const prefix = $('#heyatCityCodePrefix').data('raw') || String((currentUser && currentUser.city_code) ? currentUser.city_code : '').padStart(4, '0');
       
       // Always rebuild fullCode on submit
       let fullCode = $('#heyatFullCode').val();

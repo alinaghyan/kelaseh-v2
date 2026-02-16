@@ -237,6 +237,18 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <input name="notice_number" type="text" class="form-control form-control-sm" />
                      </div>
                      
+                     <!-- Codes Box (Old/New) -->
+                     <div class="col-12">
+                        <div class="card border-secondary border-opacity-25">
+                           <div class="card-body p-2">
+                              <div class="small text-secondary">شناسه قدیم:</div>
+                              <div id="heyatOldCodeDisplay" class="fw-bold" dir="ltr">-</div>
+                              <div class="small text-secondary mt-2">شناسه جدید:</div>
+                              <div id="heyatNewCodeDisplay" class="fw-bold" dir="ltr">-</div>
+                           </div>
+                        </div>
+                     </div>
+                     
                      <!-- Row 2: Two Boxes for Plaintiff & Defendant -->
                      <div class="col-12 col-md-6">
                           <div class="card bg-light-subtle border-info border-opacity-25 h-100">
@@ -583,6 +595,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 </div>
 
                 <div class="tab-pane fade" id="adminStats" role="tabpanel">
+                  <div class="d-flex justify-content-between align-items-center mb-2">
+                    <div class="small text-danger">
+                      دکمه زیر موقت است و فقط یک بار برای تولید «کلاسه جدید» برای پرونده‌های قدیمی استفاده شود.
+                    </div>
+                    <button id="btnAdminBackfillNewCaseCode" class="btn btn-outline-danger btn-sm" type="button">تولید کلاسه جدید برای پرونده‌های قدیمی</button>
+                  </div>
                   <div class="row g-2 align-items-end mb-2">
                     <div class="col-6 col-md-4">
                       <label class="form-label form-label-sm">از تاریخ</label>
@@ -1045,7 +1063,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <span>ثبت‌های امروز شما</span>
                     <div class="btn-group btn-group-sm">
                       <button id="btnKelasehTodaySelectAll" class="btn btn-outline-primary" type="button">انتخاب همه</button>
-                      <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button">چاپ لیبل کامل</button>
+                      <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button">چاپ لیبل قدیم</button>
+                      <button id="btnKelasehTodayPrintAllLabelsNew" class="btn btn-outline-secondary" type="button">چاپ لیبل جدید</button>
                       <button id="btnKelasehTodayPrintNotice" class="btn btn-outline-info" type="button">چاپ دعوت نامه</button>
                       <button id="btnKelasehTodayPrintVerdictNotice" class="btn btn-outline-primary" type="button">چاپ ابلاغ</button>
                     </div>
@@ -1056,15 +1075,16 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <tr>
                           <th style="width: 50px;"></th>
                           <th style="width: 50px;">ردیف</th>
-                          <th>کلاسه</th>
+                          <th>کلاسه (قدیمی)</th>
+                          <th>کلاسه (جدید)</th>
                       <th style="width: 60px;">شعبه</th>
                       <th style="width: 140px;">اداره</th>
                       <th>کاربر</th>
                       <th>خواهان</th>
                       <th>کد ملی خواهان</th>
-                      <th>خوانده</th>
-                      <th>تاریخ</th>
-                      <th>چاپ لیبل</th>
+                          <th>خوانده</th>
+                      <!-- <th>تاریخ</th> -->
+                      <!-- چاپ لیبل ستون مخفی شد -->
                       <!-- <th>چاپ ابلاغیه</th> -->
                       <!-- <th>وضعیت</th> -->
                       <th class="text-end">عملیات</th>
@@ -1121,7 +1141,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
                 <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
                 <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
-                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ کامل لیبل</button>
+                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل قدیم</button>
+                <button id="btnKelasehPrintLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل جدید</button>
                 <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
                 <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
                 <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
@@ -1134,15 +1155,16 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <tr>
                       <th style="width: 50px;"></th>
                       <th style="width: 70px;">ردیف</th>
-                      <th>کلاسه</th>
+                      <th>کلاسه (قدیمی)</th>
+                      <th>کلاسه (جدید)</th>
                       <th style="width: 90px;">شعبه</th>
                       <th style="width: 140px;">اداره</th>
                       <th>کاربر</th>
                       <th>خواهان</th>
                       <th>کد ملی خواهان</th>
                       <th>خوانده</th>
-                      <th>تاریخ</th>
-                      <th>چاپ لیبل</th>
+                      <!-- <th>تاریخ</th> -->
+                      <!-- چاپ لیبل ستون مخفی شد -->
                       <!-- <th>چاپ ابلاغیه</th> -->
                       <!-- <th>وضعیت</th> -->
                       <th class="text-end">عملیات</th>
@@ -1153,7 +1175,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               </div>
 
               <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center">
-                <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل‌های انتخاب شده</button>
+                <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل قدیم (انتخاب‌ها)</button>
+                <button id="btnKelasehPrintLabelsBottomNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل جدید (انتخاب‌ها)</button>
                 <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه انتخاب شده</button>
                 <button id="btnKelasehPrintVerdictNoticeBottom" class="btn btn-outline-primary btn-sm" type="button">ابلاغ رای انتخاب شده</button>
                 <button id="btnKelasehPrintMinutesBottom" class="btn btn-outline-warning btn-sm" type="button">چاپ رای انتخاب شده</button>
@@ -1205,8 +1228,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
         </div>
         <form id="formKelasehEdit">
           <div class="modal-body">
-            <div class="alert alert-secondary py-2 mb-3">
-              شناسه کلاسه: <strong id="editModalKelasehCode">---</strong>
+            <div class="alert alert-secondary py-2 mb-3" dir="ltr">
+              شناسه قدیم: <strong id="editModalKelasehCode">---</strong><br/>
+              شناسه جدید: <strong id="editModalKelasehNewCode">---</strong>
             </div>
             <input type="hidden" name="code" value="" />
             <div class="row g-3">
@@ -1249,16 +1273,16 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   </div>
                   <div class="card-body p-3 vstack gap-2">
                     <div>
-                      <label class="form-label form-label-sm">نام و نام خانوادگی خوانده</label>
-                      <input name="defendant_name" type="text" class="form-control form-control-sm border-warning border-opacity-25" required />
+                      <label class="form-label form-label-sm">نام و نام خانوادگی / نام شرکت خوانده</label>
+                      <input name="defendant_name" type="text" class="form-control form-control-sm border-warning border-opacity-25" />
                     </div>
                     <div>
-                      <label class="form-label form-label-sm">کد ملی خوانده</label>
-                      <input name="defendant_national_code" type="text" class="form-control form-control-sm border-warning border-opacity-25" required />
+                      <label class="form-label form-label-sm">کد ملی / شناسه ملی</label>
+                      <input name="defendant_national_code" type="text" class="form-control form-control-sm border-warning border-opacity-25" />
                     </div>
                     <div>
                       <label class="form-label form-label-sm">شماره تماس خوانده</label>
-                      <input name="defendant_mobile" type="text" class="form-control form-control-sm border-warning border-opacity-25" required />
+                      <input name="defendant_mobile" type="text" class="form-control form-control-sm border-warning border-opacity-25" />
                     </div>
                     <div>
                       <label class="form-label form-label-sm">کد پستی خوانده</label>

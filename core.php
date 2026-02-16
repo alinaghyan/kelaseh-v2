@@ -434,6 +434,16 @@ function ensure_kelaseh_numbers_supports_manual_flag(): void
     } catch (Throwable $e) {}
 }
 
+function ensure_kelaseh_numbers_supports_new_case_code(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `new_case_code` VARCHAR(30) NULL DEFAULT NULL AFTER `code`');
+    } catch (Throwable $e) {}
+}
+
 function ensure_city_code_supports_variable_length(): void
 {
     static $done = false;
@@ -723,8 +733,8 @@ function action_kelaseh_get_by_code(array $data): void {
     $user = auth_require_login();
     $code = trim((string)($data['code'] ?? ''));
     if (!$code) json_response(false, ['message' => 'کلاسه الزامی است'], 422);
-    $sql = "SELECT k.*, u.city_code FROM kelaseh_numbers k JOIN users u ON u.id = k.owner_id WHERE k.code = ?";
-    $params = [$code];
+    $sql = "SELECT k.*, u.city_code FROM kelaseh_numbers k JOIN users u ON u.id = k.owner_id WHERE (k.code = ? OR k.new_case_code = ?)";
+    $params = [$code, $code];
 
     if (in_array($user['role'], ['branch_admin', 'user'], true)) {
         $cityNorm = normalize_city_code($user['city_code']) ?? $user['city_code'];
@@ -780,9 +790,9 @@ function action_heyat_tashkhis_save(array $data): void {
     $pNC = validate_national_code($data['plaintiff_national_code'] ?? null);
     $dNC = validate_national_code($data['defendant_national_code'] ?? null);
     
-    // Check if exists
-    $stmt = db()->prepare("SELECT id, owner_id FROM kelaseh_numbers WHERE code = ? LIMIT 1");
-    $stmt->execute([$code]);
+    // Check if exists by old or new code
+    $stmt = db()->prepare("SELECT id, owner_id, code, new_case_code FROM kelaseh_numbers WHERE code = ? OR new_case_code = ? LIMIT 1");
+    $stmt->execute([$code, $code]);
     $existing = $stmt->fetch();
 
     $now = now_mysql();
@@ -800,6 +810,8 @@ function action_heyat_tashkhis_save(array $data): void {
             }
         }
         $kelasehId = $existing['id'];
+        // Normalize $code to stored old code if we looked up by new_case_code
+        $code = $existing['code'] ?? $code;
         
         $sql = "UPDATE kelaseh_numbers SET 
                 notice_number = ?,
@@ -1032,6 +1044,7 @@ function kelaseh_create_internal(array $user, array $data): array
 
     ensure_kelaseh_numbers_code_supports_city_prefix();
     ensure_kelaseh_numbers_supports_manual_flag();
+    ensure_kelaseh_numbers_supports_new_case_code();
 
     $selectedBranch = null;
 
@@ -1096,9 +1109,29 @@ function kelaseh_create_internal(array $user, array $data): array
                 . sprintf('%02d', $j['jd'])
                 . $seqPart;
 
-            $sql = "INSERT INTO kelaseh_numbers (owner_id, code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, plaintiff_address, plaintiff_postal_code, defendant_name, defendant_national_code, defendant_mobile, defendant_address, defendant_postal_code, dadnameh, representatives_govt, representatives_worker, representatives_employer, plaintiff_request, verdict_text, status, is_manual, is_manual_branch, created_at, updated_at)
+            $monthlyPrefix = $cityPart
+                . '-' . $branchNo2
+                . sprintf('%02d', $j['jy'] % 100)
+                . sprintf('%02d', $j['jm']);
+
+            $monthlySeq = 1;
+            try {
+                $stmtSeq = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
+                $stmtSeq->execute([$monthlyPrefix . '%']);
+                $curMonthly = $stmtSeq->fetchColumn();
+                if ($curMonthly !== false && $curMonthly !== null) {
+                    $monthlySeq = ((int)$curMonthly) + 1;
+                    if ($monthlySeq < 1) $monthlySeq = 1;
+                }
+            } catch (Throwable $e) {
+                $monthlySeq = 1;
+            }
+
+            $newCaseCode = $monthlyPrefix . sprintf('%04d', (int)$monthlySeq);
+
+            $sql = "INSERT INTO kelaseh_numbers (owner_id, code, new_case_code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, plaintiff_address, plaintiff_postal_code, defendant_name, defendant_national_code, defendant_mobile, defendant_address, defendant_postal_code, dadnameh, representatives_govt, representatives_worker, representatives_employer, plaintiff_request, verdict_text, status, is_manual, is_manual_branch, created_at, updated_at)
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
-            db()->prepare($sql)->execute([(int)$user['id'], $code, (int)$b, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $pAddress, $pPostal, $dName, (string)$dNC, (string)$dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, $isManual, $isManualBranch, $createdAt, $createdAt]);
+            db()->prepare($sql)->execute([(int)$user['id'], $code, $newCaseCode, (int)$b, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $pAddress, $pPostal, $dName, (string)$dNC, (string)$dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, $isManual, $isManualBranch, $createdAt, $createdAt]);
             
             db()->commit();
             $finalCode = $code;
@@ -1326,6 +1359,106 @@ function action_kelaseh_label(array $data): void {
     exit;
 }
 
+function action_kelaseh_label_new(array $data): void {
+    $user = auth_require_login();
+    $codes = [];
+    $inputCodes = $data['codes'] ?? $_GET['codes'] ?? null;
+    $inputCode = $data['code'] ?? $_GET['code'] ?? null;
+    if (!empty($inputCodes)) {
+        $codes = array_values(array_filter(array_map('trim', explode(',', (string)$inputCodes))));
+    } elseif (!empty($inputCode)) {
+        $codes = [trim((string)$inputCode)];
+    }
+    if (empty($codes)) {
+        echo "کدی ارائه نشده است.";
+        exit;
+    }
+    $placeholders = implode(',', array_fill(0, count($codes), '?'));
+    $sql = "SELECT k.*, u.city_code, c.name as city_name, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
+            FROM kelaseh_numbers k 
+            JOIN users u ON u.id = k.owner_id 
+            LEFT JOIN isfahan_cities c ON c.code = u.city_code 
+            WHERE k.new_case_code IN ($placeholders)";
+    $params = $codes;
+    if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
+        $sql .= " AND k.owner_id = ?";
+        $params[] = (int)$user['id'];
+    } elseif ($user['role'] === 'office_admin') {
+        $cityCode = $user['city_code'] ?? '';
+        $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+        $params[] = $cityCode;
+        $params[] = str_pad($cityCode, 4, '0', STR_PAD_LEFT);
+    }
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $fetchedRows = $stmt->fetchAll();
+    if (empty($fetchedRows)) {
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
+        exit;
+    }
+    try {
+        $printType = count($codes) === 1 ? 'single' : 'bulk';
+        $now = now_mysql();
+        // Update for new_case_code
+        $updateSql1 = "UPDATE kelaseh_numbers SET print_type = ?, last_printed_at = ? WHERE new_case_code IN ($placeholders)";
+        $updateParams1 = array_merge([$printType, $now], $codes);
+        db()->prepare($updateSql1)->execute($updateParams1);
+        // Also update corresponding old codes
+        $oldCodes = array_values(array_unique(array_filter(array_map(function($r){ return (string)($r['code'] ?? ''); }, $fetchedRows))));
+        if (!empty($oldCodes)) {
+            $ph2 = implode(',', array_fill(0, count($oldCodes), '?'));
+            $updateSql2 = "UPDATE kelaseh_numbers SET print_type = ?, last_printed_at = ? WHERE code IN ($ph2)";
+            $updateParams2 = array_merge([$printType, $now], $oldCodes);
+            db()->prepare($updateSql2)->execute($updateParams2);
+        }
+    } catch (Throwable $e) {
+    }
+    foreach ($fetchedRows as &$r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+        $r['full_code'] = (string)($r['new_case_code'] ?? '');
+    }
+    $buildHistory = function (array $viewer, array $row): array {
+        $limit = 7;
+        $pnc = validate_national_code($row['plaintiff_national_code'] ?? null);
+        $dnc = validate_national_code($row['defendant_national_code'] ?? null);
+        $pOut = [];
+        $dOut = [];
+        if ($pnc) {
+            $list = kelaseh_fetch_rows($viewer, ['national_code' => $pnc, 'from' => null, 'to' => null, 'q' => '', 'owner_id' => 0, 'city_code' => null], $limit);
+            foreach ($list as $it) {
+                $pOut[] = [
+                    'code' => (string)($it['full_code'] ?? $it['code'] ?? ''),
+                    'city' => (string)($it['city_name'] ?? ''),
+                    'created_at_jalali' => (string)($it['created_at_jalali'] ?? '')
+                ];
+                if (count($pOut) >= 5) break;
+            }
+        }
+        if ($dnc) {
+            $list = kelaseh_fetch_rows($viewer, ['national_code' => $dnc, 'from' => null, 'to' => null, 'q' => '', 'owner_id' => 0, 'city_code' => null], $limit);
+            foreach ($list as $it) {
+                $dOut[] = [
+                    'code' => (string)($it['full_code'] ?? $it['code'] ?? ''),
+                    'city' => (string)($it['city_name'] ?? ''),
+                    'created_at_jalali' => (string)($it['created_at_jalali'] ?? '')
+                ];
+                if (count($dOut) >= 5) break;
+            }
+        }
+        return ['plaintiff' => $pOut, 'defendant' => $dOut];
+    };
+    foreach ($fetchedRows as &$r) {
+        $hist = $buildHistory($user, $r);
+        $r['history_plaintiff'] = $hist['plaintiff'];
+        $r['history_defendant'] = $hist['defendant'];
+    }
+    $html = file_get_contents(__DIR__ . '/print_labels.html');
+    $jsonData = json_encode($fetchedRows);
+    $script = '<script>(function(){ const data = ' . $jsonData . '; localStorage.setItem(\"print_queue\", JSON.stringify(data)); })();</script>';
+    $html = str_replace('<head>', "<head>$script", $html);
+    echo $html;
+    exit;
+}
 function action_kelaseh_notice(array $data): void {
     try {
         $user = auth_require_login();
@@ -1737,12 +1870,11 @@ function action_kelaseh_update(array $data): void
     $dNCInput = trim((string)($data['defendant_national_code'] ?? ''));
     $dMobInput = trim((string)($data['defendant_mobile'] ?? ''));
     $dName = trim((string)($data['defendant_name'] ?? ''));
-    $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
-    $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
+    $dNC = $dNCInput; // اختیاری و بدون الزام به 10 رقم
+    $dMob = $dMobInput; // اختیاری؛ بدون اعتبارسنجی
 
     if (!$pNC || !$pMob) json_response(false, ['message' => 'اطلاعات خواهان نامعتبر است.'], 422);
-    if ($dNC === null) json_response(false, ['message' => 'کد ملی خوانده نامعتبر است.'], 422);
-    if ($dMob === null) json_response(false, ['message' => 'موبایل خوانده نامعتبر است.'], 422);
+    // فیلدهای خوانده اختیاری هستند؛ عدم اعتبارسنجی سخت‌گیرانه
 
     $params = [$pName, $dName, $pNC, (string)$dNC, $pMob, (string)$dMob, now_mysql()];
     $where = 'code = ?';
@@ -2032,19 +2164,19 @@ function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, i
         
         // Priority logic: if it looks like a national code (10 digits) or legal ID (11 digits)
         if (preg_match('/^[0-9]{10,11}$/', $national)) {
-            $baseSql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR k.code LIKE ? OR k.plaintiff_mobile LIKE ? OR k.defendant_mobile LIKE ? OR c.name LIKE ? OR k.branch_no LIKE ?)";
-            array_push($params, $national, $national, $like, $like, $like, $like, $like, $like, $like);
+            $baseSql .= " AND (k.plaintiff_national_code = ? OR k.defendant_national_code = ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR k.code LIKE ? OR k.new_case_code LIKE ? OR k.plaintiff_mobile LIKE ? OR k.defendant_mobile LIKE ? OR c.name LIKE ? OR k.branch_no LIKE ?)";
+            array_push($params, $national, $national, $like, $like, $like, $like, $like, $like, $like, $like);
         } else {
-            $baseSql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR k.code LIKE ? OR k.plaintiff_mobile LIKE ? OR k.defendant_mobile LIKE ? OR c.name LIKE ? OR k.branch_no LIKE ?)";
-            array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like);
+            $baseSql .= " AND (k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR k.code LIKE ? OR k.new_case_code LIKE ? OR k.plaintiff_mobile LIKE ? OR k.defendant_mobile LIKE ? OR c.name LIKE ? OR k.branch_no LIKE ?)";
+            array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like, $like);
         }
     }
 
     if ($q !== '') {
         $qEng = to_english_digits($q);
         $like = "%$qEng%";
-        $baseSql .= " AND (k.code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
-        array_push($params, $like, $like, $like, $like, $like, $like, $like, $like);
+        $baseSql .= " AND (k.code LIKE ? OR k.new_case_code LIKE ? OR k.plaintiff_national_code LIKE ? OR k.defendant_national_code LIKE ? OR k.plaintiff_name LIKE ? OR k.defendant_name LIKE ? OR u.username LIKE ? OR u.first_name LIKE ? OR u.last_name LIKE ?)";
+        array_push($params, $like, $like, $like, $like, $like, $like, $like, $like, $like);
     }
 
     if ($from) {
@@ -2283,6 +2415,75 @@ function action_admin_kelaseh_search(array $data): void
     
     $rows = kelaseh_fetch_rows($user, $filters, 200);
     json_response(true, ['data' => ['results' => $rows]]);
+}
+
+function action_admin_kelaseh_backfill_new_case_code(): void
+{
+    $user = auth_require_login();
+    auth_require_admin($user);
+    csrf_require_valid();
+
+    ensure_kelaseh_numbers_supports_new_case_code();
+
+    $sql = "SELECT k.id, k.new_case_code, k.jalali_full_ymd, k.branch_no, u.city_code
+            FROM kelaseh_numbers k
+            JOIN users u ON u.id = k.owner_id
+            WHERE k.new_case_code IS NULL
+            ORDER BY u.city_code, k.branch_no, k.jalali_full_ymd, k.id";
+    $stmt = db()->prepare($sql);
+    $stmt->execute();
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    if (!$rows) {
+        json_response(true, ['message' => 'رکوردی برای به‌روزرسانی یافت نشد.']);
+    }
+
+    $updateStmt = db()->prepare("UPDATE kelaseh_numbers SET new_case_code = ? WHERE id = ?");
+    $prefixCounters = [];
+
+    foreach ($rows as $r) {
+        $cityCodeRaw = $r['city_code'] ?? '';
+        $cityCode = resolve_city_code_fk($cityCodeRaw) ?? $cityCodeRaw;
+        $cityPart = str_pad((string)$cityCode, 4, '0', STR_PAD_LEFT);
+
+        $branchNo = (int)($r['branch_no'] ?? 0);
+        $branchNo2 = sprintf('%02d', $branchNo);
+
+        $jalaliFull = (string)($r['jalali_full_ymd'] ?? '');
+        if (strlen($jalaliFull) !== 8) {
+            continue;
+        }
+
+        $jy = (int)substr($jalaliFull, 0, 4);
+        $jm = (int)substr($jalaliFull, 4, 2);
+
+        if ($jy < 1300 || $jm < 1 || $jm > 12) {
+            continue;
+        }
+
+        $monthlyPrefix = $cityPart
+            . '-' . $branchNo2
+            . sprintf('%02d', $jy % 100)
+            . sprintf('%02d', $jm);
+
+        if (!isset($prefixCounters[$monthlyPrefix])) {
+            $stmtMax = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
+            $stmtMax->execute([$monthlyPrefix . '%']);
+            $cur = $stmtMax->fetchColumn();
+            $prefixCounters[$monthlyPrefix] = ($cur !== false && $cur !== null) ? (int)$cur : 0;
+            if ($prefixCounters[$monthlyPrefix] < 0) {
+                $prefixCounters[$monthlyPrefix] = 0;
+            }
+        }
+
+        $prefixCounters[$monthlyPrefix]++;
+        $seq = $prefixCounters[$monthlyPrefix];
+        $newCaseCode = $monthlyPrefix . sprintf('%04d', (int)$seq);
+
+        $updateStmt->execute([$newCaseCode, (int)$r['id']]);
+    }
+
+    json_response(true, ['message' => 'کلاسه‌های جدید برای رکوردهای قدیمی محاسبه و ذخیره شد.']);
 }
 
 // ADMIN ACTIONS RESTORED
@@ -2914,6 +3115,7 @@ function handle_request(): void
                 break;
             case 'kelaseh.export.csv': action_kelaseh_export_csv($data); break;
             case 'kelaseh.export.print': action_kelaseh_export_print($data); break;
+            case 'kelaseh.label.new': action_kelaseh_label_new($data); break;
             
             case 'kelaseh.search.by_nc': action_kelaseh_search_by_nc($data); break;
             case 'kelaseh.get': action_kelaseh_get_by_code($data); break;
@@ -2941,6 +3143,7 @@ function handle_request(): void
             case 'admin.items.list': action_admin_items_list($data); break;
             case 'admin.items.delete': action_admin_items_delete($data); break;
             case 'admin.kelaseh.stats': action_admin_kelaseh_stats($data); break;
+            case 'admin.kelaseh.backfill_new_case_code': action_admin_kelaseh_backfill_new_case_code(); break;
             case 'admin.sms.settings.get': action_admin_sms_settings_get(); break;
             case 'admin.sms.settings.set': action_admin_sms_settings_set($data); break;
             case 'admin.detailed.stats': action_admin_detailed_stats(); break;
