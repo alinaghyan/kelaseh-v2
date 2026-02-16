@@ -437,11 +437,13 @@ function renderPage(page) {
   }
 }
 
-function generateKelasehRows(rows, offset = 0) {
+function generateKelasehRows(rows, offset = 0, total = 0) {
   if (!rows || !rows.length) return '';
   const startOffset = parseInt(offset) || 0;
+  const totalCount = parseInt(total) || 0;
   return rows.map((r, idx) => {
-    const rowNo = toPersianDigits(startOffset + idx + 1);
+    const rowNoNum = totalCount > 0 ? (totalCount - (startOffset + idx)) : (startOffset + idx + 1);
+    const rowNo = toPersianDigits(rowNoNum);
     const rawCode = r.full_code || r.code || '';
     const code = $('<div/>').text(toPersianDigits(rawCode)).html();
     const rawNewCode = r.new_case_code || '';
@@ -575,7 +577,7 @@ function renderKelaseh(res) {
   const limit = data.limit || 100;
   const offset = (page - 1) * limit;
 
-  const html = generateKelasehRows(rows, offset);
+  const html = generateKelasehRows(rows, offset, total);
   $('#kelasehTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
   
   // Pagination Info
@@ -619,7 +621,7 @@ function refreshKelasehToday() {
   api('kelaseh.list.today', {})
     .done((res) => {
       const rows = (res.data && res.data.kelaseh) || [];
-      const html = generateKelasehRows(rows);
+      const html = generateKelasehRows(rows, 0, rows.length);
       $('#kelasehTodayTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
     })
     .fail(() => {});

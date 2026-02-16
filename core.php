@@ -444,6 +444,37 @@ function ensure_kelaseh_numbers_supports_new_case_code(): void
     } catch (Throwable $e) {}
 }
 
+function ensure_kelaseh_numbers_supports_extended_fields(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+
+    $cols = [
+        'notice_number' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `notice_number` VARCHAR(50) NULL DEFAULT NULL AFTER `is_manual`",
+        'plaintiff_address' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `plaintiff_address` TEXT NULL AFTER `plaintiff_mobile`",
+        'plaintiff_postal_code' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `plaintiff_postal_code` VARCHAR(20) NULL DEFAULT NULL AFTER `plaintiff_address`",
+        'defendant_address' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `defendant_address` TEXT NULL AFTER `defendant_mobile`",
+        'defendant_postal_code' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `defendant_postal_code` VARCHAR(20) NULL DEFAULT NULL AFTER `defendant_address`",
+        'dadnameh' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `dadnameh` VARCHAR(80) NULL DEFAULT NULL AFTER `defendant_postal_code`",
+        'representatives_govt' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `representatives_govt` TEXT NULL AFTER `dadnameh`",
+        'representatives_worker' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `representatives_worker` TEXT NULL AFTER `representatives_govt`",
+        'representatives_employer' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `representatives_employer` TEXT NULL AFTER `representatives_worker`",
+        'plaintiff_request' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `plaintiff_request` TEXT NULL AFTER `representatives_employer`",
+        'verdict_text' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `verdict_text` TEXT NULL AFTER `plaintiff_request`",
+        'print_type' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `print_type` VARCHAR(20) NULL DEFAULT NULL AFTER `status`",
+        'last_printed_at' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `last_printed_at` DATETIME NULL DEFAULT NULL AFTER `print_type`",
+        'last_notice_printed_at' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `last_notice_printed_at` DATETIME NULL DEFAULT NULL AFTER `last_printed_at`",
+    ];
+
+    foreach ($cols as $sql) {
+        try {
+            db()->exec($sql);
+        } catch (Throwable $e) {
+        }
+    }
+}
+
 function ensure_city_code_supports_variable_length(): void
 {
     static $done = false;
@@ -776,6 +807,9 @@ function action_heyat_tashkhis_save(array $data): void {
     csrf_require_valid();
     if (!in_array($user['role'], ['branch_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز (فقط مدیر شعبه)'], 403);
 
+    ensure_kelaseh_numbers_supports_extended_fields();
+    ensure_kelaseh_numbers_supports_new_case_code();
+
     $code = trim((string)($data['code'] ?? ''));
     if (!$code || strlen($code) < 5) json_response(false, ['message' => 'کلاسه پرونده معتبر نیست (حداقل ۵ کاراکتر).'], 422);
 
@@ -1045,6 +1079,7 @@ function kelaseh_create_internal(array $user, array $data): array
     ensure_kelaseh_numbers_code_supports_city_prefix();
     ensure_kelaseh_numbers_supports_manual_flag();
     ensure_kelaseh_numbers_supports_new_case_code();
+    ensure_kelaseh_numbers_supports_extended_fields();
 
     $selectedBranch = null;
 
@@ -1109,28 +1144,33 @@ function kelaseh_create_internal(array $user, array $data): array
                 . sprintf('%02d', $j['jd'])
                 . $seqPart;
 
-            $monthlyPrefix = $cityPart
-                . '-' . $branchNo2
-                . sprintf('%02d', $j['jy'] % 100)
-                . sprintf('%02d', $j['jm']);
+            $yy2 = sprintf('%02d', $j['jy'] % 100);
+            $mm2 = sprintf('%02d', $j['jm']);
+            $monthlyPrefix = $cityPart . '-' . $branchNo2 . $yy2 . $mm2;
 
-            $monthlySeq = 1;
+            $yearLike = $cityPart . '-__' . $yy2 . '______';
+            $yearSeq = 1;
             try {
                 $stmtSeq = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
-                $stmtSeq->execute([$monthlyPrefix . '%']);
-                $curMonthly = $stmtSeq->fetchColumn();
-                if ($curMonthly !== false && $curMonthly !== null) {
-                    $monthlySeq = ((int)$curMonthly) + 1;
-                    if ($monthlySeq < 1) $monthlySeq = 1;
+                $stmtSeq->execute([$yearLike]);
+                $curYear = $stmtSeq->fetchColumn();
+                if ($curYear !== false && $curYear !== null) {
+                    $yearSeq = ((int)$curYear) + 1;
+                    if ($yearSeq < 1) $yearSeq = 1;
                 }
             } catch (Throwable $e) {
-                $monthlySeq = 1;
+                $yearSeq = 1;
             }
 
-            $newCaseCode = $monthlyPrefix . sprintf('%04d', (int)$monthlySeq);
+            if ($yearSeq > 9999) {
+                db()->rollBack();
+                throw new HttpError(429, 'سقف کلاسه جدید در این سال تکمیل شده است.');
+            }
+
+            $newCaseCode = $monthlyPrefix . sprintf('%04d', (int)$yearSeq);
 
             $sql = "INSERT INTO kelaseh_numbers (owner_id, code, new_case_code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, plaintiff_address, plaintiff_postal_code, defendant_name, defendant_national_code, defendant_mobile, defendant_address, defendant_postal_code, dadnameh, representatives_govt, representatives_worker, representatives_employer, plaintiff_request, verdict_text, status, is_manual, is_manual_branch, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
             db()->prepare($sql)->execute([(int)$user['id'], $code, $newCaseCode, (int)$b, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $pAddress, $pPostal, $dName, (string)$dNC, (string)$dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, $isManual, $isManualBranch, $createdAt, $createdAt]);
             
             db()->commit();
@@ -1340,7 +1380,7 @@ function action_kelaseh_label(array $data): void {
     }
 
     // Now load the HTML template
-    $html = file_get_contents(__DIR__ . '/print_labels.html');
+    $html = file_get_contents(__DIR__ . '/print_labels_new.html');
     
     // We need to inject the data into the HTML. 
     // The HTML currently looks for localStorage 'print_queue'.
@@ -2197,10 +2237,10 @@ function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, i
     // Fetch rows
     $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name " . $baseSql;
     
-    $orderSql = "k.id DESC";
+    $orderSql = "COALESCE(CAST(RIGHT(k.new_case_code, 4) AS UNSIGNED), k.id) ASC";
     if ($national !== '' && preg_match('/^[0-9]{10,11}$/', $national)) {
         // Priority to exact matches on national code or legal ID
-        $orderSql = "CASE WHEN k.plaintiff_national_code = ? OR k.defendant_national_code = ? THEN 0 ELSE 1 END, k.id DESC";
+        $orderSql = "CASE WHEN k.plaintiff_national_code = ? OR k.defendant_national_code = ? THEN 0 ELSE 1 END, COALESCE(CAST(RIGHT(k.new_case_code, 4) AS UNSIGNED), k.id) ASC";
         array_push($params, $national, $national);
     }
     
@@ -2425,11 +2465,11 @@ function action_admin_kelaseh_backfill_new_case_code(): void
 
     ensure_kelaseh_numbers_supports_new_case_code();
 
-    $sql = "SELECT k.id, k.new_case_code, k.jalali_full_ymd, k.branch_no, u.city_code
+    $sql = "SELECT k.id, k.new_case_code, k.jalali_full_ymd, k.branch_no, u.city_code, k.created_at
             FROM kelaseh_numbers k
             JOIN users u ON u.id = k.owner_id
             WHERE k.new_case_code IS NULL
-            ORDER BY u.city_code, k.branch_no, k.jalali_full_ymd, k.id";
+            ORDER BY k.created_at ASC, k.id ASC";
     $stmt = db()->prepare($sql);
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2439,7 +2479,7 @@ function action_admin_kelaseh_backfill_new_case_code(): void
     }
 
     $updateStmt = db()->prepare("UPDATE kelaseh_numbers SET new_case_code = ? WHERE id = ?");
-    $prefixCounters = [];
+    $yearCounters = [];
 
     foreach ($rows as $r) {
         $cityCodeRaw = $r['city_code'] ?? '';
@@ -2461,24 +2501,31 @@ function action_admin_kelaseh_backfill_new_case_code(): void
             continue;
         }
 
-        $monthlyPrefix = $cityPart
-            . '-' . $branchNo2
-            . sprintf('%02d', $jy % 100)
-            . sprintf('%02d', $jm);
+        $yy2 = sprintf('%02d', $jy % 100);
+        $mm2 = sprintf('%02d', $jm);
+        $prefix = $cityPart . '-' . $branchNo2 . $yy2 . $mm2;
 
-        if (!isset($prefixCounters[$monthlyPrefix])) {
-            $stmtMax = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
-            $stmtMax->execute([$monthlyPrefix . '%']);
-            $cur = $stmtMax->fetchColumn();
-            $prefixCounters[$monthlyPrefix] = ($cur !== false && $cur !== null) ? (int)$cur : 0;
-            if ($prefixCounters[$monthlyPrefix] < 0) {
-                $prefixCounters[$monthlyPrefix] = 0;
+        $yearKey = $cityPart . '-' . $yy2;
+        if (!isset($yearCounters[$yearKey])) {
+            $yearCounters[$yearKey] = 0;
+            try {
+                $like = $cityPart . '-__' . $yy2 . '______';
+                $stmtMax = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
+                $stmtMax->execute([$like]);
+                $maxSeq = $stmtMax->fetchColumn();
+                $yearCounters[$yearKey] = ($maxSeq !== false && $maxSeq !== null) ? (int)$maxSeq : 0;
+                if ($yearCounters[$yearKey] < 0) $yearCounters[$yearKey] = 0;
+            } catch (Throwable $e) {
+                $yearCounters[$yearKey] = 0;
             }
         }
 
-        $prefixCounters[$monthlyPrefix]++;
-        $seq = $prefixCounters[$monthlyPrefix];
-        $newCaseCode = $monthlyPrefix . sprintf('%04d', (int)$seq);
+        $yearCounters[$yearKey]++;
+        $seq = (int)$yearCounters[$yearKey];
+        if ($seq > 9999) {
+            continue;
+        }
+        $newCaseCode = $prefix . sprintf('%04d', $seq);
 
         $updateStmt->execute([$newCaseCode, (int)$r['id']]);
     }

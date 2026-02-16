@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
     <meta charset="UTF-8">
-    <title>چاپ لیبل پرونده</title>
+    <title>چاپ لیبل پرونده (کلاسه جدید)</title>
     <style>
         @font-face {
             font-family: 'Vazirmatn';
@@ -29,13 +29,13 @@
             display: flex;
             flex-direction: column;
             align-items: center;
-            justify-content: center; /* Center vertically if single or small content */
+            justify-content: center;
             padding: 10mm;
             background: #eee;
         }
         .label-box {
             width: 100%;
-            max-width: 180mm; /* Fits A4, scales down for A5 */
+            max-width: 180mm;
             border: 2px solid #000;
             padding: 20px;
             background: #fff;
@@ -85,7 +85,6 @@
             direction: ltr;
             unicode-bidi: embed;
         }
-        /* Single label scaling */
         .single-label .label-box {
             padding: 30px;
             border-width: 3px;
@@ -104,97 +103,46 @@
             font-size: 18px;
             margin-top: 25px;
         }
-
         @media print {
-            @page {
-                margin: 0;
-            }
-            body { 
-                background: #fff; 
-                display: block;
-                width: 100%;
-                height: 100%;
-            }
+            @page { margin: 0; }
+            body { background: #fff; display: block; width: 100%; height: 100%; }
             .no-print { display: none !important; }
-            .print-container { 
-                padding: 0; 
-                margin: 0;
-                background: #fff;
-                display: flex;
-                height: 100vh;
-                width: 100vw;
-                justify-content: center;
-                align-items: center;
-                overflow: hidden; /* Prevent spillover to second page */
-            }
-            /* If multiple labels, don't force full height centering for all */
-            .print-container.multiple-labels {
-                display: block;
-                height: auto;
-                width: auto;
-                padding: 10mm;
-            }
-            .label-box {
-                margin: 0;
-                border-width: 2px;
-                box-shadow: none;
-                page-break-inside: avoid;
-            }
-            .multiple-labels .label-box {
-                margin-bottom: 20px;
-            }
+            .print-container { padding: 0; margin: 0; background: #fff; display: flex; height: 100vh; width: 100vw; justify-content: center; align-items: center; overflow: hidden; }
+            .print-container.multiple-labels { display: block; height: auto; width: auto; padding: 10mm; }
+            .label-box { margin: 0; border-width: 2px; box-shadow: none; page-break-inside: avoid; }
+            .multiple-labels .label-box { margin-bottom: 20px; }
         }
     </style>
-</head>
-<body>
-
-<div class="no-print" style="text-align: center; margin-bottom: 20px;">
-    <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">چاپ / ذخیره PDF</button>
-</div>
-
-<div class="print-container" id="labelsContainer">
-    <!-- Labels will be injected here -->
-</div>
-
-<script>
+    </head>
+    <body>
+    <div class="no-print" style="text-align: center; margin-bottom: 20px;">
+        <button onclick="window.print()" style="padding: 10px 20px; font-size: 16px; cursor: pointer;">چاپ / ذخیره PDF</button>
+    </div>
+    <div class="print-container" id="labelsContainer"></div>
+    <script>
     function toPersianDigits(str) {
         if (!str) return '';
         const map = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
-        return String(str).replace(/[0-9]/g, function (w) {
-            return map[+w];
-        });
+        return String(str).replace(/[0-9]/g, function (w) { return map[+w]; });
     }
-
     const queue = localStorage.getItem('print_queue');
     if (queue) {
         const items = JSON.parse(queue);
         const container = document.getElementById('labelsContainer');
-        
-        if (items.length > 1) {
-            container.classList.add('multiple-labels');
-        } else if (items.length === 1) {
-            container.classList.add('single-label');
-        }
-        
+        if (items.length > 1) container.classList.add('multiple-labels');
+        else if (items.length === 1) container.classList.add('single-label');
         items.forEach(item => {
-            const code = toPersianDigits(item.full_code || item.code);
+            const code = toPersianDigits(item.new_case_code || '');
             const pName = item.plaintiff_name || '-';
             const dName = item.defendant_name || '-';
             const date = toPersianDigits(item.created_at_jalali || '-');
             const city = toPersianDigits((item.city_name ? 'اداره ' + item.city_name : 'اداره ...') + (item.branch_name ? ' - ' + item.branch_name : ''));
-
             let manualText = '';
-            if (Number(item.is_manual) && Number(item.is_manual_branch)) {
-                manualText = ' - شعبه و تاریخ دستی';
-            } else if (Number(item.is_manual)) {
-                manualText = ' - تاریخ دستی';
-            } else if (Number(item.is_manual_branch)) {
-                manualText = ' - شعبه دستی';
-            }
-
+            if (Number(item.is_manual) && Number(item.is_manual_branch)) manualText = ' - شعبه و تاریخ دستی';
+            else if (Number(item.is_manual)) manualText = ' - تاریخ دستی';
+            else if (Number(item.is_manual_branch)) manualText = ' - شعبه دستی';
             const pHist = Array.isArray(item.history_plaintiff) ? item.history_plaintiff : [];
             const dHist = Array.isArray(item.history_defendant) ? item.history_defendant : [];
-
             let histHtml = '';
             if (pHist.length > 0 || dHist.length > 0) {
                 const formatDate = (dt) => dt ? dt.split(' ')[0] : '';
@@ -205,21 +153,13 @@
                     </div>
                 `;
             }
-
             const div = document.createElement('div');
             div.className = 'label-box';
             div.innerHTML = `
                 <div class="label-header">${code}</div>
-                <div class="label-row">
-                    <span>خواهان: ${pName}</span>
-                </div>
-                <div class="label-row">
-                    <span>خوانده: ${dName}</span>
-                </div>
-                <div class="label-footer">
-                    <span>تاریخ ثبت: ${date}${manualText}</span>
-                    <span>${city}</span>
-                </div>
+                <div class="label-row"><span>خواهان: ${pName}</span></div>
+                <div class="label-row"><span>خوانده: ${dName}</span></div>
+                <div class="label-footer"><span>تاریخ ثبت: ${date}${manualText}</span><span>${city}</span></div>
                 ${histHtml}
             `;
             container.appendChild(div);
@@ -227,7 +167,6 @@
     } else {
         document.getElementById('labelsContainer').innerHTML = '<div style="text-align:center; padding: 50px;">موردی برای چاپ یافت نشد.</div>';
     }
-</script>
-
-</body>
-</html>
+    </script>
+    </body>
+    </html>
