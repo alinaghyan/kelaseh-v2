@@ -1076,7 +1076,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <th style="width: 50px;"></th>
                           <th style="width: 50px;">ردیف</th>
                           <th>کلاسه (قدیمی)</th>
-                          <th>کلاسه (جدید)</th>
+                          <!-- <th>کلاسه (جدید)</th> -->
                       <th style="width: 60px;">شعبه</th>
                       <th style="width: 140px;">اداره</th>
                       <th>کاربر</th>
@@ -1141,7 +1141,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
                 <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
                 <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
-                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل قدیم</button>
+                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل قدیم</button>
                 <button id="btnKelasehPrintLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل جدید</button>
                 <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
                 <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
@@ -1156,7 +1156,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                       <th style="width: 50px;"></th>
                       <th style="width: 70px;">ردیف</th>
                       <th>کلاسه (قدیمی)</th>
-                      <th>کلاسه (جدید)</th>
+                      <!-- <th>کلاسه (جدید)</th> -->
                       <th style="width: 90px;">شعبه</th>
                       <th style="width: 140px;">اداره</th>
                       <th>کاربر</th>

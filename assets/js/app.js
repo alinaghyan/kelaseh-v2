@@ -549,7 +549,6 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
         </td>
         <td class="text-secondary">${rowNo}</td>
         <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}${statusLabel}</div></td>
-        <td><div class="fw-semibold" dir="ltr">${newCode}</div></td>
         <td class="text-secondary">${branchNo}</td>
         <td class="text-secondary">${cityName}</td>
         <td class="text-secondary small">${ownerName}</td>
@@ -578,7 +577,7 @@ function renderKelaseh(res) {
   const offset = (page - 1) * limit;
 
   const html = generateKelasehRows(rows, offset, total);
-  $('#kelasehTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
+  $('#kelasehTbody').html(html || `<tr><td colspan="10" class="text-center text-secondary py-4">چیزی برای نمایش نیست.</td></tr>`);
   
   // Pagination Info
   const start = offset + 1;
@@ -622,7 +621,7 @@ function refreshKelasehToday() {
     .done((res) => {
       const rows = (res.data && res.data.kelaseh) || [];
       const html = generateKelasehRows(rows, 0, rows.length);
-      $('#kelasehTodayTbody').html(html || `<tr><td colspan="11" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
+      $('#kelasehTodayTbody').html(html || `<tr><td colspan="10" class="text-center text-secondary py-3">ثبتی برای امروز وجود ندارد.</td></tr>`);
     })
     .fail(() => {});
 }
@@ -1566,6 +1565,7 @@ $(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
 });
 
 $(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', function () {
+  if ($(this).prop('disabled')) return;
   const codes = [];
   let excludedCount = 0;
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
