@@ -2237,10 +2237,10 @@ function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, i
     // Fetch rows
     $sql = "SELECT k.*, u.username, u.first_name, u.last_name, u.city_code, c.name as city_name " . $baseSql;
     
-    $orderSql = "COALESCE(CAST(RIGHT(k.new_case_code, 4) AS UNSIGNED), k.id) ASC";
+    $orderSql = "CASE WHEN k.new_case_code IS NULL OR k.new_case_code = '' THEN 1 ELSE 0 END, SUBSTRING(k.new_case_code, 8, 2) DESC, SUBSTRING(k.new_case_code, 10, 2) DESC, CAST(RIGHT(k.new_case_code, 4) AS UNSIGNED) DESC, k.id DESC";
     if ($national !== '' && preg_match('/^[0-9]{10,11}$/', $national)) {
         // Priority to exact matches on national code or legal ID
-        $orderSql = "CASE WHEN k.plaintiff_national_code = ? OR k.defendant_national_code = ? THEN 0 ELSE 1 END, COALESCE(CAST(RIGHT(k.new_case_code, 4) AS UNSIGNED), k.id) ASC";
+        $orderSql = "CASE WHEN k.plaintiff_national_code = ? OR k.defendant_national_code = ? THEN 0 ELSE 1 END, CASE WHEN k.new_case_code IS NULL OR k.new_case_code = '' THEN 1 ELSE 0 END, SUBSTRING(k.new_case_code, 8, 2) DESC, SUBSTRING(k.new_case_code, 10, 2) DESC, CAST(RIGHT(k.new_case_code, 4) AS UNSIGNED) DESC, k.id DESC";
         array_push($params, $national, $national);
     }
     
@@ -2465,11 +2465,16 @@ function action_admin_kelaseh_backfill_new_case_code(): void
 
     ensure_kelaseh_numbers_supports_new_case_code();
 
-    $sql = "SELECT k.id, k.new_case_code, k.jalali_full_ymd, k.branch_no, u.city_code, k.created_at
+    try {
+        db()->exec("UPDATE kelaseh_numbers SET new_case_code = NULL");
+    } catch (Throwable $e) {
+        json_response(false, ['message' => 'خطا در پاکسازی کلاسه‌های جدید.'], 500);
+    }
+
+    $sql = "SELECT k.id, k.jalali_full_ymd, k.branch_no, u.city_code, k.created_at
             FROM kelaseh_numbers k
             JOIN users u ON u.id = k.owner_id
-            WHERE k.new_case_code IS NULL
-            ORDER BY k.created_at ASC, k.id ASC";
+            ORDER BY LPAD(u.city_code, 4, '0') ASC, k.jalali_full_ymd ASC, k.created_at ASC, k.id ASC";
     $stmt = db()->prepare($sql);
     $stmt->execute();
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -2508,29 +2513,20 @@ function action_admin_kelaseh_backfill_new_case_code(): void
         $yearKey = $cityPart . '-' . $yy2;
         if (!isset($yearCounters[$yearKey])) {
             $yearCounters[$yearKey] = 0;
-            try {
-                $like = $cityPart . '-__' . $yy2 . '______';
-                $stmtMax = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
-                $stmtMax->execute([$like]);
-                $maxSeq = $stmtMax->fetchColumn();
-                $yearCounters[$yearKey] = ($maxSeq !== false && $maxSeq !== null) ? (int)$maxSeq : 0;
-                if ($yearCounters[$yearKey] < 0) $yearCounters[$yearKey] = 0;
-            } catch (Throwable $e) {
-                $yearCounters[$yearKey] = 0;
-            }
         }
 
         $yearCounters[$yearKey]++;
         $seq = (int)$yearCounters[$yearKey];
         if ($seq > 9999) {
-            continue;
+            json_response(false, ['message' => 'سقف ۹۹۹۹ برای شمارنده کلاسه جدید در سال ' . $yy2 . ' و اداره ' . $cityPart . ' تکمیل شده است.'], 422);
         }
+
         $newCaseCode = $prefix . sprintf('%04d', $seq);
 
         $updateStmt->execute([$newCaseCode, (int)$r['id']]);
     }
 
-    json_response(true, ['message' => 'کلاسه‌های جدید برای رکوردهای قدیمی محاسبه و ذخیره شد.']);
+    json_response(true, ['message' => 'کلاسه‌های جدید پاکسازی و مجدداً با الگوی جدید ساخته شد.']);
 }
 
 // ADMIN ACTIONS RESTORED
