@@ -243,7 +243,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                            <div class="card-body p-2">
                               <div class="small text-secondary">شناسه قدیم:</div>
                               <div id="heyatOldCodeDisplay" class="fw-bold" dir="ltr">-</div>
-                              <div class="small text-secondary mt-2">شناسه جدید:</div>
+                              <!-- <div class="small text-secondary mt-2">شناسه جدید:</div>-->
                               <div id="heyatNewCodeDisplay" class="fw-bold" dir="ltr">-</div>
                            </div>
                         </div>
@@ -1063,8 +1063,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <span>ثبت‌های امروز شما</span>
                     <div class="btn-group btn-group-sm">
                       <button id="btnKelasehTodaySelectAll" class="btn btn-outline-primary" type="button">انتخاب همه</button>
-                      <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button">چاپ لیبل قدیم</button>
-                      <button id="btnKelasehTodayPrintAllLabelsNew" class="btn btn-outline-secondary" type="button">چاپ لیبل جدید</button>
+                      <!-- <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button" disabled>چاپ لیبل جدید</button>-->
+                      <button id="btnKelasehTodayPrintAllLabelsNew" class="btn btn-outline-secondary" type="button">چاپ لیبل</button>
                       <button id="btnKelasehTodayPrintNotice" class="btn btn-outline-info" type="button">چاپ دعوت نامه</button>
                       <button id="btnKelasehTodayPrintVerdictNotice" class="btn btn-outline-primary" type="button">چاپ ابلاغ</button>
                     </div>
@@ -1141,8 +1141,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
               <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
                 <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
                 <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
-                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل قدیم</button>
-                <button id="btnKelasehPrintLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل جدید</button>
+                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل جدید</button>
+                <button id="btnKelasehPrintLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل </button> 
                 <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
                 <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
                 <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
@@ -1176,7 +1176,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
               <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center">
                 <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل قدیم (انتخاب‌ها)</button>
-                <button id="btnKelasehPrintLabelsBottomNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل جدید (انتخاب‌ها)</button>
+               <!-- <button id="btnKelasehPrintLabelsBottomNew" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل جدید (انتخاب‌ها)</button> -->
                 <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه انتخاب شده</button>
                 <button id="btnKelasehPrintVerdictNoticeBottom" class="btn btn-outline-primary btn-sm" type="button">ابلاغ رای انتخاب شده</button>
                 <button id="btnKelasehPrintMinutesBottom" class="btn btn-outline-warning btn-sm" type="button">چاپ رای انتخاب شده</button>
@@ -1230,7 +1230,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
           <div class="modal-body">
             <div class="alert alert-secondary py-2 mb-3" dir="ltr">
               شناسه قدیم: <strong id="editModalKelasehCode">---</strong><br/>
-              شناسه جدید: <strong id="editModalKelasehNewCode">---</strong>
+             <!-- شناسه جدید: <strong id="editModalKelasehNewCode">---</strong> -->
             </div>
             <input type="hidden" name="code" value="" />
             <div class="row g-3">

@@ -202,7 +202,9 @@
         }
 
         function render() {
+			
             const data = JSON.parse(localStorage.getItem('print_queue') || '[]');
+			
             const container = document.getElementById('print-container');
             
             if (data.length === 0) {
@@ -221,7 +223,7 @@
                 const branchNo = row.branch_no || '00';
                 const last3 = displayCode.slice(-3);
                 const generatedDadnameh = `${branchNo}/${last3}`;
-
+				
                 return `
                 <div class="page">
                     <table class="header-table">
@@ -291,10 +293,10 @@
                             </td>
                         </tr>
 
-                            <td class="label-cell">مکان جلسه</td>
+                            <td class="label-cell">مکان جلسه : </td>
                             <td class="content-cell" colspan="2" style="padding: 10px;">
                                 <div style=" justify-content: space-around;">
-                                    <span>آدرس : ${row.city_address || ''} <br> هیات تشخیص اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></span>
+                                    <span>آدرس : ${row.city_address || ''} | کدپستی : ${row.city_postal_code || ''} <br> هیات تشخیص اداره تعاون، کار و رفاه اجتماعی <strong>${row.city_name || ''}</strong></span>
 
                                 </div>
                             </td>
@@ -331,7 +333,7 @@
                             <td class="label-cell" style="height: 120px;">گواهی مأمور ابلاغ</td>
                             <td style="line-height: 2;">
                                 <strong>اینجانب &emsp;&emsp;&emsp;&emsp;&emsp;&emsp; در تاریخ&nbsp;&nbsp;و ساعت</strong><br>
-                                <strong>ابلاغ نامه را به آقای/خانم      ابلاغ نمودم.</strong>
+                                <strong>ابلاغ رای را به آقای/خانم      ابلاغ نمودم.</strong>
                                
                             </td>
                             <td class="signature-box">

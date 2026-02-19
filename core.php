@@ -1286,11 +1286,11 @@ function action_kelaseh_label(array $data): void {
     }
 
     // Fetch details with join to get city information
-    $sql = "SELECT k.*, u.city_code, c.name as city_name, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
-            FROM kelaseh_numbers k 
-            JOIN users u ON u.id = k.owner_id 
-            LEFT JOIN isfahan_cities c ON c.code = u.city_code 
-            WHERE k.code IN ($placeholders)";
+     $sql = "SELECT k.*, u.city_code, c.name as city_name, c.address as city_address, c.postal_code as city_postal_code, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
+        FROM kelaseh_numbers k 
+        JOIN users u ON u.id = k.owner_id 
+        LEFT JOIN isfahan_cities c ON c.code = u.city_code 
+        WHERE k.code IN ($placeholders)";
             
     // If not admin, restrict access based on role
     $params = $codes;
@@ -1414,11 +1414,11 @@ function action_kelaseh_label_new(array $data): void {
         exit;
     }
     $placeholders = implode(',', array_fill(0, count($codes), '?'));
-    $sql = "SELECT k.*, u.city_code, c.name as city_name, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
-            FROM kelaseh_numbers k 
-            JOIN users u ON u.id = k.owner_id 
-            LEFT JOIN isfahan_cities c ON c.code = u.city_code 
-            WHERE k.new_case_code IN ($placeholders)";
+    $sql = "SELECT k.*, u.city_code, c.name as city_name, c.address as city_address, c.postal_code as city_postal_code, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
+        FROM kelaseh_numbers k 
+        JOIN users u ON u.id = k.owner_id 
+        LEFT JOIN isfahan_cities c ON c.code = u.city_code 
+        WHERE k.code IN ($placeholders)";
     $params = $codes;
     if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
         $sql .= " AND k.owner_id = ?";
@@ -1529,11 +1529,11 @@ function action_kelaseh_notice(array $data): void {
             // ignore update failure
         }
 
-        $sql = "SELECT k.*, u.city_code, c.name as city_name, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
-                FROM kelaseh_numbers k 
-                JOIN users u ON u.id = k.owner_id 
-                LEFT JOIN isfahan_cities c ON c.code = u.city_code 
-                WHERE k.code IN ($placeholders)";
+         $sql = "SELECT k.*, u.city_code, c.name as city_name, c.address as city_address, c.postal_code as city_postal_code, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
+        FROM kelaseh_numbers k 
+        JOIN users u ON u.id = k.owner_id 
+        LEFT JOIN isfahan_cities c ON c.code = u.city_code 
+        WHERE k.code IN ($placeholders)";
 
         $params = $codes;
         if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
@@ -1575,7 +1575,8 @@ function action_kelaseh_notice(array $data): void {
             $sessionsToPrint = [];
 
             foreach ($rSessions as $s) {
-                if (!empty($s['meeting_date']) || !empty($s['verdict_text'])) {
+                // Include one page per session only when both meeting date and verdict are filled
+                if (!empty($s['meeting_date']) && !empty($s['verdict_text'])) {
                     $sessionsToPrint[] = $s;
                 }
             }
@@ -1668,11 +1669,11 @@ function action_kelaseh_print_minutes(array $data): void {
     
     $placeholders = implode(',', array_fill(0, count($codes), '?'));
 
-    $sql = "SELECT k.*, u.city_code, c.name as city_name, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
-            FROM kelaseh_numbers k 
-            JOIN users u ON u.id = k.owner_id 
-            LEFT JOIN isfahan_cities c ON c.code = u.city_code 
-            WHERE k.code IN ($placeholders)";
+     $sql = "SELECT k.*, u.city_code, c.name as city_name, c.address as city_address, c.postal_code as city_postal_code, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
+        FROM kelaseh_numbers k 
+        JOIN users u ON u.id = k.owner_id 
+        LEFT JOIN isfahan_cities c ON c.code = u.city_code 
+        WHERE k.code IN ($placeholders)";
             
     $params = $codes;
     if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
@@ -1692,8 +1693,7 @@ function action_kelaseh_print_minutes(array $data): void {
     $rowsMap = [];
     foreach ($fetchedRows as $r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at']);
-        $r['city_address'] = '';
-        $r['city_postal_code'] = '';
+
         $rowsMap[(string)$r['code']] = $r;
     }
     
@@ -1742,11 +1742,11 @@ function action_kelaseh_notice2(array $data): void {
 
     $placeholders = implode(',', array_fill(0, count($codes), '?'));
 
-    $sql = "SELECT k.*, u.city_code, c.name as city_name, CONCAT(u.first_name, ' ', u.last_name) as owner_name
-            FROM kelaseh_numbers k
-            JOIN users u ON u.id = k.owner_id
-            LEFT JOIN isfahan_cities c ON c.code = u.city_code
-            WHERE k.code IN ($placeholders)";
+     $sql = "SELECT k.*, u.city_code, c.name as city_name, c.address as city_address, c.postal_code as city_postal_code, CONCAT(u.first_name, ' ', u.last_name) as owner_name 
+        FROM kelaseh_numbers k 
+        JOIN users u ON u.id = k.owner_id 
+        LEFT JOIN isfahan_cities c ON c.code = u.city_code 
+        WHERE k.code IN ($placeholders)";
 
     $params = $codes;
     if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
@@ -1766,8 +1766,7 @@ function action_kelaseh_notice2(array $data): void {
     $rowsMap = [];
     foreach ($fetchedRows as $r) {
         $r['created_at_jalali'] = format_jalali_datetime($r['created_at']);
-        $r['city_address'] = '';
-        $r['city_postal_code'] = '';
+
         $rowsMap[(string)$r['code']] = $r;
     }
 

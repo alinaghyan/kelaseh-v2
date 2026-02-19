@@ -1356,6 +1356,18 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 }
 
                 html = '<div class="row g-3">';
+                
+                // Print history box
+                var printItems = [];
+                if (p.last_printed_at) {
+                    printItems.push('<span class="badge bg-success me-1">لیبل چاپ شده</span>');
+                }
+                if (p.last_notice_printed_at) {
+                    printItems.push('<span class="badge bg-info me-1">برگه رای چاپ شده</span>');
+                }
+                var printHistoryHtml = printItems.length > 0 ? printItems.join(' ') : '<span class="text-muted small">هنوز چاپی انجام نشده</span>';
+                html += '<div class="col-12"><div class="alert alert-secondary py-2 mb-0 d-flex align-items-center"><strong class="me-2">پرینت:</strong>' + printHistoryHtml + '</div></div>';
+                
                 var oldCode = $('<div/>').text(toPersianDigits(p.code || '-')).html();
                 var newCode = $('<div/>').text(toPersianDigits(p.new_case_code || '-')).html();
                 var createdAt = $('<div/>').text(toPersianDigits(p.created_at_jalali || '')).html();
