@@ -19,7 +19,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title><?php echo htmlspecialchars($appName, ENT_QUOTES, 'UTF-8'); ?></title>
   <link rel="stylesheet" href="assets/vendor/bootstrap/css/bootstrap.rtl.min.css?v=5.3" />
-  <link rel="stylesheet" href="https://unpkg.com/persian-datepicker@1.2.0/dist/css/persian-datepicker.min.css" />
+  <link rel="stylesheet" href="assets/vendor/persian-datepicker/css/persian-datepicker.min.css" />
   <link rel="stylesheet" href="assets/css/app.css?v=<?php echo file_exists(__DIR__ . '/assets/css/app.css') ? filemtime(__DIR__ . '/assets/css/app.css') : '1'; ?>" />
 </head>
 <body>
@@ -241,9 +241,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                      <div class="col-12">
                         <div class="card border-secondary border-opacity-25">
                            <div class="card-body p-2">
-                              <div class="small text-secondary">شناسه قدیم:</div>
+                              <div class="small text-secondary">کلاسه قدیم:</div>
                               <div id="heyatOldCodeDisplay" class="fw-bold" dir="ltr">-</div>
-                              <!-- <div class="small text-secondary mt-2">شناسه جدید:</div>-->
+                              <!-- <div class="small text-secondary mt-2">کلاسه جدید:</div>-->
                               <div id="heyatNewCodeDisplay" class="fw-bold" dir="ltr">-</div>
                            </div>
                         </div>
@@ -778,7 +778,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                         <table class="table table-sm table-bordered table-striped">
                           <thead>
                             <tr>
-                              <th>شناسه</th>
+                              <th>کلاسه</th>
                               <th>تاریخ</th>
                               <th>گیرنده</th>
                               <th>نوع</th>
@@ -1229,8 +1229,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
         <form id="formKelasehEdit">
           <div class="modal-body">
             <div class="alert alert-secondary py-2 mb-3" dir="ltr">
-              شناسه قدیم: <strong id="editModalKelasehCode">---</strong><br/>
-             <!-- شناسه جدید: <strong id="editModalKelasehNewCode">---</strong> -->
+              کلاسه قدیم: <strong id="editModalKelasehCode">---</strong><br/>
+             <!-- کلاسه جدید: <strong id="editModalKelasehNewCode">---</strong> -->
             </div>
             <input type="hidden" name="code" value="" />
             <div class="row g-3">
@@ -1469,8 +1469,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
   <script src="assets/vendor/jquery/jquery.min.js?v=3.7"></script>
   <script src="assets/vendor/bootstrap/js/bootstrap.bundle.min.js?v=5.3"></script>
-  <script src="https://unpkg.com/persian-date@1.1.0/dist/persian-date.min.js"></script>
-  <script src="https://unpkg.com/persian-datepicker@1.2.0/dist/js/persian-datepicker.min.js"></script>
+  <script src="assets/vendor/persian-date/persian-date.min.js"></script>
+  <script src="assets/vendor/persian-datepicker/js/persian-datepicker.min.js"></script>
   <script src="assets/js/app.js?v=<?php echo file_exists(__DIR__ . '/assets/js/app.js') ? filemtime(__DIR__ . '/assets/js/app.js') : '1'; ?>"></script>
 </body>
 </html>

@@ -256,8 +256,8 @@ function renderUser() {
   $('#navItemAdmin').toggleClass('d-none', !isAdmin);
   $('#navItemAdminKelasehSearch').toggleClass('d-none', !isAdmin);
   
-  const isBranchAdmin = currentUser.role === 'branch_admin';
-  $('#navItemHeyat').toggleClass('d-none', !isBranchAdmin);
+  const canUseHeyat = ['admin', 'office_admin', 'branch_admin'].includes(currentUser.role);
+  $('#navItemHeyat').toggleClass('d-none', !canUseHeyat);
   
   $('#headerNav a[data-page="create"]').closest('li').toggleClass('d-none', isOfficeAdmin || isAdmin);
 }
@@ -391,19 +391,20 @@ function renderPage(page) {
   }
 
   if (page === 'heyat') {
-    if (currentUser.role === 'branch_admin') {
-        $('#heyatPanel').removeClass('d-none');
-        // If we want to hide the right col or keep it? Usually keep it.
-        $('#cardKelaseh').addClass('d-none'); // Hide main list
-        
-        // Update City Prefix
-        if (currentUser.city_code) {
-             const prefix = String(currentUser.city_code).padStart(4, '0');
-             $('#heyatCityCodePrefix').text(toPersianDigits(prefix));
-             $('#heyatCityCodePrefix').data('raw', prefix);
-        }
+    const canUseHeyat = ['admin', 'office_admin', 'branch_admin'].includes(currentUser.role);
+    if (canUseHeyat) {
+      $('#heyatPanel').removeClass('d-none');
+      $('#cardKelaseh').addClass('d-none');
+
+      const rawCityCode = String((currentUser && currentUser.city_code) ? currentUser.city_code : '').trim();
+      if (rawCityCode) {
+        const prefix = rawCityCode.padStart(4, '0');
+        $('#heyatCityCodePrefix').text(toPersianDigits(prefix)).data('raw', prefix);
+      } else {
+        $('#heyatCityCodePrefix').text('----').data('raw', '');
+      }
     } else {
-        window.location.hash = '#dashboard';
+      window.location.hash = '#dashboard';
     }
     return;
   }
@@ -1177,7 +1178,7 @@ $(document).on('submit', '#formKelasehCreate', function (e) {
       if (Array.isArray(notices) && notices.length) {
         notices.forEach((m) => showToast(m, 'success'));
       }
-      showToast(code ? `شناسه پرونده ایجاد شد: ${code}` : (res.message || 'ثبت شد.'), 'success');
+      showToast(code ? `کلاسه پرونده ایجاد شد: ${code}` : (res.message || 'ثبت شد.'), 'success');
       this.reset();
       $('#historyPlaintiffTbody').empty();
       $('#historyDefendantTbody').empty();
@@ -1307,7 +1308,7 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
         }
     }
     if (!code) {
-        showToast('شناسه کلاسه یافت نشد.', 'error');
+        showToast('کلاسه پرونده یافت نشد.', 'error');
         return false;
     }
     code = String(code).trim();
@@ -1358,23 +1359,27 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 html = '<div class="row g-3">';
                 
                 // Print history box
-                var printItems = [];
-                if (p.last_printed_at) {
-                    printItems.push('<span class="badge bg-success me-1">لیبل چاپ شده</span>');
+                function buildPrintBadge(label, printedAt, okClass) {
+                    var status = printedAt ? 'چاپ شده' : 'چاپ نشده';
+                    var cls = printedAt ? ('bg-' + okClass + ' text-white') : 'bg-light text-secondary border';
+                    var title = printedAt ? (' title="' + escapeHtml(toPersianDigits(printedAt)) + '"') : '';
+                    return '<span class="badge ' + cls + ' me-1"' + title + '>' + label + ': ' + status + '</span>';
                 }
-                if (p.last_notice_printed_at) {
-                    printItems.push('<span class="badge bg-info me-1">برگه رای چاپ شده</span>');
-                }
-                var printHistoryHtml = printItems.length > 0 ? printItems.join(' ') : '<span class="text-muted small">هنوز چاپی انجام نشده</span>';
+                var printHistoryHtml = [
+                    buildPrintBadge('لیبل', p.last_printed_at, 'success'),
+                    buildPrintBadge('برگه رای', p.last_notice_printed_at, 'info'),
+                    buildPrintBadge('دعوت نامه', p.last_invitation_printed_at, 'primary'),
+                    buildPrintBadge('ابلاغ رای', p.last_verdict_notice_printed_at, 'warning')
+                ].join(' ');
                 html += '<div class="col-12"><div class="alert alert-secondary py-2 mb-0 d-flex align-items-center"><strong class="me-2">پرینت:</strong>' + printHistoryHtml + '</div></div>';
                 
                 var oldCode = $('<div/>').text(toPersianDigits(p.code || '-')).html();
                 var newCode = $('<div/>').text(toPersianDigits(p.new_case_code || '-')).html();
                 var createdAt = $('<div/>').text(toPersianDigits(p.created_at_jalali || '')).html();
                 html += '<div class="col-12"><div class="card border-secondary border-opacity-25 shadow-sm"><div class="card-body p-2">';
-                html += '<div class="small text-secondary mb-1">تاریخ و ساعت ایجاد شناسه:</div><div class="fw-bold text-primary">' + createdAt + '</div>';
-                html += '<div class="small text-secondary mt-2">شناسه قدیم:</div><div class="fw-bold" dir="ltr">' + oldCode + '</div>';
-                html += '<div class="small text-secondary mt-2">شناسه جدید:</div><div class="fw-bold" dir="ltr">' + newCode + '</div>';
+                html += '<div class="small text-secondary mb-1">تاریخ و ساعت ایجاد کلاسه:</div><div class="fw-bold text-primary">' + createdAt + '</div>';
+                html += '<div class="small text-secondary mt-2">کلاسه قدیم:</div><div class="fw-bold" dir="ltr">' + oldCode + '</div>';
+                html += '<div class="small text-secondary mt-2">کلاسه جدید:</div><div class="fw-bold" dir="ltr">' + newCode + '</div>';
                 html += '</div></div></div>';
                 html += renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
                 html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
@@ -1618,7 +1623,8 @@ $(document).on('click', '#btnKelasehPrintLabelsNew, #btnKelasehPrintLabelsBottom
     if (raw) {
       const payload = JSON.parse(decodeURIComponent(raw));
       if (payload.status === 'active') {
-        if (payload.new_case_code) codes.push(payload.new_case_code);
+        const printCode = payload.new_case_code || payload.code || '';
+        if (printCode) codes.push(printCode);
       } else {
         excludedCount++;
       }
@@ -1811,7 +1817,8 @@ $(document).on('click', '#btnKelasehTodayPrintAllLabelsNew', function () {
       if (raw) {
         const payload = JSON.parse(decodeURIComponent(raw));
         if (payload.status === 'active') {
-          if (payload.new_case_code) codes.push(payload.new_case_code);
+          const printCode = payload.new_case_code || payload.code || '';
+          if (printCode) codes.push(printCode);
         } else {
           excludedCount++;
         }
@@ -1874,6 +1881,16 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-edit', function () {
   $('#formKelasehEdit [name=defendant_national_code]').val(payload.defendant_national_code);
   $('#formKelasehEdit [name=plaintiff_mobile]').val(payload.plaintiff_mobile);
   $('#formKelasehEdit [name=defendant_mobile]').val(payload.defendant_mobile);
+  $('#formKelasehEdit [name=plaintiff_postal_code]').val(payload.plaintiff_postal_code);
+  $('#formKelasehEdit [name=defendant_postal_code]').val(payload.defendant_postal_code);
+  $('#formKelasehEdit [name=dadnameh]').val(payload.dadnameh);
+  $('#formKelasehEdit [name=plaintiff_address]').val(payload.plaintiff_address);
+  $('#formKelasehEdit [name=defendant_address]').val(payload.defendant_address);
+  $('#formKelasehEdit [name=representatives_govt]').val(payload.representatives_govt || '');
+  $('#formKelasehEdit [name=representatives_worker]').val(payload.representatives_worker || '');
+  $('#formKelasehEdit [name=representatives_employer]').val(payload.representatives_employer || '');
+  $('#formKelasehEdit [name=plaintiff_request]').val(payload.plaintiff_request || '');
+  $('#formKelasehEdit [name=verdict_text]').val(payload.verdict_text || '');
   $('#editModalKelasehNewCode').text(toPersianDigits(payload.new_case_code || '-'));
   const modal = new bootstrap.Modal(document.getElementById('modalKelasehEdit'));
   modal.show();
@@ -2827,8 +2844,9 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
           return;
       }
       
-      const prefix = $('#heyatCityCodePrefix').data('raw') || String((currentUser && currentUser.city_code) ? currentUser.city_code : '').padStart(4, '0');
-      const query = prefix + '-' + suffix;
+      const prefixRaw = String($('#heyatCityCodePrefix').data('raw') || ((currentUser && currentUser.city_code) ? currentUser.city_code : '')).trim();
+      const prefix = prefixRaw ? prefixRaw.padStart(4, '0') : '';
+      const query = prefix ? (prefix + '-' + suffix) : suffix;
       
       api('kelaseh.list', { q: query, limit: 10 })
         .done(res => {
@@ -2865,7 +2883,8 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       
       const item = JSON.parse(decodeURIComponent(raw));
       const fullCode = item.new_case_code || item.full_code || item.code || '';
-      const cityPrefix = fullCode.includes('-') ? fullCode.split('-')[0] : ($('#heyatCityCodePrefix').data('raw') || String((currentUser && currentUser.city_code) ? currentUser.city_code : '').padStart(4, '0'));
+      const fallbackPrefixRaw = String($('#heyatCityCodePrefix').data('raw') || ((currentUser && currentUser.city_code) ? currentUser.city_code : '')).trim();
+      const cityPrefix = fullCode.includes('-') ? fullCode.split('-')[0] : (fallbackPrefixRaw ? fallbackPrefixRaw.padStart(4, '0') : '');
       
       // Extract suffix
       let suffix = fullCode;
@@ -2946,12 +2965,13 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       e.preventDefault();
       
       const suffix = $('#heyatCodeInput').val();
-      const prefix = $('#heyatCityCodePrefix').data('raw') || String((currentUser && currentUser.city_code) ? currentUser.city_code : '').padStart(4, '0');
+      const prefixRaw = String($('#heyatCityCodePrefix').data('raw') || ((currentUser && currentUser.city_code) ? currentUser.city_code : '')).trim();
+      const prefix = prefixRaw ? prefixRaw.padStart(4, '0') : '';
       
       // Always rebuild fullCode on submit
       let fullCode = $('#heyatFullCode').val();
       if (!fullCode || !fullCode.endsWith(suffix)) {
-          fullCode = prefix + '-' + suffix;
+          fullCode = prefix ? (prefix + '-' + suffix) : suffix;
           $('#heyatFullCode').val(fullCode);
       }
       
