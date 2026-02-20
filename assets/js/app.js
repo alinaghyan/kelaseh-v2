@@ -1641,10 +1641,18 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 var createdAt = $('<div/>').text(toPersianDigits(p.created_at_jalali || '')).html();
                 var creatorName = $('<div/>').text(toPersianDigits(p.creator_name || p.owner_name || '-')).html();
                 var creatorOffice = $('<div/>').text(toPersianDigits(p.creator_office_name || p.city_name || '-')).html();
-                var creatorRole = $('<div/>').text(toPersianDigits(p.creator_role || '-')).html();
+                function roleTitle(role) {
+                    var r = String(role || '').trim();
+                    if (r === 'admin') return 'مدیر کل';
+                    if (r === 'office_admin') return 'مدیر اداره';
+                    if (r === 'branch_admin') return 'مدیر شعبه';
+                    if (r === 'user') return 'کاربر';
+                    return '';
+                }
+                var creatorRole = $('<div/>').text(toPersianDigits(roleTitle(p.creator_role))).html();
                 var lastEditorName = $('<div/>').text(toPersianDigits(p.last_edited_by_name || '-')).html();
                 var lastEditorOffice = $('<div/>').text(toPersianDigits(p.last_edited_office_name || '-')).html();
-                var lastEditorRole = $('<div/>').text(toPersianDigits(p.last_edited_by_role || '-')).html();
+                var lastEditorRole = $('<div/>').text(toPersianDigits(roleTitle(p.last_edited_by_role))).html();
                 var lastEditedAt = $('<div/>').text(toPersianDigits(p.last_edited_at_jalali || '-')).html();
 
                 function infoCell(label, value, valueClass, dir) {
@@ -1658,9 +1666,9 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 html += '<div class="col-12"><div class="card border-secondary border-opacity-25 shadow-sm"><div class="card-body p-2">';
                 html += '<div class="row g-2">';
                 html += infoCell('تاریخ و ساعت ایجاد کلاسه', createdAt, 'text-primary');
-                html += infoCell('ثبت‌کننده', creatorName + ' <span class="text-muted small">(' + creatorRole + ')</span>');
+                html += infoCell('ثبت‌کننده', creatorRole ? (creatorName + ' <span class="text-muted small">(' + creatorRole + ')</span>') : creatorName);
                 html += infoCell('اداره', creatorOffice);
-                html += infoCell('آخرین ویرایش', lastEditorName + ' <span class="text-muted small">(' + lastEditorRole + ')</span>');
+                html += infoCell('آخرین ویرایش', lastEditorRole ? (lastEditorName + ' <span class="text-muted small">(' + lastEditorRole + ')</span>') : lastEditorName);
                 html += infoCell('اداره ویرایش‌کننده', lastEditorOffice);
                 html += infoCell('زمان آخرین ویرایش', lastEditedAt);
                 html += infoCell('کلاسه قدیم', oldCode, '', 'ltr');
