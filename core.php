@@ -467,6 +467,7 @@ function ensure_kelaseh_numbers_supports_extended_fields(): void
         'last_notice_printed_at' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `last_notice_printed_at` DATETIME NULL DEFAULT NULL AFTER `last_printed_at`",
         'last_invitation_printed_at' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `last_invitation_printed_at` DATETIME NULL DEFAULT NULL AFTER `last_notice_printed_at`",
         'last_verdict_notice_printed_at' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `last_verdict_notice_printed_at` DATETIME NULL DEFAULT NULL AFTER `last_invitation_printed_at`",
+        'last_exec_form_printed_at' => "ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `last_exec_form_printed_at` DATETIME NULL DEFAULT NULL AFTER `last_verdict_notice_printed_at`",
     ];
 
     foreach ($cols as $sql) {
@@ -2025,6 +2026,86 @@ function action_kelaseh_update(array $data): void
     json_response(true, ['message' => 'ویرایش شد']);
 }
 
+function action_kelaseh_exec_form(array $data): void {
+    $user = auth_require_login();
+    ensure_kelaseh_numbers_supports_extended_fields();
+    $codes = [];
+
+    $inputCodes = $data['codes'] ?? $_GET['codes'] ?? null;
+    $inputCode = $data['code'] ?? $_GET['code'] ?? null;
+
+    if (!empty($inputCodes)) {
+        $codes = array_values(array_filter(array_map('trim', explode(',', (string)$inputCodes))));
+    } elseif (!empty($inputCode)) {
+        $codes = [trim((string)$inputCode)];
+    }
+
+    if (empty($codes)) {
+        echo "کدی ارائه نشده است.";
+        exit;
+    }
+
+    $placeholders = implode(',', array_fill(0, count($codes), '?'));
+    try {
+        $now = now_mysql();
+        $updateSql = "UPDATE kelaseh_numbers SET last_exec_form_printed_at = ? WHERE code IN ($placeholders)";
+        $updateParams = array_merge([$now], $codes);
+        db()->prepare($updateSql)->execute($updateParams);
+    } catch (Throwable $e) {
+        // ignore update failure to avoid breaking print
+    }
+    $sql = "SELECT k.*, u.city_code, c.name as city_name, c.address as city_address, c.postal_code as city_postal_code, CONCAT(u.first_name, ' ', u.last_name) as owner_name
+        FROM kelaseh_numbers k
+        JOIN users u ON u.id = k.owner_id
+        LEFT JOIN isfahan_cities c ON c.code = u.city_code
+        WHERE k.code IN ($placeholders)";
+
+    $params = $codes;
+    if ($user['role'] !== 'admin' && $user['role'] !== 'office_admin') {
+        $sql .= " AND k.owner_id = ?";
+        $params[] = (int)$user['id'];
+    } elseif ($user['role'] === 'office_admin') {
+        $cityCode = $user['city_code'] ?? '';
+        $sql .= " AND (u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
+        $params[] = $cityCode;
+        $params[] = str_pad($cityCode, 4, '0', STR_PAD_LEFT);
+    }
+
+    $stmt = db()->prepare($sql);
+    $stmt->execute($params);
+    $fetchedRows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $rowsMap = [];
+    foreach ($fetchedRows as $r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+        $rowsMap[(string)($r['code'] ?? '')] = $r;
+    }
+
+    $rows = [];
+    foreach ($codes as $c) {
+        if (isset($rowsMap[(string)$c])) {
+            $rows[] = $rowsMap[(string)$c];
+        }
+    }
+
+    if (empty($rows)) {
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
+        exit;
+    }
+
+    $html = file_get_contents(__DIR__ . '/print_exec_form.html');
+    if ($html === false) {
+        echo "قالب چاپ یافت نشد.";
+        exit;
+    }
+    $jsonData = json_encode($rows, JSON_UNESCAPED_UNICODE);
+    $script = '<script>(function(){ const data = ' . $jsonData . '; localStorage.setItem("print_queue", JSON.stringify(data)); })();</script>';
+    $html = str_replace('<head>', "<head>$script", $html);
+
+    echo $html;
+    exit;
+}
+
 function action_kelaseh_set_status(array $data): void
 {
     $user = auth_require_login();
@@ -3241,6 +3322,9 @@ function handle_request(): void
                 break;
             case 'kelaseh.notice2':
                 action_kelaseh_notice2($data);
+                break;
+            case 'kelaseh.exec_form':
+                action_kelaseh_exec_form($data);
                 break;
             case 'kelaseh.export.csv': action_kelaseh_export_csv($data); break;
             case 'kelaseh.export.print': action_kelaseh_export_print($data); break;

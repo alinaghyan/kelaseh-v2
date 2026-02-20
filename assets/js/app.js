@@ -458,6 +458,13 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
     const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
     const statusHtml = $('<div/>').text(status).html();
     const statusClass = r.status === 'voided' ? 'text-danger' : r.status === 'inactive' ? 'text-secondary' : 'text-success';
+    const isVoided = r.status === 'voided';
+    const isInactive = r.status === 'inactive';
+    const isActive = !isVoided && !isInactive;
+    const rowClass = [
+      isVoided ? 'kelaseh-row-voided' : '',
+      isInactive ? 'kelaseh-row-inactive' : ''
+    ].filter(Boolean).join(' ');
     
     let printStatusHtml = '<span class="badge bg-light text-secondary">چاپ نشده</span>';
     if (r.print_type) {
@@ -525,7 +532,7 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
                 <button class="btn btn-glass btn-glass-info btn-kelaseh-view" type="button" data-code="${(r.code || r.full_code || '').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">نمایش مشخصات</button>
                 <!-- <button class="btn btn-glass btn-glass-secondary btn-kelaseh-label" type="button">چاپ لیبل</button> -->
                 <button class="btn btn-glass btn-glass-primary btn-kelaseh-edit" type="button">ویرایش</button>
-                <button class="btn btn-glass btn-glass-warning btn-kelaseh-toggle" type="button">وضعیت</button>
+                <button class="btn btn-glass btn-glass-warning btn-kelaseh-toggle" type="button">فعال/غیر فعال</button>
                 <button class="btn btn-glass btn-glass-danger btn-kelaseh-void" type="button">ابطال</button>
             </div>
             <div class="d-flex justify-content-end gap-2 align-items-center">
@@ -544,9 +551,9 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
 
     var rowCode = (r.code || r.full_code || '').replace(/"/g, '&quot;');
     return `
-      <tr data-json="${json}" data-code="${rowCode}">
+      <tr data-json="${json}" data-code="${rowCode}" class="${rowClass}">
         <td>
-           <input class="kelaseh-label-check" type="checkbox" style="width: 18px; height: 18px; cursor: pointer;" />
+           <input class="kelaseh-label-check" type="checkbox" style="width: 18px; height: 18px; cursor: pointer;" ${isActive ? '' : 'disabled title="پرونده غیر فعال یا ابطال است."'} />
         </td>
         <td class="text-secondary">${rowNo}</td>
         <td><div class="fw-semibold" dir="ltr">${code}${manualBadge}${statusLabel}</div></td>
@@ -1369,7 +1376,8 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                     buildPrintBadge('لیبل', p.last_printed_at, 'success'),
                     buildPrintBadge('برگه رای', p.last_notice_printed_at, 'info'),
                     buildPrintBadge('دعوت نامه', p.last_invitation_printed_at, 'primary'),
-                    buildPrintBadge('ابلاغ رای', p.last_verdict_notice_printed_at, 'warning')
+                    buildPrintBadge('ابلاغ رای', p.last_verdict_notice_printed_at, 'warning'),
+                    buildPrintBadge('فرم اجراییه', p.last_exec_form_printed_at, 'secondary')
                 ].join(' ');
                 html += '<div class="col-12"><div class="alert alert-secondary py-2 mb-0 d-flex align-items-center"><strong class="me-2">پرینت:</strong>' + printHistoryHtml + '</div></div>';
                 
@@ -1559,7 +1567,7 @@ $(document).on('click', '#kelasehPagination .page-link', function (e) {
 });
 
 $(document).on('click', '#btnKelasehSelectAll, #btnKelasehSelectAllBottom', function () {
-    const checks = $('#kelasehTbody .kelaseh-label-check');
+    const checks = $('#kelasehTbody .kelaseh-label-check:not(:disabled)');
     const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
     checks.prop('checked', !allChecked);
 });
@@ -1677,20 +1685,32 @@ $(document).on('click', '#btnKelasehPrintMinutes, #btnKelasehPrintMinutesBottom'
 /* چاپ دعوت نامه → kelaseh.print.minutes */
 $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', function () {
   const codes = [];
+  let excludedCount = 0;
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (raw) {
       try {
         const payload = JSON.parse(decodeURIComponent(raw));
-        if (payload.code) codes.push(payload.code);
+        if (payload.status === 'active') {
+          if (payload.code) codes.push(payload.code);
+        } else {
+          excludedCount++;
+        }
       } catch (e) { /* skip row */ }
     }
   });
 
   if (codes.length === 0) {
-    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیر فعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
     return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
   }
   window.open(`core.php?action=kelaseh.print.minutes&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
@@ -1698,27 +1718,72 @@ $(document).on('click', '#btnKelasehPrintNotice, #btnKelasehPrintNoticeBottom', 
 /* چاپ ابلاغ رای → kelaseh.notice2 */
 $(document).on('click', '#btnKelasehPrintVerdictNotice, #btnKelasehPrintVerdictNoticeBottom', function () {
   const codes = [];
+  let excludedCount = 0;
   $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
     const tr = $(this).closest('tr');
     const raw = tr.attr('data-json');
     if (raw) {
       try {
         const payload = JSON.parse(decodeURIComponent(raw));
-        if (payload.code) codes.push(payload.code);
+        if (payload.status === 'active') {
+          if (payload.code) codes.push(payload.code);
+        } else {
+          excludedCount++;
+        }
       } catch (e) { /* skip row */ }
     }
   });
 
   if (codes.length === 0) {
-    showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیر فعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
     return;
   }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
   window.open(`core.php?action=kelaseh.notice2&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
+});
+
+$(document).on('click', '#btnKelasehPrintExecForm, #btnKelasehPrintExecFormBottom', function () {
+  const codes = [];
+  let excludedCount = 0;
+  $('#kelasehTbody .kelaseh-label-check:checked').each(function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (raw) {
+      try {
+        const payload = JSON.parse(decodeURIComponent(raw));
+        if (payload.status === 'active') {
+          if (payload.code) codes.push(payload.code);
+        } else {
+          excludedCount++;
+        }
+      } catch (e) { /* skip row */ }
+    }
+  });
+
+  if (codes.length === 0) {
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیر فعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('هیچ پرونده‌ای انتخاب نشده است.', 'error');
+    }
+    return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  window.open(`core.php?action=kelaseh.exec_form&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
 /* امروز: چاپ دعوت نامه → kelaseh.print.minutes */
 $(document).on('click', '#btnKelasehTodayPrintNotice', function () {
   const codes = [];
+  let excludedCount = 0;
   const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
   const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
 
@@ -1728,20 +1793,32 @@ $(document).on('click', '#btnKelasehTodayPrintNotice', function () {
       if (raw) {
         try {
           const payload = JSON.parse(decodeURIComponent(raw));
-          if (payload.code) codes.push(payload.code);
+          if (payload.status === 'active') {
+            if (payload.code) codes.push(payload.code);
+          } else {
+            excludedCount++;
+          }
         } catch (e) { /* skip */ }
       }
   });
 
   if (codes.length === 0) {
-    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیر فعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
     return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
   }
   window.open(`core.php?action=kelaseh.print.minutes&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehTodayPrintVerdictNotice', function () {
   const codes = [];
+  let excludedCount = 0;
   const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
   const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
 
@@ -1751,20 +1828,31 @@ $(document).on('click', '#btnKelasehTodayPrintVerdictNotice', function () {
       if (raw) {
         try {
           const payload = JSON.parse(decodeURIComponent(raw));
-          if (payload.code) codes.push(payload.code);
+          if (payload.status === 'active') {
+            if (payload.code) codes.push(payload.code);
+          } else {
+            excludedCount++;
+          }
         } catch (e) { /* skip */ }
       }
   });
 
   if (codes.length === 0) {
-    showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیر فعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
     return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
   }
   window.open(`core.php?action=kelaseh.notice2&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
 $(document).on('click', '#btnKelasehTodaySelectAll', function () {
-    const checks = $('#kelasehTodayTbody .kelaseh-label-check');
+    const checks = $('#kelasehTodayTbody .kelaseh-label-check:not(:disabled)');
     const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
     checks.prop('checked', !allChecked);
 });

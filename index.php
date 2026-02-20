@@ -1146,6 +1146,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
                 <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
                 <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
+                <button id="btnKelasehPrintExecForm" class="btn btn-outline-dark btn-sm" type="button">فرم اجراییه</button>
                 <button id="btnKelasehSelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
 
@@ -1180,6 +1181,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه انتخاب شده</button>
                 <button id="btnKelasehPrintVerdictNoticeBottom" class="btn btn-outline-primary btn-sm" type="button">ابلاغ رای انتخاب شده</button>
                 <button id="btnKelasehPrintMinutesBottom" class="btn btn-outline-warning btn-sm" type="button">چاپ رای انتخاب شده</button>
+                <button id="btnKelasehPrintExecFormBottom" class="btn btn-outline-dark btn-sm" type="button">فرم اجراییه</button>
                 <button id="btnKelasehSelectAllBottom" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
               </div>
               
@@ -1217,6 +1219,18 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     .btn-glass-warning { border-color: rgba(255, 193, 7, 0.5); color: #ffc107; }
     .btn-glass-danger { border-color: rgba(220, 53, 69, 0.5); color: #dc3545; }
     .btn-glass-success { border-color: rgba(25, 135, 84, 0.5); color: #198754; }
+    .kelaseh-row-voided {
+      background-color: #d94b4b45;
+    }
+    .kelaseh-row-inactive {
+      background-color: #d94b4b45;
+    }
+    .table-hover tbody tr.kelaseh-row-voided:hover {
+      background-color: #d94b4b60;
+    }
+    .table-hover tbody tr.kelaseh-row-inactive:hover {
+      background-color: #d94b4b60;
+    }
   </style>
 
   <div class="modal fade" id="modalKelasehEdit" tabindex="-1" aria-hidden="true">

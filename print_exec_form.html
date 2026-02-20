@@ -1,0 +1,263 @@
+<!DOCTYPE html>
+<html lang="fa" dir="rtl">
+<head>
+    <meta charset="UTF-8">
+    <title>فرم اجراییه</title>
+    <style>
+        @font-face {
+            font-family: 'Vazirmatn';
+            src: url('/assets/fonts/Vazirmatn.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'IranNastaliq';
+            src: url('/assets/fonts/IranNastaliq.woff2') format('woff2');
+        }
+        @font-face {
+            font-family: 'B Zar';
+            src: local('B Zar'), local('BZar'), url('/assets/fonts/BZar.ttf') format('truetype');
+        }
+        body {
+            font-family: 'B Zar', 'Vazirmatn', Tahoma, Arial, sans-serif;
+            margin: 0;
+            padding: 20px;
+            background-color: #f0f0f0;
+        }
+        .page {
+            width: 210mm;
+            min-height: 297mm;
+            padding: 15mm;
+            margin: 10mm auto;
+            background: white;
+            box-shadow: 0 0 10px rgba(0,0,0,0.1);
+            box-sizing: border-box;
+            position: relative;
+        }
+        .form-box {
+            border: 2px solid #2b2b2b;
+            padding: 10mm 12mm 18mm;
+            min-height: 220mm;
+            box-sizing: border-box;
+        }
+        .header-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 6mm;
+        }
+        .header-table td {
+            border: none;
+            padding: 5px;
+            vertical-align: top;
+        }
+        .logo-box {
+            width: 140px;
+            height: auto;
+            margin-bottom: 5px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+        .logo-box img {
+            width: 178px;
+            height: auto;
+            padding-right: 88px;
+        }
+        .nastaliq-text {
+            font-family: 'IranNastaliq', serif;
+            font-size: 1.4rem;
+        }
+        .info-box {
+            line-height: 1.8;
+            text-align: right;
+            font-size: 0.9rem;
+            padding-right: 75px;
+            padding-top: 15px;
+        }
+        .header-title {
+            text-align: center;
+            font-weight: bold;
+            font-size: 20pt;
+            margin: 0;
+        }
+        .salute {
+            font-weight: bold;
+            margin-bottom: 6mm;
+        }
+        .body-text {
+            font-size: 12.5pt;
+            line-height: 2.1;
+            text-align: justify;
+        }
+        .header-wrap {
+            margin-bottom: 6mm;
+        }
+        .office-lines {
+            border-top: 6px solid #2b2b2b;
+            padding-top: 6mm;
+            margin-top: 10mm;
+            font-size: 12pt;
+            text-align: right;
+			direction: initial;
+        }
+        .office-title {
+            text-align: center;
+            font-weight: bold;
+            margin-bottom: 4mm;
+        }
+        .office-line {
+            display: flex;
+            justify-content: flex-end;
+            margin: 3mm 0;
+        }
+        .signature {
+            margin-top: 18mm;
+            font-size: 12pt;
+            line-height: 2;
+            text-align: left;
+        }
+        .footer-note {
+            margin-top: 6mm;
+            font-size: 11pt;
+            text-align: right;
+            color: #333;
+        }
+        .btn-print-action {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            padding: 10px 25px;
+            background: #0d6efd;
+            color: white;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.2);
+            z-index: 1000;
+            font-family: 'Vazirmatn', Tahoma;
+            font-size: 1rem;
+        }
+        .btn-print-action:hover {
+            background: #0b5ed7;
+        }
+        @media print {
+            @page {
+                size: A4;
+                margin: 0;
+            }
+            html, body {
+                width: 210mm;
+                height: 297mm;
+                margin: 0 !important;
+                padding: 0 !important;
+                background: white;
+            }
+            .page {
+                width: 210mm;
+                height: 297mm;
+                margin: 0 !important;
+                padding: 15mm;
+                box-sizing: border-box;
+                page-break-after: avoid;
+                box-shadow: none !important;
+            }
+            .no-print {
+                display: none !important;
+            }
+            .header-table,
+            .header-table td,
+            .header-table th {
+                border: none !important;
+            }
+        }
+    </style>
+</head>
+<body>
+    <button class="btn-print-action no-print" onclick="window.print()">چاپ / ذخیره فرم اجراییه</button>
+    <div id="print-container"></div>
+
+    <script>
+        function toPersianDigits(str) {
+            if (!str && str !== 0) return '';
+            const id = ['۰', '۱', '۲', '۳', '۴', '۵', '۶', '۷', '۸', '۹'];
+            return String(str).replace(/[0-9]/g, function (w) {
+                return id[w];
+            });
+        }
+
+        function render() {
+            const data = JSON.parse(localStorage.getItem('print_queue') || '[]');
+            const container = document.getElementById('print-container');
+
+            if (!data.length) {
+                container.innerHTML = '<div style="padding: 20px; background: white; border-radius: 8px; text-align: center;">هیچ داده‌ای برای چاپ یافت نشد.</div>';
+                return;
+            }
+
+            container.innerHTML = data.map(row => {
+                let displayCode = row.code || '';
+                if (displayCode.includes('-')) {
+                    displayCode = displayCode.split('-')[1];
+                }
+                const plaintiff = row.plaintiff_name || '';
+                const cityTitle = row.city_name || 'اصفهان';
+                const postalCode = row.city_postal_code || '........';
+                const now = new Date();
+                const today = new Intl.DateTimeFormat('fa-IR-u-ca-persian', {
+                    year: 'numeric',
+                    month: '2-digit',
+                    day: '2-digit'
+                }).format(now);
+
+                return `
+                <div class="page">
+                    <div class="header-wrap">
+                        <table class="header-table">
+                            <tr>
+                                <td style="width: 35%; text-align: center;">
+                                    <div class="logo-box">
+                                        <img src="assets/img/logo.png" alt="لوگو وزارت">
+                                    </div>
+                                    <div class="nastaliq-text">اداره تعاون، کار و رفاه اجتماعی <strong>${cityTitle}</strong></div>
+                                </td>
+                                <td style="width: 30%; text-align: center;">
+                                    <div style="font-weight: bold; font-size: 12pt; margin-bottom: 4mm;">بسم تعالی</div>
+                                    <h2 class="header-title">فرم اجراییه</h2>
+                                </td>
+                                <td style="width: 35%">
+                                    <div class="info-box">
+                                        <div>کلاسه پرونده: <strong>${toPersianDigits(displayCode)}</strong></div>
+                                        <div>تاریخ: <strong>${today}</strong></div>
+                                    </div>
+                                </td>
+                            </tr>
+                        </table>
+                    </div>
+                    <div class="form-box">
+                        <div class="salute">با سلام و احترام</div>
+                        <div class="body-text">
+                            نظر به اینکه دادنامه شماره ............. مورخ .............
+                             دادخواست اینجانب <strong>${plaintiff}</strong>
+                           به شماره کلاسه پرونده  <strong>${toPersianDigits(displayCode)}</strong>
+                            قطعی گردیده است.<br> خواهشمند است مستند به ماده ۱۶۶ قانون کار
+                            جهت اجرای رأی به مراجع ذیصلاح ارجاع گردد.
+                        </div>
+                        <div class="office-lines">
+                            <div class="office-title">لطفاً جهت تکمیل فرم به اتاق‌های زیر مراجعه فرمایید.</div>
+							<div class="office-line">اتاق 201 یا 131 (دستور)</div>
+                            <div class="office-line"> اتاق 103 (ثبت) </div>  
+                        </div>
+                        <div class="signature">
+                            نام و نام خانوادگی: ............................
+                            <br/>
+                            امضاء و تاریخ: ${today}
+                        </div>
+                    </div>
+                    <div class="footer-note">اداره تعاون، کار و رفاه اجتماعی اداره ${cityTitle} | کدپستی: ${toPersianDigits(postalCode)}</div>
+                </div>
+                `;
+            }).join('<div style="page-break-after: always;"></div>');
+        }
+
+        window.onload = render;
+    </script>
+</body>
+</html>
