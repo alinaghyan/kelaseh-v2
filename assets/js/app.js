@@ -38,7 +38,9 @@ function initDatePickers() {
     calendar: {
       persian: {
         showHint: true,
-        leapThreshold: 12
+        // Use official Iranian calendar calculation to avoid +1 day drift
+        // in some years/months (seen as "today" mismatch in date filters).
+        leapYearMode: 'astronomical'
       }
     }
   };
@@ -1635,11 +1637,36 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 
                 var oldCode = $('<div/>').text(toPersianDigits(p.code || '-')).html();
                 var newCode = $('<div/>').text(toPersianDigits(p.new_case_code || '-')).html();
+                var dadnamehNo = $('<div/>').text(toPersianDigits(p.dadnameh || '-')).html();
                 var createdAt = $('<div/>').text(toPersianDigits(p.created_at_jalali || '')).html();
+                var creatorName = $('<div/>').text(toPersianDigits(p.creator_name || p.owner_name || '-')).html();
+                var creatorOffice = $('<div/>').text(toPersianDigits(p.creator_office_name || p.city_name || '-')).html();
+                var creatorRole = $('<div/>').text(toPersianDigits(p.creator_role || '-')).html();
+                var lastEditorName = $('<div/>').text(toPersianDigits(p.last_edited_by_name || '-')).html();
+                var lastEditorOffice = $('<div/>').text(toPersianDigits(p.last_edited_office_name || '-')).html();
+                var lastEditorRole = $('<div/>').text(toPersianDigits(p.last_edited_by_role || '-')).html();
+                var lastEditedAt = $('<div/>').text(toPersianDigits(p.last_edited_at_jalali || '-')).html();
+
+                function infoCell(label, value, valueClass, dir) {
+                    return '<div class="col-6 col-md-4 col-xl-3">'
+                        + '<div class="border rounded p-2 h-100 bg-white">'
+                        + '<div class="small text-secondary mb-1">' + label + '</div>'
+                        + '<div class="fw-bold ' + (valueClass || '') + '"' + (dir ? (' dir="' + dir + '"') : '') + '>' + value + '</div>'
+                        + '</div></div>';
+                }
+
                 html += '<div class="col-12"><div class="card border-secondary border-opacity-25 shadow-sm"><div class="card-body p-2">';
-                html += '<div class="small text-secondary mb-1">تاریخ و ساعت ایجاد کلاسه:</div><div class="fw-bold text-primary">' + createdAt + '</div>';
-                html += '<div class="small text-secondary mt-2">کلاسه قدیم:</div><div class="fw-bold" dir="ltr">' + oldCode + '</div>';
-                html += '<div class="small text-secondary mt-2">کلاسه جدید:</div><div class="fw-bold" dir="ltr">' + newCode + '</div>';
+                html += '<div class="row g-2">';
+                html += infoCell('تاریخ و ساعت ایجاد کلاسه', createdAt, 'text-primary');
+                html += infoCell('ثبت‌کننده', creatorName + ' <span class="text-muted small">(' + creatorRole + ')</span>');
+                html += infoCell('اداره', creatorOffice);
+                html += infoCell('آخرین ویرایش', lastEditorName + ' <span class="text-muted small">(' + lastEditorRole + ')</span>');
+                html += infoCell('اداره ویرایش‌کننده', lastEditorOffice);
+                html += infoCell('زمان آخرین ویرایش', lastEditedAt);
+                html += infoCell('کلاسه قدیم', oldCode, '', 'ltr');
+                html += infoCell('کلاسه جدید', newCode, '', 'ltr');
+                html += infoCell('شماره دادنامه', dadnamehNo);
+                html += '</div>';
                 html += '</div></div></div>';
                 html += renderColumn('اطلاعات خواهان', plaintiffFields, 'info');
                 html += renderColumn('اطلاعات خوانده', defendantFields, 'warning');
@@ -3330,17 +3357,15 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
   
   // Search Logic
   $(document).on('input', '#heyatCodeInput', function() {
-      const suffix = $(this).val();
+      const normalizeCodeInput = (v) => String(v || '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
+      const suffix = normalizeCodeInput($(this).val());
       const suggestions = $('#heyatCodeSuggestions');
       
       if (suffix.length < 4) {
           suggestions.hide().empty();
           return;
       }
-      
-      const prefixRaw = String($('#heyatCityCodePrefix').data('raw') || ((currentUser && currentUser.city_code) ? currentUser.city_code : '')).trim();
-      const prefix = prefixRaw ? prefixRaw.padStart(4, '0') : '';
-      const query = prefix ? (prefix + '-' + suffix) : suffix;
+      const query = suffix;
       
       api('kelaseh.list', { q: query, limit: 10 })
         .done(res => {
@@ -3474,17 +3499,25 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
   // Save Heyat Form
   $(document).on('submit', '#formHeyatTashkhis', function(e) {
       e.preventDefault();
-      
-      const suffix = $('#heyatCodeInput').val();
+      const normalizeCodeInput = (v) => String(v || '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
+      const suffix = normalizeCodeInput($('#heyatCodeInput').val());
       const prefixRaw = String($('#heyatCityCodePrefix').data('raw') || ((currentUser && currentUser.city_code) ? currentUser.city_code : '')).trim();
       const prefix = prefixRaw ? prefixRaw.padStart(4, '0') : '';
-      
-      // Always rebuild fullCode on submit
-      let fullCode = $('#heyatFullCode').val();
-      if (!fullCode || !fullCode.endsWith(suffix)) {
-          fullCode = prefix ? (prefix + '-' + suffix) : suffix;
-          $('#heyatFullCode').val(fullCode);
+      if (!suffix) {
+          showToast('کلاسه پرونده را وارد کنید.', 'error');
+          return;
       }
+      
+      // Rebuild fullCode on submit:
+      // - if full code with city prefix is typed, use it directly
+      // - otherwise keep selected fullCode if it matches, else compose with current prefix
+      let fullCode = normalizeCodeInput($('#heyatFullCode').val());
+      if (/^\d{4}-/.test(suffix)) {
+          fullCode = suffix;
+      } else if (!fullCode || !(fullCode === suffix || fullCode.endsWith(suffix))) {
+          fullCode = prefix ? (prefix + '-' + suffix) : suffix;
+      }
+      $('#heyatFullCode').val(fullCode);
       
       const form = this;
       
