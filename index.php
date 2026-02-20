@@ -7,6 +7,10 @@
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: same-origin');
+header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
+header('Cache-Control: post-check=0, pre-check=0', false);
+header('Pragma: no-cache');
+header('Expires: 0');
 
 $configPath = __DIR__ . DIRECTORY_SEPARATOR . 'config.php';
 $cfg = is_file($configPath) ? require $configPath : [];
@@ -385,6 +389,9 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 </li>
                 <li class="nav-item" role="presentation">
                   <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminSms" type="button" role="tab">پیامک</button>
+                </li>
+                <li class="nav-item" role="presentation">
+                  <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminManagerMessage" type="button" role="tab">پیام به مدیران</button>
                 </li>
                 <li class="nav-item" role="presentation">
                   <button class="nav-link" data-bs-toggle="tab" data-bs-target="#adminDetailedStats" type="button" role="tab">گزارش تفکیکی</button>
@@ -793,6 +800,67 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                   </div>
                 </div>
 
+                <div class="tab-pane fade" id="adminManagerMessage" role="tabpanel">
+                  <form id="formAdminManagerMessage" class="border rounded p-2">
+                    <div class="row g-2 align-items-end">
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">نوع مدیر</label>
+                        <select id="adminManagerMsgRole" name="target_role" class="form-select form-select-sm">
+                          <option value="office_admin" selected>مدیر اداره</option>
+                          <option value="branch_admin">مدیر شعبه</option>
+                          <option value="both">هر دو</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">اداره</label>
+                        <select id="adminManagerMsgCity" name="city_code" class="form-select form-select-sm">
+                          <option value="all">همه اداره‌ها</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">گیرنده</label>
+                        <select id="adminManagerMsgUser" name="target_user_id" class="form-select form-select-sm">
+                          <option value="all">همه مدیران</option>
+                        </select>
+                      </div>
+                      <div class="col-12 col-md-3">
+                        <label class="form-label form-label-sm">عنوان پیام</label>
+                        <input name="title" type="text" class="form-control form-control-sm" placeholder="عنوان کوتاه" required />
+                      </div>
+                      <div class="col-12">
+                        <label class="form-label form-label-sm">متن پیام</label>
+                        <textarea name="content" class="form-control form-control-sm" rows="3" required></textarea>
+                      </div>
+                      <div class="col-12 col-md-3 d-grid">
+                        <button class="btn btn-primary btn-sm" type="submit">ارسال پیام</button>
+                      </div>
+                    </div>
+                  </form>
+                  <div class="form-text small text-secondary mt-2">
+                    اگر «گیرنده» روی «همه مدیران» باشد، پیام برای همه‌ی مدیران فیلترشده ارسال می‌شود.
+                  </div>
+                  <div class="d-flex justify-content-between align-items-center mt-3">
+                    <div class="fw-semibold">پیام‌های ارسالی</div>
+                    <button id="btnAdminManagerMsgRefresh" class="btn btn-outline-secondary btn-sm" type="button">بروزرسانی</button>
+                  </div>
+                  <div class="table-responsive mt-2">
+                    <table class="table table-sm align-middle table-bordered">
+                      <thead>
+                        <tr>
+                          <th style="width: 140px;">تاریخ</th>
+                          <th>عنوان</th>
+                          <th style="width: 120px;">نوع</th>
+                          <th style="width: 120px;">اداره</th>
+                          <th style="width: 120px;">گیرنده</th>
+                          <th>متن</th>
+                          <th style="width: 90px;">عملیات</th>
+                        </tr>
+                      </thead>
+                      <tbody id="adminManagerMessagesSentTbody"></tbody>
+                    </table>
+                  </div>
+                </div>
+
                 <div class="tab-pane fade" id="adminDetailedStats" role="tabpanel">
                   <div class="d-flex justify-content-end mb-2">
                     <button id="btnAdminDetailedStatsRefresh" class="btn btn-outline-secondary btn-sm" type="button">دریافت گزارش</button>
@@ -1098,56 +1166,58 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
 
               <div id="kelasehListSection">
 
-              <div class="row g-2 mb-2">
-                <div class="col-12 col-md-2">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text">جستجو</span>
-                    <input id="kelasehNational" type="text" class="form-control" placeholder="کد ملی/نام/کلاسه/موبایل..." />
+              <div class="kelaseh-sticky-controls">
+                <div class="row g-2 mb-2 kelaseh-filters-row">
+                  <div class="col-12 col-md-2">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">جستجو</span>
+                      <input id="kelasehNational" type="text" class="form-control" placeholder="کد ملی/نام/کلاسه/موبایل..." />
+                    </div>
+                  </div>
+                  <div id="kelasehCityFilterWrap" class="col-12 col-md-2 d-none">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">اداره</span>
+                      <select id="adminKelasehCityFilterMain" class="form-select">
+                        <option value="">همه اداره‌ها</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div id="kelasehOwnerFilterWrap" class="col-12 col-md-2 d-none">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">مدیر شعبه</span>
+                      <select id="kelasehOwnerFilter" class="form-select">
+                        <option value="0">همه مدیران</option>
+                      </select>
+                    </div>
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">از</span>
+                      <input id="kelasehFrom" type="text" class="form-control" placeholder="1404/11/12" />
+                    </div>
+                  </div>
+                  <div class="col-6 col-md-2">
+                    <div class="input-group input-group-sm">
+                      <span class="input-group-text">تا</span>
+                      <input id="kelasehTo" type="text" class="form-control" placeholder="1404/11/12" />
+                    </div>
+                  </div>
+                  <div class="col-12 col-md-2 d-grid">
+                    <button id="btnKelasehSearch" class="btn btn-outline-secondary btn-sm" type="button">جستجو</button>
                   </div>
                 </div>
-                <div id="kelasehCityFilterWrap" class="col-12 col-md-2 d-none">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text">اداره</span>
-                    <select id="adminKelasehCityFilterMain" class="form-select">
-                      <option value="">همه اداره‌ها</option>
-                    </select>
-                  </div>
-                </div>
-                <div id="kelasehOwnerFilterWrap" class="col-12 col-md-2 d-none">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text">مدیر شعبه</span>
-                    <select id="kelasehOwnerFilter" class="form-select">
-                      <option value="0">همه مدیران</option>
-                    </select>
-                  </div>
-                </div>
-                <div class="col-6 col-md-2">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text">از</span>
-                    <input id="kelasehFrom" type="text" class="form-control" placeholder="1404/11/12" />
-                  </div>
-                </div>
-                <div class="col-6 col-md-2">
-                  <div class="input-group input-group-sm">
-                    <span class="input-group-text">تا</span>
-                    <input id="kelasehTo" type="text" class="form-control" placeholder="1404/11/12" />
-                  </div>
-                </div>
-                <div class="col-12 col-md-2 d-grid">
-                  <button id="btnKelasehSearch" class="btn btn-outline-secondary btn-sm" type="button">جستجو</button>
-                </div>
-              </div>
 
-              <div class="d-flex flex-wrap gap-2 mb-2 align-items-center">
-                <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
-                <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
-                <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل جدید</button>
-                <button id="btnKelasehPrintLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل </button> 
-                <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
-                <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
-                <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
-                <button id="btnKelasehPrintExecForm" class="btn btn-outline-dark btn-sm" type="button">فرم اجراییه</button>
-                <button id="btnKelasehSelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
+                <div class="d-flex flex-wrap gap-2 mb-2 align-items-center action-bar">
+                  <button id="btnKelasehExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
+                  <button id="btnKelasehExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
+                  <button id="btnKelasehPrintLabels" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل جدید</button>
+                  <button id="btnKelasehPrintLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل </button> 
+                  <button id="btnKelasehPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
+                  <button id="btnKelasehPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
+                  <button id="btnKelasehPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
+                  <button id="btnKelasehPrintExecForm" class="btn btn-outline-dark btn-sm" type="button">فرم اجراییه</button>
+                  <button id="btnKelasehSelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
+                </div>
               </div>
 
               <div class="table-responsive">
@@ -1175,7 +1245,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 </table>
               </div>
 
-              <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center">
+              <div class="d-flex flex-wrap gap-2 mt-2 mb-3 align-items-center action-bar">
                 <button id="btnKelasehPrintLabelsBottom" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل قدیم (انتخاب‌ها)</button>
                <!-- <button id="btnKelasehPrintLabelsBottomNew" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل جدید (انتخاب‌ها)</button> -->
                 <button id="btnKelasehPrintNoticeBottom" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه انتخاب شده</button>
@@ -1219,6 +1289,206 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     .btn-glass-warning { border-color: rgba(255, 193, 7, 0.5); color: #ffc107; }
     .btn-glass-danger { border-color: rgba(220, 53, 69, 0.5); color: #dc3545; }
     .btn-glass-success { border-color: rgba(25, 135, 84, 0.5); color: #198754; }
+    #kelasehListSection .kelaseh-sticky-controls {
+      position: sticky;
+      top: 10px;
+      z-index: 30;
+      padding: 8px;
+      border-radius: 12px;
+      margin-bottom: 10px;
+      background: rgba(255, 255, 255, 0.96);
+      border: 1px solid #e9edf5;
+    }
+    #kelasehListSection .kelaseh-sticky-controls .kelaseh-filters-row {
+      align-items: center;
+    }
+    #kelasehListSection .kelaseh-sticky-controls .input-group,
+    #kelasehListSection .kelaseh-sticky-controls .form-select,
+    #kelasehListSection .kelaseh-sticky-controls .form-control {
+      height: 44px;
+    }
+    #kelasehListSection .kelaseh-sticky-controls .input-group {
+      border-radius: 16px;
+      padding: 4px 6px;
+      background: #eef4fb;
+      border: 1px solid rgba(120, 138, 170, 0.25);
+      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.8),
+                  inset -4px -4px 10px rgba(187, 198, 216, 0.6),
+                  6px 10px 24px rgba(40, 55, 86, 0.12);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+    }
+    #kelasehListSection .kelaseh-sticky-controls .input-group:focus-within {
+      transform: translateY(-1px);
+      border-color: rgba(70, 96, 155, 0.45);
+      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.85),
+                  inset -5px -5px 12px rgba(176, 191, 214, 0.65),
+                  8px 14px 30px rgba(40, 55, 86, 0.16);
+    }
+    #kelasehListSection .kelaseh-sticky-controls .input-group-text {
+      border: none;
+      background: transparent;
+      font-weight: 700;
+      color: #4b5a78;
+    }
+    #kelasehListSection .kelaseh-sticky-controls .form-control,
+    #kelasehListSection .kelaseh-sticky-controls .form-select {
+      border: none;
+      background: transparent;
+      box-shadow: none;
+    }
+    #kelasehListSection .kelaseh-sticky-controls #btnKelasehSearch {
+      height: 44px;
+      border-radius: 16px;
+      font-weight: 800;
+      background: #eef4fb;
+      border: 1px solid rgba(120, 138, 170, 0.25);
+      color: #3b4a66;
+      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.8),
+                  inset -4px -4px 10px rgba(187, 198, 216, 0.6),
+                  6px 10px 24px rgba(40, 55, 86, 0.12);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    #kelasehListSection .kelaseh-sticky-controls #btnKelasehSearch:hover {
+      transform: translateY(-1px);
+      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.85),
+                  inset -5px -5px 12px rgba(176, 191, 214, 0.65),
+                  8px 14px 30px rgba(40, 55, 86, 0.16);
+    }
+    #kelasehListSection .action-bar .btn {
+      position: relative;
+      overflow: hidden;
+      border-radius: 14px;
+      border: 1px solid rgba(120, 138, 170, 0.25);
+      background: #eef4fb;
+      color: #3b4a66 !important;
+      font-weight: 700;
+      letter-spacing: 0.1px;
+      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.8),
+                  inset -4px -4px 10px rgba(187, 198, 216, 0.6),
+                  6px 10px 24px rgba(40, 55, 86, 0.12);
+      transition: transform 0.2s ease, box-shadow 0.2s ease;
+    }
+    #kelasehListSection .action-bar .btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 45%, transparent 60%);
+      transform: translateX(-120%);
+      transition: transform 0.6s ease;
+      pointer-events: none;
+    }
+    #kelasehListSection .action-bar .btn:hover {
+      transform: translateY(-1px);
+      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.85),
+                  inset -5px -5px 12px rgba(176, 191, 214, 0.65),
+                  8px 14px 30px rgba(40, 55, 86, 0.16);
+    }
+    #kelasehListSection .action-bar .btn:hover::after {
+      transform: translateX(120%);
+    }
+    #kelasehListSection .action-bar .btn:active {
+      transform: translateY(0);
+      box-shadow: inset 3px 3px 7px rgba(170, 185, 210, 0.8),
+                  inset -2px -2px 6px rgba(255, 255, 255, 0.75);
+    }
+    #kelasehListSection .action-bar .btn:focus-visible {
+      outline: 2px solid rgba(37, 99, 235, 0.45);
+      outline-offset: 2px;
+    }
+    #kelasehListSection .table-responsive {
+      overflow: visible;
+    }
+    #kelasehListSection .table-responsive thead {
+      position: sticky;
+      top: var(--kelaseh-sticky-offset, 120px);
+      z-index: 21;
+      background: #f2f5fa;
+      box-shadow: 0 2px 0 rgba(15, 23, 42, 0.06);
+    }
+    #kelasehListSection .table-responsive thead th {
+      position: static;
+      background: transparent;
+      white-space: nowrap;
+    }
+    #kelasehListSection .kelaseh-action-group {
+      display: inline-flex;
+      flex-wrap: nowrap;
+      gap: 0;
+    }
+    #kelasehListSection .kelaseh-action-group .btn {
+      border-radius: 0;
+      border: 1px solid rgba(35, 49, 82, 0.18);
+      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
+      font-weight: 700;
+      position: relative;
+      overflow: hidden;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+      white-space: nowrap;
+    }
+    #kelasehListSection .kelaseh-action-group .btn::after {
+      content: "";
+      position: absolute;
+      inset: 0;
+      background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.55) 45%, transparent 60%);
+      transform: translateX(-120%);
+      transition: transform 0.6s ease;
+      pointer-events: none;
+    }
+    #kelasehListSection .kelaseh-action-group .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 12px 26px rgba(16, 24, 40, 0.16);
+      filter: brightness(1.02);
+    }
+    #kelasehListSection .kelaseh-action-group .btn:hover::after {
+      transform: translateX(120%);
+    }
+    #kelasehListSection .kelaseh-action-group .btn:active {
+      transform: translateY(0);
+      box-shadow: 0 6px 14px rgba(16, 24, 40, 0.1);
+    }
+    #kelasehListSection .kelaseh-action-group .btn-glass-info {
+      background: linear-gradient(135deg, #f6fbff 0%, #e1f3ff 100%);
+      color: #0b5ed7;
+      border-color: rgba(13, 110, 253, 0.35);
+    }
+    #kelasehListSection .kelaseh-action-group .btn-glass-primary {
+      background: linear-gradient(135deg, #f7f8ff 0%, #e7edff 100%);
+      color: #2a6fdb;
+      border-color: rgba(13, 110, 253, 0.35);
+    }
+    #kelasehListSection .kelaseh-action-group .btn-glass-warning {
+      background: linear-gradient(135deg, #fff8e6 0%, #ffe6a6 100%);
+      color: #a06a00;
+      border-color: rgba(255, 193, 7, 0.45);
+    }
+    #kelasehListSection .kelaseh-action-group .btn-glass-danger {
+      background: linear-gradient(135deg, #ffeef0 0%, #ffd2d8 100%);
+      color: #b42318;
+      border-color: rgba(220, 53, 69, 0.45);
+    }
+    #kelasehListSection .kelaseh-action-group .btn + .btn {
+      margin-right: -1px;
+    }
+    #kelasehListSection .kelaseh-action-group .btn:first-child {
+      border-top-right-radius: 12px;
+      border-bottom-right-radius: 12px;
+    }
+    #kelasehListSection .kelaseh-action-group .btn:last-child {
+      border-top-left-radius: 12px;
+      border-bottom-left-radius: 12px;
+    }
+    #kelasehListSection td.kelaseh-compact-text {
+      max-width: 180px;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+    }
+    @media (max-width: 767.98px) {
+      #kelasehListSection .kelaseh-sticky-controls {
+        top: 6px;
+        padding: 6px;
+      }
+    }
     .kelaseh-row-voided {
       background-color: #d94b4b45;
     }
@@ -1232,6 +1502,25 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       background-color: #d94b4b60;
     }
   </style>
+
+  <div class="modal fade" id="modalManagerMessage" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-lg modal-dialog-centered">
+      <div class="modal-content">
+        <div class="modal-header">
+          <h5 class="modal-title" id="managerMsgTitle">پیام مدیر</h5>
+          <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+        </div>
+        <div class="modal-body">
+          <div class="text-secondary small mb-2" id="managerMsgMeta"></div>
+          <div id="managerMsgBody" class="lh-lg"></div>
+        </div>
+        <div class="modal-footer">
+          <button type="button" class="btn btn-outline-secondary" id="btnManagerMsgClose" data-bs-dismiss="modal">بستن</button>
+          <button type="button" class="btn btn-primary" id="btnManagerMsgRead">خواندم</button>
+        </div>
+      </div>
+    </div>
+  </div>
 
   <div class="modal fade" id="modalKelasehEdit" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-lg modal-dialog-centered">

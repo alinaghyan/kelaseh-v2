@@ -2026,6 +2026,44 @@ function action_kelaseh_update(array $data): void
     json_response(true, ['message' => 'ویرایش شد']);
 }
 
+function ensure_manager_messages_tables(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        db()->exec("CREATE TABLE IF NOT EXISTS manager_messages (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            sender_id INT UNSIGNED NOT NULL,
+            sender_role VARCHAR(30) NOT NULL,
+            target_role VARCHAR(30) NOT NULL,
+            target_city_code VARCHAR(10) NULL,
+            target_user_id INT UNSIGNED NULL,
+            title VARCHAR(200) NOT NULL,
+            content TEXT NULL,
+            created_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            KEY idx_manager_messages_target (target_role, target_city_code, created_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci");
+    } catch (Throwable $e) {}
+
+    try {
+        db()->exec("ALTER TABLE manager_messages ADD COLUMN IF NOT EXISTS target_user_id INT UNSIGNED NULL AFTER target_city_code");
+    } catch (Throwable $e) {}
+
+    try {
+        db()->exec("CREATE TABLE IF NOT EXISTS manager_message_reads (
+            id INT UNSIGNED NOT NULL AUTO_INCREMENT,
+            message_id INT UNSIGNED NOT NULL,
+            user_id INT UNSIGNED NOT NULL,
+            read_at DATETIME NOT NULL,
+            PRIMARY KEY (id),
+            UNIQUE KEY uniq_manager_message_read (message_id, user_id),
+            KEY idx_manager_message_reads_user (user_id, read_at)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci");
+    } catch (Throwable $e) {}
+}
+
 function action_kelaseh_exec_form(array $data): void {
     $user = auth_require_login();
     ensure_kelaseh_numbers_supports_extended_fields();
@@ -2104,6 +2142,173 @@ function action_kelaseh_exec_form(array $data): void {
 
     echo $html;
     exit;
+}
+
+function action_manager_message_send(array $data): void
+{
+    $user = auth_require_login();
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) {
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    }
+    csrf_require_valid();
+
+    ensure_manager_messages_tables();
+    $title = trim((string)($data['title'] ?? ''));
+    $content = trim((string)($data['content'] ?? ''));
+    if ($title === '' || $content === '') {
+        json_response(false, ['message' => 'عنوان و متن پیام الزامی است.'], 422);
+    }
+
+    $targetRole = $user['role'] === 'admin'
+        ? (string)($data['target_role'] ?? 'office_admin')
+        : 'branch_admin';
+    if (!in_array($targetRole, ['office_admin', 'branch_admin', 'both'], true)) {
+        json_response(false, ['message' => 'نوع مدیر نامعتبر است.'], 422);
+    }
+    $targetCity = null;
+    $targetUserId = (int)($data['target_user_id'] ?? 0);
+
+    if ($user['role'] === 'admin') {
+        $rawCity = trim((string)($data['city_code'] ?? ''));
+        if ($rawCity !== '' && $rawCity !== 'all') {
+            $resolved = resolve_city_code_fk($rawCity) ?? normalize_city_code($rawCity);
+            if (!$resolved) {
+                json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
+            }
+            $targetCity = $resolved;
+        }
+    } else {
+        $targetCity = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
+    }
+
+    if ($targetUserId > 0) {
+        $stmtU = db()->prepare("SELECT id, role, city_code FROM users WHERE id = ? LIMIT 1");
+        $stmtU->execute([$targetUserId]);
+        $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
+        if (!$uRow) json_response(false, ['message' => 'گیرنده یافت نشد.'], 404);
+        if ($targetRole !== 'both' && ($uRow['role'] ?? '') !== $targetRole) {
+            json_response(false, ['message' => 'گیرنده با نوع مدیر انتخابی سازگار نیست.'], 422);
+        }
+        if ($targetRole === 'both' && !in_array(($uRow['role'] ?? ''), ['office_admin', 'branch_admin'], true)) {
+            json_response(false, ['message' => 'گیرنده با نوع مدیر انتخابی سازگار نیست.'], 422);
+        }
+        if ($targetCity !== null && $targetCity !== '' && ($uRow['city_code'] ?? '') !== $targetCity) {
+            json_response(false, ['message' => 'گیرنده متعلق به این اداره نیست.'], 422);
+        }
+    } else {
+        $targetUserId = null;
+    }
+
+    $targetRoles = $targetRole === 'both' ? ['office_admin', 'branch_admin'] : [$targetRole];
+    foreach ($targetRoles as $tr) {
+        db()->prepare("INSERT INTO manager_messages (sender_id, sender_role, target_role, target_city_code, target_user_id, title, content, created_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?)")
+            ->execute([
+                (int)($user['id'] ?? 0),
+                (string)($user['role'] ?? ''),
+                $tr,
+                $targetCity,
+                $targetUserId,
+                $title,
+                $content,
+                now_mysql()
+            ]);
+    }
+
+    json_response(true, ['message' => 'پیام ارسال شد.']);
+}
+
+function action_manager_messages_unread(array $data): void
+{
+    $user = auth_require_login();
+    if (!in_array($user['role'], ['office_admin', 'branch_admin'], true)) {
+        json_response(true, ['data' => ['messages' => []]]);
+    }
+
+    ensure_manager_messages_tables();
+    $role = (string)$user['role'];
+    $city = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
+    $sql = "SELECT m.*, u.username, u.first_name, u.last_name
+        FROM manager_messages m
+        LEFT JOIN users u ON u.id = m.sender_id
+        WHERE m.target_role = ?
+          AND (m.target_city_code IS NULL OR m.target_city_code = ?)
+          AND (m.target_user_id IS NULL OR m.target_user_id = ?)
+          AND NOT EXISTS (SELECT 1 FROM manager_message_reads r WHERE r.message_id = m.id AND r.user_id = ?)
+        ORDER BY m.created_at DESC
+        LIMIT 50";
+    $stmt = db()->prepare($sql);
+    $stmt->execute([$role, $city, (int)($user['id'] ?? 0), (int)($user['id'] ?? 0)]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+        $r['sender_name'] = trim(($r['first_name'] ?? '') . ' ' . ($r['last_name'] ?? '')) ?: ($r['username'] ?? '');
+    }
+    json_response(true, ['data' => ['messages' => $rows]]);
+}
+
+function action_manager_message_read(array $data): void
+{
+    $user = auth_require_login();
+    if (!in_array($user['role'], ['office_admin', 'branch_admin'], true)) {
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
+    }
+    csrf_require_valid();
+
+    ensure_manager_messages_tables();
+    $id = (int)($data['id'] ?? 0);
+    if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
+
+    $role = (string)$user['role'];
+    $city = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
+    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND target_role = ? AND (target_city_code IS NULL OR target_city_code = ?) AND (target_user_id IS NULL OR target_user_id = ?) LIMIT 1");
+    $stmt->execute([$id, $role, $city, (int)($user['id'] ?? 0)]);
+    $exists = $stmt->fetchColumn();
+    if (!$exists) json_response(false, ['message' => 'پیام یافت نشد.'], 404);
+
+    db()->prepare("INSERT IGNORE INTO manager_message_reads (message_id, user_id, read_at) VALUES (?, ?, ?)")
+        ->execute([$id, (int)($user['id'] ?? 0), now_mysql()]);
+
+    json_response(true, ['message' => 'ثبت شد.']);
+}
+
+function action_manager_messages_sent(array $data): void
+{
+    $user = auth_require_login();
+    auth_require_admin($user);
+    ensure_manager_messages_tables();
+
+    $stmt = db()->prepare("SELECT m.*
+        FROM manager_messages m
+        WHERE m.sender_id = ?
+        ORDER BY m.created_at DESC
+        LIMIT 200");
+    $stmt->execute([(int)($user['id'] ?? 0)]);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as &$r) {
+        $r['created_at_jalali'] = format_jalali_datetime($r['created_at'] ?? null);
+    }
+    json_response(true, ['data' => ['messages' => $rows]]);
+}
+
+function action_manager_message_delete(array $data): void
+{
+    $user = auth_require_login();
+    auth_require_admin($user);
+    csrf_require_valid();
+    ensure_manager_messages_tables();
+
+    $id = (int)($data['id'] ?? 0);
+    if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
+
+    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND sender_id = ? LIMIT 1");
+    $stmt->execute([$id, (int)($user['id'] ?? 0)]);
+    if (!$stmt->fetchColumn()) {
+        json_response(false, ['message' => 'پیام یافت نشد.'], 404);
+    }
+
+    db()->prepare("DELETE FROM manager_message_reads WHERE message_id = ?")->execute([$id]);
+    db()->prepare("DELETE FROM manager_messages WHERE id = ?")->execute([$id]);
+    json_response(true, ['message' => 'حذف شد.']);
 }
 
 function action_kelaseh_set_status(array $data): void
@@ -3325,6 +3530,21 @@ function handle_request(): void
                 break;
             case 'kelaseh.exec_form':
                 action_kelaseh_exec_form($data);
+                break;
+            case 'manager.message.send':
+                action_manager_message_send($data);
+                break;
+            case 'manager.messages.unread':
+                action_manager_messages_unread($data);
+                break;
+            case 'manager.message.read':
+                action_manager_message_read($data);
+                break;
+            case 'manager.messages.sent':
+                action_manager_messages_sent($data);
+                break;
+            case 'manager.message.delete':
+                action_manager_message_delete($data);
                 break;
             case 'kelaseh.export.csv': action_kelaseh_export_csv($data); break;
             case 'kelaseh.export.print': action_kelaseh_export_print($data); break;

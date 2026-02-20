@@ -87,6 +87,36 @@ CREATE TABLE IF NOT EXISTS `items` (
   KEY `idx_items_updated_at` (`updated_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
+-- --------------------------------------------------------
+-- ساختار جدول پیام مدیران
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `manager_messages` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `sender_id` INT UNSIGNED NOT NULL,
+  `sender_role` VARCHAR(30) NOT NULL,
+  `target_role` VARCHAR(30) NOT NULL,
+  `target_city_code` VARCHAR(10) NULL,
+  `target_user_id` INT UNSIGNED NULL,
+  `title` VARCHAR(200) NOT NULL,
+  `content` TEXT NULL,
+  `created_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  KEY `idx_manager_messages_target` (`target_role`, `target_city_code`, `created_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+-- --------------------------------------------------------
+-- ساختار جدول خوانده‌شدن پیام مدیران
+-- --------------------------------------------------------
+CREATE TABLE IF NOT EXISTS `manager_message_reads` (
+  `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `message_id` INT UNSIGNED NOT NULL,
+  `user_id` INT UNSIGNED NOT NULL,
+  `read_at` DATETIME NOT NULL,
+  PRIMARY KEY (`id`),
+  UNIQUE KEY `uniq_manager_message_read` (`message_id`, `user_id`),
+  KEY `idx_manager_message_reads_user` (`user_id`, `read_at`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
 CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,
@@ -147,4 +177,3 @@ CREATE TABLE IF NOT EXISTS `sms_logs` (
   PRIMARY KEY (`id`),
   KEY `idx_sms_logs_created_at` (`created_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
-

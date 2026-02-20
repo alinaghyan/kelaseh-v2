@@ -9,6 +9,23 @@ let currentUser = null;
 let adminCitiesLoaded = false;
 let headerClockTimer = null;
 let kelasehCreateBusy = false;
+let managerMsgQueue = [];
+let managerMsgActive = null;
+let adminUsersCache = null;
+let managerMsgPoller = null;
+let kelasehStickyInit = false;
+let managerMsgReadBusy = false;
+
+function updateKelasehStickyOffset() {
+  const section = document.getElementById('kelasehListSection');
+  const wrap = section ? section.querySelector('.kelaseh-sticky-controls') : null;
+  if (!section || !wrap) return;
+  const top = parseFloat(getComputedStyle(wrap).top) || 0;
+  const height = wrap.offsetHeight || 0;
+  const gap = 8;
+  const offset = Math.max(0, height + top + gap);
+  section.style.setProperty('--kelaseh-sticky-offset', `${Math.ceil(offset)}px`);
+}
 
 function initDatePickers() {
   const commonOptions = {
@@ -78,6 +95,182 @@ function showToast(message, type) {
   const t = new bootstrap.Toast(el, { delay: 2500 });
   t.show();
   el.addEventListener('hidden.bs.toast', () => el.remove());
+}
+
+function showNextManagerMessage() {
+  const modalEl = document.getElementById('modalManagerMessage');
+  if (!modalEl) return;
+  if (!managerMsgQueue.length) {
+    managerMsgActive = null;
+    const inst = bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    return;
+  }
+
+  if (modalEl.parentElement !== document.body) {
+    document.body.appendChild(modalEl);
+  }
+  managerMsgActive = null;
+  while (managerMsgQueue.length) {
+    const candidate = managerMsgQueue.shift();
+    if (!candidate || !candidate.id) {
+      managerMsgActive = candidate || null;
+      break;
+    }
+    const uid = currentUser && (currentUser.id || currentUser.user_id || currentUser.username || currentUser.email) || 'user';
+    const key = `managerMsgShown:${uid}:${candidate.id}`;
+    const shownCount = Number(localStorage.getItem(key) || 0);
+    if (shownCount >= 2) {
+      api('manager.message.read', { id: candidate.id });
+      continue;
+    }
+    localStorage.setItem(key, String(shownCount + 1));
+    managerMsgActive = candidate;
+    break;
+  }
+  if (!managerMsgActive) {
+    const inst = bootstrap.Modal.getInstance(modalEl);
+    if (inst) inst.hide();
+    document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+    document.body.classList.remove('modal-open');
+    document.body.style.removeProperty('overflow');
+    document.body.style.removeProperty('padding-right');
+    return;
+  }
+  const titleEl = document.getElementById('managerMsgTitle');
+  const bodyEl = document.getElementById('managerMsgBody');
+  const metaEl = document.getElementById('managerMsgMeta');
+  if (titleEl) titleEl.textContent = managerMsgActive.title || '';
+  if (bodyEl) bodyEl.textContent = managerMsgActive.content || '';
+  if (metaEl) {
+    const sender = managerMsgActive.sender_name || 'مدیر';
+    const created = managerMsgActive.created_at_jalali || '';
+    metaEl.textContent = `${sender}${created ? ' | ' + created : ''}`;
+  }
+
+  document.querySelectorAll('.modal-backdrop').forEach((b) => b.remove());
+  document.body.classList.remove('modal-open');
+  document.body.style.removeProperty('overflow');
+  document.body.style.removeProperty('padding-right');
+  bootstrap.Modal.getOrCreateInstance(modalEl).show();
+}
+
+function markActiveManagerMessageRead() {
+  if (!managerMsgActive || managerMsgReadBusy) return;
+  managerMsgReadBusy = true;
+  const id = managerMsgActive.id;
+  api('manager.message.read', { id })
+    .done(() => {
+      managerMsgActive = null;
+      managerMsgReadBusy = false;
+      showNextManagerMessage();
+    })
+    .fail(() => {
+      managerMsgReadBusy = false;
+      showToast('خطا در ثبت خواندن پیام.', 'error');
+    });
+}
+
+function refreshAdminManagerMessagesSent() {
+  if (!currentUser || currentUser.role !== 'admin') return;
+  api('manager.messages.sent', {})
+    .done((res) => {
+      const rows = (res.data && res.data.messages) || [];
+      const html = rows.map((r) => {
+        const created = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
+        const title = $('<div/>').text(r.title || '').html();
+        const content = $('<div/>').text(r.content || '').html();
+        const role = r.target_role === 'both' ? 'هر دو' : (r.target_role === 'office_admin' ? 'مدیر اداره' : 'مدیر شعبه');
+        const city = r.target_city_code ? toPersianDigits(String(r.target_city_code)) : 'همه اداره‌ها';
+        const target = r.target_user_id ? `کاربر #${toPersianDigits(String(r.target_user_id))}` : 'همه';
+        return `
+          <tr data-id="${r.id}">
+            <td class="text-secondary">${created}</td>
+            <td>${title}</td>
+            <td class="text-secondary">${role}</td>
+            <td class="text-secondary">${city}</td>
+            <td class="text-secondary">${target}</td>
+            <td>${content}</td>
+            <td class="text-center">
+              <button class="btn btn-outline-danger btn-sm btn-admin-manager-msg-del" type="button">حذف</button>
+            </td>
+          </tr>
+        `;
+      }).join('');
+      $('#adminManagerMessagesSentTbody').html(html || `<tr><td colspan="7" class="text-center text-secondary py-3">پیامی ثبت نشده است.</td></tr>`);
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'خطا در دریافت پیام‌های ارسالی.';
+      showToast(msg, 'error');
+    });
+}
+
+function fetchManagerMessages() {
+  if (!currentUser || !['office_admin', 'branch_admin'].includes(currentUser.role)) return;
+  api('manager.messages.unread', {})
+    .done((res) => {
+      const list = (res.data && res.data.messages) || [];
+      managerMsgQueue = list.slice();
+      showNextManagerMessage();
+    })
+    .fail(() => {});
+}
+
+function startManagerMsgPolling() {
+  if (!currentUser || !['office_admin', 'branch_admin'].includes(currentUser.role)) return;
+  if (managerMsgPoller) clearInterval(managerMsgPoller);
+  managerMsgPoller = setInterval(fetchManagerMessages, 30000);
+}
+
+function loadAdminUsersCache() {
+  if (adminUsersCache) {
+    return $.Deferred().resolve(adminUsersCache).promise();
+  }
+  return api('admin.users.list', { q: '' })
+    .done((res) => {
+      adminUsersCache = (res.data && res.data.users) || [];
+    })
+    .fail(() => {
+      adminUsersCache = [];
+    });
+}
+
+function updateAdminManagerMsgUsers() {
+  const role = $('#adminManagerMsgRole').val() || 'office_admin';
+  const city = $('#adminManagerMsgCity').val() || 'all';
+  const $sel = $('#adminManagerMsgUser');
+  if ($sel.length === 0) return;
+
+  loadAdminUsersCache().always(() => {
+    const users = Array.isArray(adminUsersCache) ? adminUsersCache : [];
+    const filtered = users.filter((u) => {
+      if (role === 'both') {
+        if (!['office_admin', 'branch_admin'].includes(u.role)) return false;
+      } else if (u.role !== role) {
+        return false;
+      }
+      if (city === 'all' || city === '') return true;
+      const code = String(u.city_code || '');
+      return code === String(city);
+    });
+
+    const opts = ['<option value="all">همه مدیران</option>']
+      .concat(
+        filtered.map((u) => {
+          const id = String(u.id || '');
+          const name = $('<div/>').text(u.display_name || u.username || '').html();
+          const cityName = $('<div/>').text(u.city_name || u.city_code || '').html();
+          const label = cityName ? `${name} - ${cityName}` : name;
+          return `<option value="${id}">${label}</option>`;
+        })
+      )
+      .join('');
+    $sel.html(opts);
+  });
 }
 
 function api(action, data) {
@@ -157,6 +350,17 @@ function loadAdminCities() {
         .join('');
       $('#adminKelasehCityFilter').html(opts2);
       $('#adminKelasehCityFilterMain').html(opts2);
+      const msgOpts = ['<option value="all">همه اداره‌ها</option>']
+        .concat(
+          cities.map((c) => {
+            const code = $('<div/>').text(c.code || '').html();
+            const name = $('<div/>').text(c.name || '').html();
+            return `<option value="${code}">${name}</option>`;
+          })
+        )
+        .join('');
+      $('#adminManagerMsgCity').html(msgOpts);
+      updateAdminManagerMsgUsers();
       const modalCityOpts = ['<option value="" disabled selected>انتخاب اداره…</option>']
         .concat(
           cities.map((c) => {
@@ -452,8 +656,10 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
     const branchNo = toPersianDigits(String(r.branch_no || '').padStart(2, '0'));
     const cityName = $('<div/>').text(toPersianDigits(r.city_name || '')).html();
     const ownerName = $('<div/>').text(toPersianDigits(r.owner_name || '')).html();
-    const plaintiff = $('<div/>').text(toPersianDigits(r.plaintiff_name || '')).html();
-    const defendant = $('<div/>').text(toPersianDigits(r.defendant_name || '')).html();
+    const plaintiffRaw = String(r.plaintiff_name || '').replace(/\s+/g, ' ').trim();
+    const defendantRaw = String(r.defendant_name || '').replace(/\s+/g, ' ').trim();
+    const plaintiff = $('<div/>').text(toPersianDigits(plaintiffRaw)).html();
+    const defendant = $('<div/>').text(toPersianDigits(defendantRaw)).html();
     const date = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
     const status = r.status === 'voided' ? 'ابطال' : r.status === 'inactive' ? 'غیرفعال' : 'فعال';
     const statusHtml = $('<div/>').text(status).html();
@@ -528,7 +734,7 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
 
     const actionButtons = `
         <div class="d-flex flex-column gap-1">
-            <div class="btn-group btn-group-sm" role="group">
+            <div class="btn-group btn-group-sm kelaseh-action-group" role="group">
                 <button class="btn btn-glass btn-glass-info btn-kelaseh-view" type="button" data-code="${(r.code || r.full_code || '').replace(/"/g, '&quot;').replace(/</g, '&lt;')}">نمایش مشخصات</button>
                 <!-- <button class="btn btn-glass btn-glass-secondary btn-kelaseh-label" type="button">چاپ لیبل</button> -->
                 <button class="btn btn-glass btn-glass-primary btn-kelaseh-edit" type="button">ویرایش</button>
@@ -560,9 +766,9 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
         <td class="text-secondary">${branchNo}</td>
         <td class="text-secondary">${cityName}</td>
         <td class="text-secondary small">${ownerName}</td>
-        <td>${plaintiff}</td>
+        <td class="kelaseh-compact-text">${plaintiff}</td>
         <td class="text-secondary" dir="ltr">${pnc}</td>
-        <td>${defendant}</td>
+        <td class="kelaseh-compact-text">${defendant}</td>
         <!-- <td>${noticeStatusHtml}</td> -->
         <!-- <td class="${statusClass}">${statusHtml}</td> -->
         <td class="text-end">
@@ -622,6 +828,7 @@ function renderKelaseh(res) {
     pagHtml += `<li class="page-item ${page === totalPages ? 'disabled' : ''}"><a class="page-link" href="#" data-page="${page + 1}">بعدی</a></li>`;
   }
   $('#kelasehPagination').html(pagHtml);
+  updateKelasehStickyOffset();
 }
 
 function refreshKelasehToday() {
@@ -915,6 +1122,14 @@ function boot() {
         renderUser();
         setView('app');
         initDatePickers();
+        if (!kelasehStickyInit) {
+          kelasehStickyInit = true;
+          updateKelasehStickyOffset();
+          window.addEventListener('resize', () => {
+            window.clearTimeout(window.__kelasehStickyTimer);
+            window.__kelasehStickyTimer = window.setTimeout(updateKelasehStickyOffset, 120);
+          });
+        }
         if (!window.location.hash) {
           window.location.hash = '#dashboard';
         }
@@ -930,11 +1145,14 @@ function boot() {
           refreshAdminLogs();
           refreshAdminStats();
           refreshAdminSmsSettings();
+          refreshAdminManagerMessagesSent();
         } else if (currentUser.role === 'office_admin') {
           refreshOfficeUsers();
           refreshOfficeKelasehSearch();
           refreshOfficeCapacities();
         }
+        fetchManagerMessages();
+        startManagerMsgPolling();
       }
     })
     .fail((xhr) => {
@@ -994,6 +1212,8 @@ $(document).on('submit', '#formLogin', function (e) {
         refreshOfficeKelasehSearch();
         refreshOfficeCapacities();
       }
+      fetchManagerMessages();
+      startManagerMsgPolling();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ورود ناموفق بود.';
@@ -1045,6 +1265,8 @@ $(document).on('click', '#btnLoginOtpVerify', function () {
         refreshOfficeKelasehSearch();
         refreshOfficeCapacities();
       }
+      fetchManagerMessages();
+      startManagerMsgPolling();
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تأیید کد ناموفق بود.';
@@ -1570,6 +1792,77 @@ $(document).on('click', '#btnKelasehSelectAll, #btnKelasehSelectAllBottom', func
     const checks = $('#kelasehTbody .kelaseh-label-check:not(:disabled)');
     const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
     checks.prop('checked', !allChecked);
+});
+
+$(document).on('click', '#btnManagerMsgRead, #btnManagerMsgClose', function () {
+  markActiveManagerMessageRead();
+});
+
+$(document).on('hidden.bs.modal', '#modalManagerMessage', function () {
+  markActiveManagerMessageRead();
+});
+
+$(document).on('submit', '#formAdminManagerMessage', function (e) {
+  e.preventDefault();
+  const formEl = this;
+  const data = Object.fromEntries(new FormData(formEl));
+  if (data.target_user_id === 'all') delete data.target_user_id;
+  api('manager.message.send', data)
+    .done((res) => {
+      showToast(res.message || 'پیام ارسال شد.', 'success');
+      formEl.reset();
+      $('#adminManagerMsgCity').val('all');
+      $('#adminManagerMsgRole').val('office_admin');
+      updateAdminManagerMsgUsers();
+      refreshAdminManagerMessagesSent();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ارسال پیام ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('submit', '#formOfficeManagerMessage', function (e) {
+  e.preventDefault();
+  const formEl = this;
+  const data = Object.fromEntries(new FormData(formEl));
+  api('manager.message.send', data)
+    .done((res) => {
+      showToast(res.message || 'پیام ارسال شد.', 'success');
+      formEl.reset();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ارسال پیام ناموفق بود.';
+      showToast(msg, 'error');
+    });
+});
+
+$(document).on('change', '#adminManagerMsgRole, #adminManagerMsgCity', function () {
+  updateAdminManagerMsgUsers();
+});
+
+$(document).on('shown.bs.tab', 'button[data-bs-target="#adminManagerMessage"]', function () {
+  refreshAdminManagerMessagesSent();
+});
+
+$(document).on('click', '#btnAdminManagerMsgRefresh', function () {
+  refreshAdminManagerMessagesSent();
+});
+
+$(document).on('click', '#adminManagerMessagesSentTbody .btn-admin-manager-msg-del', function () {
+  const tr = $(this).closest('tr');
+  const id = Number(tr.attr('data-id') || 0);
+  if (!id) return;
+  if (!confirm('پیام حذف شود؟')) return;
+  api('manager.message.delete', { id })
+    .done((res) => {
+      showToast(res.message || 'حذف شد.', 'success');
+      refreshAdminManagerMessagesSent();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'حذف پیام ناموفق بود.';
+      showToast(msg, 'error');
+    });
 });
 
 $(document).on('change', '#adminKelasehCityFilter', function() {
