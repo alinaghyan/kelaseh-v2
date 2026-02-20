@@ -183,6 +183,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
         <li class="nav-item"><a class="nav-link" href="#create" data-page="create">ایجاد شماره کلاسه</a></li>
         <li class="nav-item d-none" id="navItemHeyat"><a class="nav-link" href="#heyat" data-page="heyat">هیات تشخیص</a></li>
         <li class="nav-item"><a class="nav-link" href="#dashboard" data-page="dashboard">پنل کاربری</a></li>
+        <li class="nav-item d-none" id="navItemOfficeManagement"><a class="nav-link" href="#office-management" data-page="office-management">پنل مدیریت</a></li>
         <li class="nav-item"><a class="nav-link" href="#profile" data-page="profile">پروفایل</a></li>
         <li class="nav-item" id="navItemAdmin"><a class="nav-link" href="#admin" data-page="admin">پنل مدیر کل</a></li>
         <li class="nav-item" id="navItemAdminKelasehSearch"><a class="nav-link" href="#admin-kelaseh-search" data-page="admin-kelaseh-search">جستجوی پرونده</a></li>
@@ -305,6 +306,10 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                      <!-- Sessions Accordion -->
                      <div class="col-12">
                         <label class="form-label form-label-sm fw-bold border-bottom w-100 pb-1 mb-2">جلسات رسیدگی</label>
+                        <div class="d-flex justify-content-end gap-2 mb-2">
+                          <button id="btnHeyatAddSession" type="button" class="btn btn-outline-primary btn-sm">افزودن جلسه</button>
+                          <button id="btnHeyatRemoveSession" type="button" class="btn btn-outline-danger btn-sm">حذف آخرین جلسه</button>
+                        </div>
                         <div class="accordion" id="accordionSessions">
                            <?php 
                              $sessions = [
@@ -318,7 +323,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                              foreach($sessions as $idx => $s):
                                $isFirst = $idx === 0;
                            ?>
-                           <div class="accordion-item">
+                           <div class="accordion-item heyat-session-item <?php echo $isFirst ? '' : 'd-none'; ?>" data-session-key="<?php echo $s['id']; ?>" data-session-index="<?php echo $idx; ?>">
                              <h2 class="accordion-header">
                                <button class="accordion-button <?php echo $isFirst ? '' : 'collapsed'; ?> p-2 bg-light" type="button" data-bs-toggle="collapse" data-bs-target="#collapse<?php echo $s['id']; ?>" aria-expanded="<?php echo $isFirst ? 'true' : 'false'; ?>">
                                  <span class="fw-bold ms-2"><?php echo $s['label']; ?></span>
@@ -1293,11 +1298,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       position: sticky;
       top: 10px;
       z-index: 30;
-      padding: 8px;
-      border-radius: 12px;
+      padding: 10px;
+      border-radius: 14px;
       margin-bottom: 10px;
-      background: rgba(255, 255, 255, 0.96);
-      border: 1px solid #e9edf5;
+      background: rgba(255, 255, 255, 0.95);
+      border: 1px solid #d8e1ee;
+      box-shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
     }
     #kelasehListSection .kelaseh-sticky-controls .kelaseh-filters-row {
       align-items: center;
@@ -1308,27 +1314,23 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       height: 44px;
     }
     #kelasehListSection .kelaseh-sticky-controls .input-group {
-      border-radius: 16px;
-      padding: 4px 6px;
-      background: #eef4fb;
-      border: 1px solid rgba(120, 138, 170, 0.25);
-      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.8),
-                  inset -4px -4px 10px rgba(187, 198, 216, 0.6),
-                  6px 10px 24px rgba(40, 55, 86, 0.12);
-      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+      border-radius: 12px;
+      padding: 0;
+      background: #f9fbff;
+      border: 1px solid #cfd9e7;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.05);
+      transition: border-color 0.2s ease, box-shadow 0.2s ease;
     }
     #kelasehListSection .kelaseh-sticky-controls .input-group:focus-within {
-      transform: translateY(-1px);
-      border-color: rgba(70, 96, 155, 0.45);
-      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.85),
-                  inset -5px -5px 12px rgba(176, 191, 214, 0.65),
-                  8px 14px 30px rgba(40, 55, 86, 0.16);
+      border-color: #7e9ec8;
+      box-shadow: 0 0 0 3px rgba(74, 123, 187, 0.16);
     }
     #kelasehListSection .kelaseh-sticky-controls .input-group-text {
       border: none;
-      background: transparent;
+      background: #eff4fb;
+      border-inline-start: 1px solid #d7e0ee;
       font-weight: 700;
-      color: #4b5a78;
+      color: #445773;
     }
     #kelasehListSection .kelaseh-sticky-controls .form-control,
     #kelasehListSection .kelaseh-sticky-controls .form-select {
@@ -1338,62 +1340,64 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     }
     #kelasehListSection .kelaseh-sticky-controls #btnKelasehSearch {
       height: 44px;
-      border-radius: 16px;
-      font-weight: 800;
-      background: #eef4fb;
-      border: 1px solid rgba(120, 138, 170, 0.25);
-      color: #3b4a66;
-      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.8),
-                  inset -4px -4px 10px rgba(187, 198, 216, 0.6),
-                  6px 10px 24px rgba(40, 55, 86, 0.12);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
+      border-radius: 12px;
+      font-weight: 700;
+      background: linear-gradient(180deg, #355f94 0%, #294f81 100%);
+      border: 1px solid #244874;
+      color: #f8fbff;
+      box-shadow: 0 8px 18px rgba(41, 79, 129, 0.26);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
     }
     #kelasehListSection .kelaseh-sticky-controls #btnKelasehSearch:hover {
       transform: translateY(-1px);
-      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.85),
-                  inset -5px -5px 12px rgba(176, 191, 214, 0.65),
-                  8px 14px 30px rgba(40, 55, 86, 0.16);
+      box-shadow: 0 12px 24px rgba(41, 79, 129, 0.32);
+      filter: brightness(1.02);
     }
     #kelasehListSection .action-bar .btn {
-      position: relative;
-      overflow: hidden;
-      border-radius: 14px;
-      border: 1px solid rgba(120, 138, 170, 0.25);
-      background: #eef4fb;
-      color: #3b4a66 !important;
+      border-radius: 12px;
+      border: 1px solid #cdd8e7;
+      background: #ffffff;
+      color: #314660 !important;
       font-weight: 700;
-      letter-spacing: 0.1px;
-      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.8),
-                  inset -4px -4px 10px rgba(187, 198, 216, 0.6),
-                  6px 10px 24px rgba(40, 55, 86, 0.12);
-      transition: transform 0.2s ease, box-shadow 0.2s ease;
-    }
-    #kelasehListSection .action-bar .btn::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.4) 45%, transparent 60%);
-      transform: translateX(-120%);
-      transition: transform 0.6s ease;
-      pointer-events: none;
+      letter-spacing: 0;
+      box-shadow: 0 1px 2px rgba(15, 23, 42, 0.06);
+      transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease, background-color 0.2s ease;
+      opacity: 0;
+      animation: kelasehBtnIn 360ms ease-out forwards;
     }
     #kelasehListSection .action-bar .btn:hover {
       transform: translateY(-1px);
-      box-shadow: inset 2px 2px 6px rgba(255, 255, 255, 0.85),
-                  inset -5px -5px 12px rgba(176, 191, 214, 0.65),
-                  8px 14px 30px rgba(40, 55, 86, 0.16);
-    }
-    #kelasehListSection .action-bar .btn:hover::after {
-      transform: translateX(120%);
+      border-color: #9eb3ce;
+      background: #f7faff;
+      box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
     }
     #kelasehListSection .action-bar .btn:active {
       transform: translateY(0);
-      box-shadow: inset 3px 3px 7px rgba(170, 185, 210, 0.8),
-                  inset -2px -2px 6px rgba(255, 255, 255, 0.75);
+      box-shadow: 0 4px 10px rgba(15, 23, 42, 0.1);
+    }
+    #kelasehListSection .action-bar .btn:disabled {
+      opacity: 0.65;
+      transform: none;
+      box-shadow: none;
+      cursor: not-allowed;
     }
     #kelasehListSection .action-bar .btn:focus-visible {
       outline: 2px solid rgba(37, 99, 235, 0.45);
       outline-offset: 2px;
+    }
+    #kelasehListSection .action-bar .btn:nth-child(1) { animation-delay: 40ms; }
+    #kelasehListSection .action-bar .btn:nth-child(2) { animation-delay: 70ms; }
+    #kelasehListSection .action-bar .btn:nth-child(3) { animation-delay: 100ms; }
+    #kelasehListSection .action-bar .btn:nth-child(4) { animation-delay: 130ms; }
+    #kelasehListSection .action-bar .btn:nth-child(5) { animation-delay: 160ms; }
+    #kelasehListSection .action-bar .btn:nth-child(6) { animation-delay: 190ms; }
+    #kelasehListSection .action-bar .btn:nth-child(7) { animation-delay: 220ms; }
+    #kelasehListSection .action-bar .btn:nth-child(8) { animation-delay: 250ms; }
+    #kelasehListSection .action-bar .btn:nth-child(9) { animation-delay: 280ms; }
+    #kelasehListSection .action-bar .btn:nth-child(10) { animation-delay: 310ms; }
+    @keyframes kelasehBtnIn {
+      from { opacity: 0; transform: translateY(6px); }
+      to { opacity: 1; transform: translateY(0); }
     }
     #kelasehListSection .table-responsive {
       overflow: visible;
@@ -1413,38 +1417,24 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
     #kelasehListSection .kelaseh-action-group {
       display: inline-flex;
       flex-wrap: nowrap;
-      gap: 0;
+      gap: 6px;
     }
     #kelasehListSection .kelaseh-action-group .btn {
-      border-radius: 0;
-      border: 1px solid rgba(35, 49, 82, 0.18);
-      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.08);
+      border-radius: 10px;
+      border: 1px solid #ced8e7;
+      box-shadow: 0 1px 2px rgba(16, 24, 40, 0.06);
       font-weight: 700;
-      position: relative;
-      overflow: hidden;
-      transition: transform 0.2s ease, box-shadow 0.2s ease, filter 0.2s ease;
+      transition: transform 0.2s ease, box-shadow 0.2s ease, background-color 0.2s ease;
       white-space: nowrap;
-    }
-    #kelasehListSection .kelaseh-action-group .btn::after {
-      content: "";
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(120deg, transparent 0%, rgba(255, 255, 255, 0.55) 45%, transparent 60%);
-      transform: translateX(-120%);
-      transition: transform 0.6s ease;
-      pointer-events: none;
+      font-size: 0.76rem;
     }
     #kelasehListSection .kelaseh-action-group .btn:hover {
-      transform: translateY(-2px);
-      box-shadow: 0 12px 26px rgba(16, 24, 40, 0.16);
-      filter: brightness(1.02);
-    }
-    #kelasehListSection .kelaseh-action-group .btn:hover::after {
-      transform: translateX(120%);
+      transform: translateY(-1px);
+      box-shadow: 0 8px 18px rgba(16, 24, 40, 0.11);
     }
     #kelasehListSection .kelaseh-action-group .btn:active {
       transform: translateY(0);
-      box-shadow: 0 6px 14px rgba(16, 24, 40, 0.1);
+      box-shadow: 0 2px 8px rgba(16, 24, 40, 0.1);
     }
     #kelasehListSection .kelaseh-action-group .btn-glass-info {
       background: linear-gradient(135deg, #f6fbff 0%, #e1f3ff 100%);
@@ -1465,17 +1455,6 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       background: linear-gradient(135deg, #ffeef0 0%, #ffd2d8 100%);
       color: #b42318;
       border-color: rgba(220, 53, 69, 0.45);
-    }
-    #kelasehListSection .kelaseh-action-group .btn + .btn {
-      margin-right: -1px;
-    }
-    #kelasehListSection .kelaseh-action-group .btn:first-child {
-      border-top-right-radius: 12px;
-      border-bottom-right-radius: 12px;
-    }
-    #kelasehListSection .kelaseh-action-group .btn:last-child {
-      border-top-left-radius: 12px;
-      border-bottom-left-radius: 12px;
     }
     #kelasehListSection td.kelaseh-compact-text {
       max-width: 180px;

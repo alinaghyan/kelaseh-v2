@@ -176,6 +176,39 @@ function ensure_kelaseh_sessions_table(): void
     ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
 }
 
+function fetch_latest_kelaseh_sessions_map(array $kelasehIds): array
+{
+    $kelasehIds = array_values(array_unique(array_filter(array_map('intval', $kelasehIds), function ($v) {
+        return $v > 0;
+    })));
+    if (empty($kelasehIds)) {
+        return [];
+    }
+
+    $inQuery = implode(',', array_fill(0, count($kelasehIds), '?'));
+    $sql = "SELECT s.*
+            FROM kelaseh_sessions s
+            INNER JOIN (
+                SELECT kelaseh_id, session_key, MAX(id) AS max_id
+                FROM kelaseh_sessions
+                WHERE kelaseh_id IN ($inQuery)
+                GROUP BY kelaseh_id, session_key
+            ) latest ON latest.max_id = s.id
+            ORDER BY s.kelaseh_id ASC, s.id ASC";
+    $stmt = db()->prepare($sql);
+    $stmt->execute($kelasehIds);
+    $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
+
+    $sessionsMap = [];
+    foreach ($rows as $s) {
+        $kid = (int)($s['kelaseh_id'] ?? 0);
+        if ($kid > 0) {
+            $sessionsMap[$kid][] = $s;
+        }
+    }
+    return $sessionsMap;
+}
+
 function ensure_user_branches_table(): void
 {
     db()->exec("CREATE TABLE IF NOT EXISTS user_branches (
@@ -792,10 +825,9 @@ function action_kelaseh_get_by_code(array $data): void {
     $row['created_at_jalali'] = format_jalali_datetime($row['created_at']);
 
     ensure_kelaseh_sessions_table();
-    // Fetch sessions
-    $stmtS = db()->prepare("SELECT * FROM kelaseh_sessions WHERE kelaseh_id = ?");
-    $stmtS->execute([$row['id']]);
-    $sessions = $stmtS->fetchAll();
+    // Fetch latest session row per session_key (handles old duplicate rows on host)
+    $sessionsMapByKelaseh = fetch_latest_kelaseh_sessions_map([(int)$row['id']]);
+    $sessions = $sessionsMapByKelaseh[(int)$row['id']] ?? [];
     $sessionsMap = [];
     foreach ($sessions as $s) {
         $sessionsMap[$s['session_key']] = $s;
@@ -891,24 +923,77 @@ function action_heyat_tashkhis_save(array $data): void {
     ensure_kelaseh_sessions_table();
     // Save Sessions
     if (isset($data['sessions']) && is_array($data['sessions'])) {
-        $sessStmt = db()->prepare("INSERT INTO kelaseh_sessions 
-            (kelaseh_id, session_key, meeting_date, plaintiff_request, verdict_text, reps_govt, reps_worker, reps_employer) 
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?) 
-            ON DUPLICATE KEY UPDATE 
-            meeting_date=VALUES(meeting_date), plaintiff_request=VALUES(plaintiff_request), verdict_text=VALUES(verdict_text), 
-            reps_govt=VALUES(reps_govt), reps_worker=VALUES(reps_worker), reps_employer=VALUES(reps_employer), updated_at=NOW()");
+        $allowedSessionKeys = ['session1', 'session2', 'session3', 'session4', 'session5', 'resolution'];
+        $savedSessionKeys = [];
+        $findLatestStmt = db()->prepare("SELECT id FROM kelaseh_sessions WHERE kelaseh_id = ? AND session_key = ? ORDER BY id DESC LIMIT 1");
+        $updateByIdStmt = db()->prepare("UPDATE kelaseh_sessions SET
+            meeting_date = ?, plaintiff_request = ?, verdict_text = ?,
+            reps_govt = ?, reps_worker = ?, reps_employer = ?, updated_at = NOW()
+            WHERE id = ?");
+        $insertStmt = db()->prepare("INSERT INTO kelaseh_sessions
+            (kelaseh_id, session_key, meeting_date, plaintiff_request, verdict_text, reps_govt, reps_worker, reps_employer)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?)");
+        $cleanupDuplicatesStmt = db()->prepare("DELETE old_row
+            FROM kelaseh_sessions old_row
+            INNER JOIN kelaseh_sessions new_row
+                ON new_row.kelaseh_id = old_row.kelaseh_id
+               AND new_row.session_key = old_row.session_key
+               AND new_row.id > old_row.id
+            WHERE old_row.kelaseh_id = ? AND old_row.session_key = ?");
             
         foreach ($data['sessions'] as $key => $sData) {
-            $sessStmt->execute([
-                $kelasehId,
-                $key,
-                trim((string)($sData['date'] ?? '')),
-                trim((string)($sData['plaintiff_request'] ?? '')),
-                trim((string)($sData['verdict_text'] ?? '')),
-                trim((string)($sData['reps_govt'] ?? '')),
-                trim((string)($sData['reps_worker'] ?? '')),
-                trim((string)($sData['reps_employer'] ?? ''))
-            ]);
+            if (!in_array((string)$key, $allowedSessionKeys, true)) {
+                continue;
+            }
+            $meetingDate = trim((string)($sData['date'] ?? ''));
+            $plaintiffRequest = trim((string)($sData['plaintiff_request'] ?? ''));
+            $verdictText = trim((string)($sData['verdict_text'] ?? ''));
+            $repsGovt = trim((string)($sData['reps_govt'] ?? ''));
+            $repsWorker = trim((string)($sData['reps_worker'] ?? ''));
+            $repsEmployer = trim((string)($sData['reps_employer'] ?? ''));
+
+            $hasAnyValue = ($meetingDate !== '' || $plaintiffRequest !== '' || $verdictText !== '' || $repsGovt !== '' || $repsWorker !== '' || $repsEmployer !== '');
+            if (!$hasAnyValue) {
+                db()->prepare("DELETE FROM kelaseh_sessions WHERE kelaseh_id = ? AND session_key = ?")->execute([$kelasehId, $key]);
+                continue;
+            }
+
+            $savedSessionKeys[] = (string)$key;
+            $findLatestStmt->execute([$kelasehId, $key]);
+            $existingSessionId = (int)($findLatestStmt->fetchColumn() ?: 0);
+
+            if ($existingSessionId > 0) {
+                $updateByIdStmt->execute([
+                    $meetingDate,
+                    $plaintiffRequest,
+                    $verdictText,
+                    $repsGovt,
+                    $repsWorker,
+                    $repsEmployer,
+                    $existingSessionId
+                ]);
+            } else {
+                $insertStmt->execute([
+                    $kelasehId,
+                    $key,
+                    $meetingDate,
+                    $plaintiffRequest,
+                    $verdictText,
+                    $repsGovt,
+                    $repsWorker,
+                    $repsEmployer
+                ]);
+            }
+
+            $cleanupDuplicatesStmt->execute([$kelasehId, $key]);
+        }
+
+        if (!empty($savedSessionKeys)) {
+            $placeholders = implode(',', array_fill(0, count($savedSessionKeys), '?'));
+            $params = array_merge([$kelasehId], $savedSessionKeys);
+            db()->prepare("DELETE FROM kelaseh_sessions WHERE kelaseh_id = ? AND session_key NOT IN ($placeholders)")->execute($params);
+        } else {
+            db()->prepare("DELETE FROM kelaseh_sessions WHERE kelaseh_id = ?")->execute([$kelasehId]);
         }
     }
     
@@ -1592,19 +1677,7 @@ function action_kelaseh_notice(array $data): void {
 
         ensure_kelaseh_sessions_table();
         $kelasehIds = array_values(array_unique(array_filter(array_column($fetchedRows, 'id'))));
-        $sessionsMap = [];
-        if (!empty($kelasehIds)) {
-            $inQuery = implode(',', array_fill(0, count($kelasehIds), '?'));
-            $stmtS = db()->prepare("SELECT * FROM kelaseh_sessions WHERE kelaseh_id IN ($inQuery) ORDER BY id ASC");
-            $stmtS->execute($kelasehIds);
-            $allSessions = $stmtS->fetchAll(PDO::FETCH_ASSOC);
-            foreach ($allSessions as $s) {
-                $kid = $s['kelaseh_id'] ?? null;
-                if ($kid !== null) {
-                    $sessionsMap[$kid][] = $s;
-                }
-            }
-        }
+        $sessionsMap = fetch_latest_kelaseh_sessions_map($kelasehIds);
 
         $rowsMap = [];
         foreach ($fetchedRows as $r) {
@@ -1615,8 +1688,8 @@ function action_kelaseh_notice(array $data): void {
             $sessionsToPrint = [];
 
             foreach ($rSessions as $s) {
-                // Include one page per session only when both meeting date and verdict are filled
-                if (!empty($s['meeting_date']) && !empty($s['verdict_text'])) {
+                // Print one page for each session that has a meeting date.
+                if (!empty($s['meeting_date'])) {
                     $sessionsToPrint[] = $s;
                 }
             }
@@ -2050,6 +2123,15 @@ function ensure_manager_messages_tables(): void
     try {
         db()->exec("ALTER TABLE manager_messages ADD COLUMN IF NOT EXISTS target_user_id INT UNSIGNED NULL AFTER target_city_code");
     } catch (Throwable $e) {}
+    try {
+        db()->exec("ALTER TABLE manager_messages ADD COLUMN IF NOT EXISTS updated_at DATETIME NULL AFTER created_at");
+    } catch (Throwable $e) {}
+    try {
+        db()->exec("ALTER TABLE manager_messages ADD COLUMN IF NOT EXISTS deleted_at DATETIME NULL AFTER updated_at");
+    } catch (Throwable $e) {}
+    try {
+        db()->exec("CREATE INDEX idx_manager_messages_deleted ON manager_messages (deleted_at)");
+    } catch (Throwable $e) {}
 
     try {
         db()->exec("CREATE TABLE IF NOT EXISTS manager_message_reads (
@@ -2231,6 +2313,7 @@ function action_manager_messages_unread(array $data): void
         FROM manager_messages m
         LEFT JOIN users u ON u.id = m.sender_id
         WHERE m.target_role = ?
+          AND m.deleted_at IS NULL
           AND (m.target_city_code IS NULL OR m.target_city_code = ?)
           AND (m.target_user_id IS NULL OR m.target_user_id = ?)
           AND NOT EXISTS (SELECT 1 FROM manager_message_reads r WHERE r.message_id = m.id AND r.user_id = ?)
@@ -2260,7 +2343,7 @@ function action_manager_message_read(array $data): void
 
     $role = (string)$user['role'];
     $city = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
-    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND target_role = ? AND (target_city_code IS NULL OR target_city_code = ?) AND (target_user_id IS NULL OR target_user_id = ?) LIMIT 1");
+    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND deleted_at IS NULL AND target_role = ? AND (target_city_code IS NULL OR target_city_code = ?) AND (target_user_id IS NULL OR target_user_id = ?) LIMIT 1");
     $stmt->execute([$id, $role, $city, (int)($user['id'] ?? 0)]);
     $exists = $stmt->fetchColumn();
     if (!$exists) json_response(false, ['message' => 'پیام یافت نشد.'], 404);
@@ -2280,6 +2363,7 @@ function action_manager_messages_sent(array $data): void
     $stmt = db()->prepare("SELECT m.*
         FROM manager_messages m
         WHERE m.sender_id = ?
+          AND m.deleted_at IS NULL
         ORDER BY m.created_at DESC
         LIMIT 200");
     $stmt->execute([(int)($user['id'] ?? 0)]);
@@ -2300,15 +2384,43 @@ function action_manager_message_delete(array $data): void
     $id = (int)($data['id'] ?? 0);
     if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
 
-    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND sender_id = ? LIMIT 1");
+    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND sender_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->execute([$id, (int)($user['id'] ?? 0)]);
     if (!$stmt->fetchColumn()) {
         json_response(false, ['message' => 'پیام یافت نشد.'], 404);
     }
 
-    db()->prepare("DELETE FROM manager_message_reads WHERE message_id = ?")->execute([$id]);
-    db()->prepare("DELETE FROM manager_messages WHERE id = ?")->execute([$id]);
+    db()->prepare("UPDATE manager_messages SET deleted_at = ?, updated_at = ? WHERE id = ? AND sender_id = ? AND deleted_at IS NULL")
+        ->execute([now_mysql(), now_mysql(), $id, (int)($user['id'] ?? 0)]);
     json_response(true, ['message' => 'حذف شد.']);
+}
+
+function action_manager_message_update(array $data): void
+{
+    $user = auth_require_login();
+    auth_require_admin($user);
+    csrf_require_valid();
+    ensure_manager_messages_tables();
+
+    $id = (int)($data['id'] ?? 0);
+    if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
+
+    $title = trim((string)($data['title'] ?? ''));
+    $content = trim((string)($data['content'] ?? ''));
+    if ($title === '' || $content === '') {
+        json_response(false, ['message' => 'عنوان و متن پیام الزامی است.'], 422);
+    }
+
+    $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND sender_id = ? AND deleted_at IS NULL LIMIT 1");
+    $stmt->execute([$id, (int)($user['id'] ?? 0)]);
+    if (!$stmt->fetchColumn()) {
+        json_response(false, ['message' => 'پیام یافت نشد.'], 404);
+    }
+
+    db()->prepare("UPDATE manager_messages SET title = ?, content = ?, updated_at = ? WHERE id = ? AND sender_id = ? AND deleted_at IS NULL")
+        ->execute([$title, $content, now_mysql(), $id, (int)($user['id'] ?? 0)]);
+
+    json_response(true, ['message' => 'ویرایش شد.']);
 }
 
 function action_kelaseh_set_status(array $data): void
@@ -3546,6 +3658,9 @@ function handle_request(): void
             case 'manager.message.delete':
                 action_manager_message_delete($data);
                 break;
+            case 'manager.message.update':
+                action_manager_message_update($data);
+                break;
             case 'kelaseh.export.csv': action_kelaseh_export_csv($data); break;
             case 'kelaseh.export.print': action_kelaseh_export_print($data); break;
             case 'kelaseh.label.new': action_kelaseh_label_new($data); break;
@@ -3595,5 +3710,3 @@ function handle_request(): void
 if (!defined('KELASEH_LIB_ONLY')) {
     handle_request();
 }
-
-

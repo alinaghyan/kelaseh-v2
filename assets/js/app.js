@@ -15,6 +15,8 @@ let adminUsersCache = null;
 let managerMsgPoller = null;
 let kelasehStickyInit = false;
 let managerMsgReadBusy = false;
+let adminManagerMsgCache = {};
+let adminManagerMsgEditingId = 0;
 
 function updateKelasehStickyOffset() {
   const section = document.getElementById('kelasehListSection');
@@ -145,7 +147,11 @@ function showNextManagerMessage() {
   const bodyEl = document.getElementById('managerMsgBody');
   const metaEl = document.getElementById('managerMsgMeta');
   if (titleEl) titleEl.textContent = managerMsgActive.title || '';
-  if (bodyEl) bodyEl.textContent = managerMsgActive.content || '';
+  if (bodyEl) {
+    bodyEl.textContent = managerMsgActive.content || '';
+    bodyEl.style.whiteSpace = 'pre-line';
+    bodyEl.style.wordBreak = 'break-word';
+  }
   if (metaEl) {
     const sender = managerMsgActive.sender_name || 'مدیر';
     const created = managerMsgActive.created_at_jalali || '';
@@ -169,8 +175,13 @@ function markActiveManagerMessageRead() {
       managerMsgReadBusy = false;
       showNextManagerMessage();
     })
-    .fail(() => {
+    .fail((xhr) => {
       managerMsgReadBusy = false;
+      if (xhr && xhr.status === 404) {
+        managerMsgActive = null;
+        showNextManagerMessage();
+        return;
+      }
       showToast('خطا در ثبت خواندن پیام.', 'error');
     });
 }
@@ -180,7 +191,9 @@ function refreshAdminManagerMessagesSent() {
   api('manager.messages.sent', {})
     .done((res) => {
       const rows = (res.data && res.data.messages) || [];
+      adminManagerMsgCache = {};
       const html = rows.map((r) => {
+        adminManagerMsgCache[String(r.id)] = r;
         const created = $('<div/>').text(toPersianDigits(r.created_at_jalali || r.created_at || '')).html();
         const title = $('<div/>').text(r.title || '').html();
         const content = $('<div/>').text(r.content || '').html();
@@ -194,8 +207,9 @@ function refreshAdminManagerMessagesSent() {
             <td class="text-secondary">${role}</td>
             <td class="text-secondary">${city}</td>
             <td class="text-secondary">${target}</td>
-            <td>${content}</td>
+            <td class="manager-msg-content" style="white-space: pre-line; word-break: break-word;">${content}</td>
             <td class="text-center">
+              <button class="btn btn-outline-primary btn-sm btn-admin-manager-msg-edit" type="button">ویرایش</button>
               <button class="btn btn-outline-danger btn-sm btn-admin-manager-msg-del" type="button">حذف</button>
             </td>
           </tr>
@@ -245,7 +259,7 @@ function updateAdminManagerMsgUsers() {
   const $sel = $('#adminManagerMsgUser');
   if ($sel.length === 0) return;
 
-  loadAdminUsersCache().always(() => {
+  return loadAdminUsersCache().always(() => {
     const users = Array.isArray(adminUsersCache) ? adminUsersCache : [];
     const filtered = users.filter((u) => {
       if (role === 'both') {
@@ -271,6 +285,18 @@ function updateAdminManagerMsgUsers() {
       .join('');
     $sel.html(opts);
   });
+}
+
+function resetAdminManagerMessageForm() {
+  const formEl = document.getElementById('formAdminManagerMessage');
+  if (!formEl) return;
+  formEl.reset();
+  adminManagerMsgEditingId = 0;
+  $('#adminManagerMsgCity').val('all');
+  $('#adminManagerMsgRole').val('office_admin');
+  updateAdminManagerMsgUsers();
+  $('#adminManagerMsgRole, #adminManagerMsgCity, #adminManagerMsgUser').prop('disabled', false);
+  $('#formAdminManagerMessage button[type="submit"]').text('ارسال پیام');
 }
 
 function api(action, data) {
@@ -459,6 +485,7 @@ function renderUser() {
   // Actually, the nav item visibility is controlled here.
   $('#navItemAdmin').toggleClass('d-none', !isAdmin);
   $('#navItemAdminKelasehSearch').toggleClass('d-none', !isAdmin);
+  $('#navItemOfficeManagement').toggleClass('d-none', !isOfficeAdmin);
   
   const canUseHeyat = ['admin', 'office_admin', 'branch_admin'].includes(currentUser.role);
   $('#navItemHeyat').toggleClass('d-none', !canUseHeyat);
@@ -522,7 +549,7 @@ function startHeaderClock() {
 
 function getPageFromHash() {
   const raw = (window.location.hash || '').replace('#', '').trim();
-  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin' || raw === 'admin-kelaseh-search' || raw === 'heyat') {
+  if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin' || raw === 'admin-kelaseh-search' || raw === 'heyat' || raw === 'office-management') {
     return raw;
   }
   return 'dashboard';
@@ -582,6 +609,19 @@ function renderPage(page) {
     return;
   }
 
+  if (page === 'office-management') {
+    if (isOfficeAdmin) {
+      $('#officePanel').removeClass('d-none');
+      $('button[data-bs-target="#officeUsers"]').closest('li').removeClass('d-none');
+      $('button[data-bs-target="#officeStats"]').closest('li').removeClass('d-none');
+      $('button[data-bs-target="#officeKelaseh"]').closest('li').removeClass('d-none');
+      $('#officePanel .card-header').text('پنل مدیر اداره');
+    } else {
+      window.location.hash = '#dashboard';
+    }
+    return;
+  }
+
   if (page === 'create') {
     if (isOfficeAdmin) {
       window.location.hash = '#dashboard';
@@ -629,17 +669,7 @@ function renderPage(page) {
     loadBranchManagers();
   }
 
-  if (isOfficeAdmin) {
-    $('#officePanel').removeClass('d-none');
-  }
-
-  if (currentUser.role === 'office_admin') {
-      // Show all tabs for office admin
-      $('button[data-bs-target="#officeUsers"]').closest('li').removeClass('d-none');
-      $('button[data-bs-target="#officeStats"]').closest('li').removeClass('d-none');
-      $('button[data-bs-target="#officeKelaseh"]').closest('li').removeClass('d-none');
-      $('#officePanel .card-header').text('پنل مدیر اداره');
-  }
+  // In dashboard, office admin sees only kelaseh list/table.
 }
 
 function generateKelasehRows(rows, offset = 0, total = 0) {
@@ -1807,17 +1837,21 @@ $(document).on('submit', '#formAdminManagerMessage', function (e) {
   const formEl = this;
   const data = Object.fromEntries(new FormData(formEl));
   if (data.target_user_id === 'all') delete data.target_user_id;
-  api('manager.message.send', data)
+  const isEdit = adminManagerMsgEditingId > 0;
+  if (isEdit) {
+    data.id = adminManagerMsgEditingId;
+    delete data.target_role;
+    delete data.city_code;
+    delete data.target_user_id;
+  }
+  api(isEdit ? 'manager.message.update' : 'manager.message.send', data)
     .done((res) => {
-      showToast(res.message || 'پیام ارسال شد.', 'success');
-      formEl.reset();
-      $('#adminManagerMsgCity').val('all');
-      $('#adminManagerMsgRole').val('office_admin');
-      updateAdminManagerMsgUsers();
+      showToast(res.message || (isEdit ? 'ویرایش شد.' : 'پیام ارسال شد.'), 'success');
+      resetAdminManagerMessageForm();
       refreshAdminManagerMessagesSent();
     })
     .fail((xhr) => {
-      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ارسال پیام ناموفق بود.';
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || (isEdit ? 'ویرایش پیام ناموفق بود.' : 'ارسال پیام ناموفق بود.');
       showToast(msg, 'error');
     });
 });
@@ -1842,11 +1876,37 @@ $(document).on('change', '#adminManagerMsgRole, #adminManagerMsgCity', function 
 });
 
 $(document).on('shown.bs.tab', 'button[data-bs-target="#adminManagerMessage"]', function () {
+  resetAdminManagerMessageForm();
   refreshAdminManagerMessagesSent();
 });
 
 $(document).on('click', '#btnAdminManagerMsgRefresh', function () {
   refreshAdminManagerMessagesSent();
+});
+
+$(document).on('click', '#adminManagerMessagesSentTbody .btn-admin-manager-msg-edit', function () {
+  const tr = $(this).closest('tr');
+  const id = Number(tr.attr('data-id') || 0);
+  if (!id) return;
+  if (adminManagerMsgEditingId === id) {
+    resetAdminManagerMessageForm();
+    return;
+  }
+  const row = adminManagerMsgCache[String(id)];
+  if (!row) return;
+
+  adminManagerMsgEditingId = id;
+  $('#formAdminManagerMessage [name="title"]').val(row.title || '');
+  $('#formAdminManagerMessage [name="content"]').val(row.content || '');
+  $('#adminManagerMsgRole').val(row.target_role || 'office_admin');
+  $('#adminManagerMsgCity').val(row.target_city_code || 'all');
+  updateAdminManagerMsgUsers();
+  const userVal = row.target_user_id ? String(row.target_user_id) : 'all';
+  setTimeout(() => {
+    $('#adminManagerMsgUser').val(userVal);
+  }, 0);
+  $('#adminManagerMsgRole, #adminManagerMsgCity, #adminManagerMsgUser').prop('disabled', true);
+  $('#formAdminManagerMessage button[type="submit"]').text('ذخیره ویرایش');
 });
 
 $(document).on('click', '#adminManagerMessagesSentTbody .btn-admin-manager-msg-del', function () {
@@ -1857,6 +1917,9 @@ $(document).on('click', '#adminManagerMessagesSentTbody .btn-admin-manager-msg-d
   api('manager.message.delete', { id })
     .done((res) => {
       showToast(res.message || 'حذف شد.', 'success');
+      if (adminManagerMsgEditingId === id) {
+        resetAdminManagerMessageForm();
+      }
       refreshAdminManagerMessagesSent();
     })
     .fail((xhr) => {
@@ -3214,6 +3277,56 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
   });
 
   // Heyat Tashkhis Logic
+  const HEYAT_SESSION_ORDER = ['session1', 'session2', 'session3', 'session4', 'session5', 'resolution'];
+
+  function clearHeyatSessionFields(sessionKey) {
+      const box = $(`#accordionSessions .heyat-session-item[data-session-key="${sessionKey}"]`);
+      box.find('input[type="text"], input:not([type]), textarea').val('');
+      box.find('.session-date-input').val('');
+      $(`#labelDate${sessionKey}`).text('');
+  }
+
+  function setHeyatVisibleSessions(count, clearHidden = true) {
+      const safeCount = Math.max(1, Math.min(HEYAT_SESSION_ORDER.length, Number(count) || 1));
+      HEYAT_SESSION_ORDER.forEach((key, idx) => {
+          const show = idx < safeCount;
+          const item = $(`#accordionSessions .heyat-session-item[data-session-key="${key}"]`);
+          if (!item.length) return;
+          item.toggleClass('d-none', !show);
+          item.find('input, textarea, select').prop('disabled', !show);
+          const collapseEl = item.find('.accordion-collapse');
+          if (!show) {
+              collapseEl.removeClass('show');
+              item.find('.accordion-button').addClass('collapsed').attr('aria-expanded', 'false');
+              if (clearHidden) clearHeyatSessionFields(key);
+          }
+      });
+      $('#btnHeyatAddSession').prop('disabled', safeCount >= HEYAT_SESSION_ORDER.length);
+      $('#btnHeyatRemoveSession').prop('disabled', safeCount <= 1);
+      return safeCount;
+  }
+
+  function getHeyatVisibleSessionsCount() {
+      return $('#accordionSessions .heyat-session-item').not('.d-none').length;
+  }
+
+  setHeyatVisibleSessions(1, true);
+
+  $(document).on('click', '#btnHeyatAddSession', function () {
+      const currentCount = getHeyatVisibleSessionsCount();
+      const nextCount = setHeyatVisibleSessions(currentCount + 1, false);
+      const key = HEYAT_SESSION_ORDER[nextCount - 1];
+      if (key) {
+          const item = $(`#accordionSessions .heyat-session-item[data-session-key="${key}"]`);
+          item.find('.accordion-button').removeClass('collapsed').attr('aria-expanded', 'true');
+          item.find('.accordion-collapse').addClass('show');
+      }
+  });
+
+  $(document).on('click', '#btnHeyatRemoveSession', function () {
+      const currentCount = getHeyatVisibleSessionsCount();
+      setHeyatVisibleSessions(currentCount - 1, true);
+  });
   
   // Search Logic
   $(document).on('input', '#heyatCodeInput', function() {
@@ -3282,6 +3395,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       // Fill Form
       const f = $('#formHeyatTashkhis');
       f[0].reset(); // Clear first
+      setHeyatVisibleSessions(1, true);
 
       $('#heyatCityCodePrefix').text(toPersianDigits(cityPrefix)).data('raw', cityPrefix);
       $('#heyatCodeInput').val(suffix);
@@ -3308,10 +3422,25 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
             if (res.data) {
                 const d = res.data;
                 const sessions = d.sessions || {};
+                let maxVisibleIndex = 0;
                 
                 // Populate sessions
                 Object.keys(sessions).forEach(key => {
                     const s = sessions[key];
+                    const sessionIndex = HEYAT_SESSION_ORDER.indexOf(key);
+                    if (sessionIndex > -1) {
+                        const hasAnyValue = !!(
+                            (s.meeting_date && String(s.meeting_date).trim() !== '') ||
+                            (s.plaintiff_request && String(s.plaintiff_request).trim() !== '') ||
+                            (s.verdict_text && String(s.verdict_text).trim() !== '') ||
+                            (s.reps_govt && String(s.reps_govt).trim() !== '') ||
+                            (s.reps_worker && String(s.reps_worker).trim() !== '') ||
+                            (s.reps_employer && String(s.reps_employer).trim() !== '')
+                        );
+                        if (hasAnyValue) {
+                            maxVisibleIndex = Math.max(maxVisibleIndex, sessionIndex);
+                        }
+                    }
                     f.find(`[name="sessions[${key}][date]"]`).val(s.meeting_date || '');
                     f.find(`[name="sessions[${key}][plaintiff_request]"]`).val(s.plaintiff_request || '');
                     f.find(`[name="sessions[${key}][verdict_text]"]`).val(s.verdict_text || '');
@@ -3325,6 +3454,7 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
                         if (labelId) $(labelId).text(toPersianDigits(s.meeting_date));
                     }
                 });
+                setHeyatVisibleSessions(maxVisibleIndex + 1, false);
             }
             showToast('اطلاعات پرونده بارگذاری شد.', 'info');
         })
