@@ -1659,7 +1659,6 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
 
             try {
                 var plaintiffFields = [
-                    { label: 'شماره دادنامه', value: p.dadnameh },
                     { label: 'نام و نام خانوادگی خواهان', value: p.plaintiff_name },
                     { label: 'کد ملی خواهان', value: p.plaintiff_national_code },
                     { label: 'شماره تماس خواهان', value: p.plaintiff_mobile },
@@ -1711,6 +1710,8 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                 
                 var oldCode = $('<div/>').text(toPersianDigits(p.code || '-')).html();
                 var newCode = $('<div/>').text(toPersianDigits(p.new_case_code || '-')).html();
+                var authorityType = Number(p.is_resolution || 0) === 1 ? 'حل اختلاف' : 'هیات تشخیص';
+                var authorityTypeHtml = $('<div/>').text(toPersianDigits(authorityType)).html();
                 var dadnamehNo = $('<div/>').text(toPersianDigits(p.dadnameh || '-')).html();
                 var createdAt = $('<div/>').text(toPersianDigits(p.created_at_jalali || '')).html();
                 var creatorName = $('<div/>').text(toPersianDigits(p.creator_name || p.owner_name || '-')).html();
@@ -1739,6 +1740,7 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
 
                 html += '<div class="col-12"><div class="card border-secondary border-opacity-25 shadow-sm"><div class="card-body p-2">';
                 html += '<div class="row g-2">';
+                html += infoCell('مرجع رسیدگی', authorityTypeHtml, 'text-danger');
                 html += infoCell('تاریخ و ساعت ایجاد کلاسه', createdAt, 'text-primary');
                 html += infoCell('ثبت‌کننده', creatorRole ? (creatorName + ' <span class="text-muted small">(' + creatorRole + ')</span>') : creatorName);
                 html += infoCell('اداره', creatorOffice);
@@ -1874,6 +1876,7 @@ $(document).on('click', '#kelasehTodayTbody .btn-kelaseh-edit', function () {
     $('#formKelasehEdit [name=representatives_employer]').val(payload.representatives_employer || '');
     $('#formKelasehEdit [name=plaintiff_request]').val(payload.plaintiff_request || '');
     $('#formKelasehEdit [name=verdict_text]').val(payload.verdict_text || '');
+    $('#formKelasehEdit [name=is_resolution]').prop('checked', Number(payload.is_resolution || 0) === 1);
     
     new bootstrap.Modal(document.getElementById('modalKelasehEdit')).show();
 });
@@ -2514,6 +2517,7 @@ $(document).on('click', '#kelasehTbody .btn-kelaseh-edit', function () {
   $('#formKelasehEdit [name=representatives_employer]').val(payload.representatives_employer || '');
   $('#formKelasehEdit [name=plaintiff_request]').val(payload.plaintiff_request || '');
   $('#formKelasehEdit [name=verdict_text]').val(payload.verdict_text || '');
+  $('#formKelasehEdit [name=is_resolution]').prop('checked', Number(payload.is_resolution || 0) === 1);
   $('#editModalKelasehNewCode').text(toPersianDigits(payload.new_case_code || '-'));
   const modal = new bootstrap.Modal(document.getElementById('modalKelasehEdit'));
   modal.show();
@@ -3052,11 +3056,14 @@ $(document).on('change', '#adminEditBranchList .branch-check', function() {
     capInput.prop('disabled', !this.checked);
 });
 
-$(document).on('submit', '#formAdminEditUser', function(e) {
-    e.preventDefault();
-    const form = $(this);
+function submitAdminEditUserForm(form) {
+    const userId = Number(form.find('[name="id"]').val() || 0);
+    if (!Number.isFinite(userId) || userId < 1) {
+        showToast('شناسه کاربر نامعتبر است.', 'error');
+        return;
+    }
     const data = {
-        id: form.find('[name="id"]').val(),
+        id: userId,
         first_name: form.find('[name="first_name"]').val(),
         last_name: form.find('[name="last_name"]').val(),
         mobile: form.find('[name="mobile"]').val(),
@@ -3087,6 +3094,22 @@ $(document).on('submit', '#formAdminEditUser', function(e) {
         .fail(xhr => {
              showToast((xhr.responseJSON && xhr.responseJSON.message) || 'خطا در ذخیره.', 'error');
         });
+}
+
+$(document).on('click', '#btnAdminEditUserSave', function (e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    submitAdminEditUserForm($('#formAdminEditUser'));
+    return false;
+});
+
+$(document).on('submit', '#formAdminEditUser', function(e) {
+    e.preventDefault();
+    e.stopPropagation();
+    e.stopImmediatePropagation();
+    submitAdminEditUserForm($(this));
+    return false;
 });
 
 $(document).on('click', '.btn-admin-delete-user', function() {

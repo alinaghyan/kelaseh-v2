@@ -3,17 +3,25 @@
  * هسته اصلی پردازش‌های برنامه (Backend)
  * شامل توابع کمکی، اتصال به دیتابیس، مدیریت نشست‌ها (Session) و پردازش درخواست‌های AJAX
  */
+$bootCfg = is_file(__DIR__ . DIRECTORY_SEPARATOR . 'config.php') ? require __DIR__ . DIRECTORY_SEPARATOR . 'config.php' : [];
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
+if (!empty($bootCfg['app']['session_name'])) {
+    session_name((string)$bootCfg['app']['session_name']);
+}
 ini_set('session.use_strict_mode', '1');
 ini_set('session.use_only_cookies', '1');
 ini_set('session.cookie_httponly', '1');
 ini_set('session.cookie_samesite', 'Lax');
 if ($isHttps) ini_set('session.cookie_secure', '1');
 session_start();
-date_default_timezone_set('Asia/Tehran');
+date_default_timezone_set((string)($bootCfg['app']['timezone'] ?? 'Asia/Tehran'));
 header('X-Frame-Options: DENY');
 header('X-Content-Type-Options: nosniff');
 header('Referrer-Policy: same-origin');
+if ($isHttps) {
+    header('Strict-Transport-Security: max-age=31536000; includeSubDomains');
+}
+header('Permissions-Policy: geolocation=(), microphone=(), camera=()');
 
 require_once __DIR__ . '/vendor/autoload.php';
 use Morilog\Jalali\Jalalian;
@@ -555,6 +563,21 @@ function ensure_kelaseh_numbers_supports_new_case_code(): void
     } catch (Throwable $e) {}
 }
 
+function ensure_kelaseh_numbers_supports_resolution_flag(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    try {
+        $stmt = db()->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kelaseh_numbers' AND COLUMN_NAME = 'is_resolution'");
+        $stmt->execute();
+        $exists = (int)$stmt->fetchColumn() > 0;
+        if (!$exists) {
+            db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN `is_resolution` TINYINT(1) NOT NULL DEFAULT 0 AFTER `is_manual_branch`');
+        }
+    } catch (Throwable $e) {}
+}
+
 function ensure_kelaseh_numbers_supports_extended_fields(): void
 {
     static $done = false;
@@ -643,6 +666,69 @@ function ensure_city_code_supports_variable_length(): void
     }
 }
 
+function ensure_kelaseh_yearly_counters_table(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    db()->exec("CREATE TABLE IF NOT EXISTS kelaseh_yearly_counters (
+        city_code VARCHAR(10) NOT NULL,
+        yy CHAR(2) NOT NULL,
+        seq_no INT UNSIGNED NOT NULL,
+        updated_at DATETIME NOT NULL,
+        PRIMARY KEY (city_code, yy)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+function ensure_login_attempts_table(): void
+{
+    static $done = false;
+    if ($done) return;
+    $done = true;
+    db()->exec("CREATE TABLE IF NOT EXISTS login_attempts (
+        id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+        login_key VARCHAR(120) NOT NULL,
+        ip VARCHAR(45) NOT NULL,
+        attempted_at DATETIME NOT NULL,
+        success TINYINT(1) NOT NULL DEFAULT 0,
+        PRIMARY KEY (id),
+        KEY idx_login_attempts_login_time (login_key, attempted_at),
+        KEY idx_login_attempts_ip_time (ip, attempted_at)
+    ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
+}
+
+function login_rate_limit_require_ok(string $loginKey): void
+{
+    ensure_login_attempts_table();
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    $windowSec = 15 * 60;
+    $maxByLogin = 10;
+    $maxByIp = 30;
+    $since = date('Y-m-d H:i:s', time() - $windowSec);
+
+    $stmt1 = db()->prepare("SELECT COUNT(*) FROM login_attempts WHERE login_key = ? AND attempted_at >= ? AND success = 0");
+    $stmt1->execute([$loginKey, $since]);
+    if ((int)$stmt1->fetchColumn() >= $maxByLogin) {
+        json_response(false, ['message' => 'تعداد تلاش ورود بیش از حد مجاز است. ۱۵ دقیقه بعد تلاش کنید.'], 429);
+    }
+
+    if ($ip !== '') {
+        $stmt2 = db()->prepare("SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND attempted_at >= ? AND success = 0");
+        $stmt2->execute([$ip, $since]);
+        if ((int)$stmt2->fetchColumn() >= $maxByIp) {
+            json_response(false, ['message' => 'تعداد تلاش ورود از این IP بیش از حد مجاز است. ۱۵ دقیقه بعد تلاش کنید.'], 429);
+        }
+    }
+}
+
+function login_attempt_record(string $loginKey, bool $success): void
+{
+    ensure_login_attempts_table();
+    $ip = (string)($_SERVER['REMOTE_ADDR'] ?? '');
+    db()->prepare("INSERT INTO login_attempts (login_key, ip, attempted_at, success) VALUES (?, ?, ?, ?)")
+        ->execute([$loginKey, $ip, now_mysql(), $success ? 1 : 0]);
+}
+
 function is_test_mode_enabled(): bool
 {
     $v = getenv('KELASEH_ENABLE_TESTS');
@@ -697,6 +783,7 @@ function jalali_now_string(): string
 
 function finish_login(array $row): void
 {
+    session_regenerate_id(true);
     $_SESSION['user_id'] = (int)$row['id'];
     db()->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int)$row['id']]);
     audit_log((int)$row['id'], 'login', 'user', (int)$row['id'], (int)$row['id']);
@@ -719,6 +806,7 @@ function action_login(array $data): void
     $login = trim((string)($data['login'] ?? ''));
     $password = (string)($data['password'] ?? '');
     if ($login === '' || $password === '') json_response(false, ['message' => 'نام کاربری و رمز عبور الزامی است.'], 422);
+    login_rate_limit_require_ok($login);
 
     $isEmail = filter_var($login, FILTER_VALIDATE_EMAIL);
     if ($isEmail) {
@@ -730,8 +818,10 @@ function action_login(array $data): void
     }
     $row = $stmt->fetch();
     if (!$row || !password_verify($password, (string)$row['password_hash'])) {
+        login_attempt_record($login, false);
         json_response(false, ['message' => 'نام کاربری یا رمز عبور اشتباه است.'], 401);
     }
+    login_attempt_record($login, true);
     if ((int)$row['is_active'] !== 1) json_response(false, ['message' => 'حساب غیرفعال است.'], 403);
 
     $otpEnabled = (int)(setting_get('sms.otp.enabled', '0') ?? '0') === 1;
@@ -832,8 +922,6 @@ function action_logout(): void
 
 function action_session(): void
 {
-    ensure_city_code_supports_variable_length();
-    ensure_kelaseh_numbers_supports_new_case_code();
     $user = null;
     try { $user = current_user(); } catch (Throwable $e) {}
     json_response(true, ['data' => ['csrf_token' => csrf_token(), 'user' => $user]]);
@@ -874,6 +962,7 @@ function action_kelaseh_search_by_nc(array $data): void {
 
 function action_kelaseh_get_by_code(array $data): void {
     $user = auth_require_login();
+    ensure_kelaseh_numbers_supports_resolution_flag();
     $code = trim((string)($data['code'] ?? ''));
     if (!$code) json_response(false, ['message' => 'کلاسه الزامی است'], 422);
     $sql = "SELECT k.*, u.city_code,
@@ -1276,6 +1365,7 @@ function kelaseh_create_internal(array $user, array $data): array
     $repEmployer = trim((string)($data['representatives_employer'] ?? ''));
     $pRequest = trim((string)($data['plaintiff_request'] ?? ''));
     $vText = trim((string)($data['verdict_text'] ?? ''));
+    $isResolution = (int)($data['is_resolution'] ?? 0) === 1 ? 1 : 0;
 
     $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
     $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
@@ -1291,7 +1381,9 @@ function kelaseh_create_internal(array $user, array $data): array
     ensure_kelaseh_numbers_code_supports_city_prefix();
     ensure_kelaseh_numbers_supports_manual_flag();
     ensure_kelaseh_numbers_supports_new_case_code();
+    ensure_kelaseh_numbers_supports_resolution_flag();
     ensure_kelaseh_numbers_supports_extended_fields();
+    ensure_kelaseh_yearly_counters_table();
 
     $selectedBranch = null;
 
@@ -1360,30 +1452,35 @@ function kelaseh_create_internal(array $user, array $data): array
             $mm2 = sprintf('%02d', $j['jm']);
             $monthlyPrefix = $cityPart . '-' . $branchNo2 . $yy2 . $mm2;
 
-            $yearLike = $cityPart . '-__' . $yy2 . '______';
             $yearSeq = 1;
-            try {
-                $stmtSeq = db()->prepare('SELECT MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
+            $stmtYear = db()->prepare("SELECT seq_no FROM kelaseh_yearly_counters WHERE city_code = ? AND yy = ? FOR UPDATE");
+            $stmtYear->execute([$cityPart, $yy2]);
+            $curYear = $stmtYear->fetchColumn();
+            if ($curYear === false) {
+                $yearLike = $cityPart . '-__' . $yy2 . '______';
+                $stmtSeq = db()->prepare('SELECT COALESCE(MAX(CAST(RIGHT(new_case_code, 4) AS UNSIGNED)), 0) FROM kelaseh_numbers WHERE new_case_code LIKE ?');
                 $stmtSeq->execute([$yearLike]);
-                $curYear = $stmtSeq->fetchColumn();
-                if ($curYear !== false && $curYear !== null) {
-                    $yearSeq = ((int)$curYear) + 1;
-                    if ($yearSeq < 1) $yearSeq = 1;
-                }
-            } catch (Throwable $e) {
-                $yearSeq = 1;
+                $curYear = (int)$stmtSeq->fetchColumn();
+            } else {
+                $curYear = (int)$curYear;
             }
+            $yearSeq = $curYear + 1;
 
             if ($yearSeq > 9999) {
                 db()->rollBack();
                 throw new HttpError(429, 'سقف کلاسه جدید در این سال تکمیل شده است.');
             }
 
+            db()->prepare("INSERT INTO kelaseh_yearly_counters (city_code, yy, seq_no, updated_at)
+                VALUES (?, ?, ?, ?)
+                ON DUPLICATE KEY UPDATE seq_no = VALUES(seq_no), updated_at = VALUES(updated_at)")
+                ->execute([$cityPart, $yy2, $yearSeq, now_mysql()]);
+
             $newCaseCode = $monthlyPrefix . sprintf('%04d', (int)$yearSeq);
 
-            $sql = "INSERT INTO kelaseh_numbers (owner_id, code, new_case_code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, plaintiff_address, plaintiff_postal_code, defendant_name, defendant_national_code, defendant_mobile, defendant_address, defendant_postal_code, dadnameh, representatives_govt, representatives_worker, representatives_employer, plaintiff_request, verdict_text, status, is_manual, is_manual_branch, created_at, updated_at)
-                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?)";
-            db()->prepare($sql)->execute([(int)$user['id'], $code, $newCaseCode, (int)$b, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $pAddress, $pPostal, $dName, (string)$dNC, (string)$dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, $isManual, $isManualBranch, $createdAt, $createdAt]);
+            $sql = "INSERT INTO kelaseh_numbers (owner_id, code, new_case_code, branch_no, jalali_ymd, jalali_full_ymd, seq_no, plaintiff_name, plaintiff_national_code, plaintiff_mobile, plaintiff_address, plaintiff_postal_code, defendant_name, defendant_national_code, defendant_mobile, defendant_address, defendant_postal_code, dadnameh, representatives_govt, representatives_worker, representatives_employer, plaintiff_request, verdict_text, status, is_manual, is_manual_branch, is_resolution, created_at, updated_at)
+                    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'active', ?, ?, ?, ?, ?, ?)";
+            db()->prepare($sql)->execute([(int)$user['id'], $code, $newCaseCode, (int)$b, $jalaliYmd, $jalaliFull, $seqNo, $pName, $pNC, $pMob, $pAddress, $pPostal, $dName, (string)$dNC, (string)$dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, $isManual, $isManualBranch, $isResolution, $createdAt, $createdAt]);
             
             db()->commit();
             $finalCode = $code;
@@ -3204,6 +3301,9 @@ function action_admin_users_create(array $data): void {
     if (!$isOfficeAdmin) auth_require_admin($user);
     if ($isOfficeAdmin && ($data['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'مجاز نیستید'], 403);
     csrf_require_valid();
+    if (isset($data['id']) && (int)$data['id'] > 0) {
+        json_response(false, ['message' => 'درخواست نامعتبر است. برای ویرایش از عملیات ویرایش استفاده کنید.'], 422);
+    }
 
     $cfg = app_config();
     $minLen = (int)($cfg['security']['password_min_length'] ?? 8);
@@ -3259,6 +3359,7 @@ function action_admin_users_update(array $data): void {
     csrf_require_valid();
     
     $id = (int)($data['id'] ?? 0);
+    if ($id < 1) json_response(false, ['message' => 'شناسه کاربر نامعتبر است.'], 422);
     $target = db()->prepare("SELECT * FROM users WHERE id = ?");
     $target->execute([$id]);
     $u = $target->fetch();
@@ -3316,6 +3417,7 @@ function action_admin_users_update(array $data): void {
 function action_kelaseh_edit(array $data): void {
     $user = auth_require_login();
     csrf_require_valid();
+    ensure_kelaseh_numbers_supports_resolution_flag();
     
     $code = (string)($data['code'] ?? '');
     if (!$code) json_response(false, ['message' => 'کد پرونده الزامی است.']);
@@ -3336,6 +3438,7 @@ function action_kelaseh_edit(array $data): void {
     $repEmployer = trim((string)($data['representatives_employer'] ?? ''));
     $pRequest = trim((string)($data['plaintiff_request'] ?? ''));
     $vText = trim((string)($data['verdict_text'] ?? ''));
+    $isResolution = (int)($data['is_resolution'] ?? 0) === 1 ? 1 : 0;
     
     if (!$dNC || !$dMob) json_response(false, ['message' => 'اطلاعات خوانده نامعتبر است.']);
     
@@ -3356,10 +3459,11 @@ function action_kelaseh_edit(array $data): void {
             representatives_employer = ?,
             plaintiff_request = ?,
             verdict_text = ?,
+            is_resolution = ?,
             updated_at = ?
             WHERE code = ?";
             
-    $params = [$pName, $pNC, $pMob, $pAddress, $pPostal, $dName, $dNC, $dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, now_mysql(), $code];
+    $params = [$pName, $pNC, $pMob, $pAddress, $pPostal, $dName, $dNC, $dMob, $dAddress, $dPostal, $dadnameh, $repGovt, $repWorker, $repEmployer, $pRequest, $vText, $isResolution, now_mysql(), $code];
     
     // Check ownership only for normal users
     if (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) {
@@ -3380,7 +3484,7 @@ function action_kelaseh_edit(array $data): void {
         'plaintiff_name', 'defendant_name', 'plaintiff_national_code', 'defendant_national_code',
         'plaintiff_mobile', 'defendant_mobile', 'plaintiff_address', 'plaintiff_postal_code',
         'defendant_address', 'defendant_postal_code', 'dadnameh', 'representatives_govt',
-        'representatives_worker', 'representatives_employer', 'plaintiff_request', 'verdict_text'
+        'representatives_worker', 'representatives_employer', 'plaintiff_request', 'verdict_text', 'is_resolution'
     ]);
     
     json_response(true, ['message' => 'پرونده با موفقیت ویرایش شد.']);

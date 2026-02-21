@@ -15,7 +15,7 @@ return [
     'db' => [
         'host' => 'localhost',
         'port' => 3306,
-        'name' => 'kelaseh_v3',
+        'name' => 'kelaseh_v2',
         'user' => 'root',
         'pass' => '',
         'charset' => 'utf8mb4',

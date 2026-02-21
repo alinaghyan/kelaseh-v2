@@ -61,6 +61,7 @@ CREATE TABLE IF NOT EXISTS `users` (
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_users_email` (`email`),
   UNIQUE KEY `uniq_users_username` (`username`),
+  KEY `idx_users_role_city` (`role`, `city_code`),
   KEY `idx_users_city_code` (`city_code`),
   CONSTRAINT `fk_users_city` FOREIGN KEY (`city_code`) REFERENCES `isfahan_cities` (`code`) ON UPDATE CASCADE
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
@@ -154,6 +155,7 @@ CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `id` INT UNSIGNED NOT NULL AUTO_INCREMENT,
   `owner_id` INT UNSIGNED NOT NULL,
   `code` VARCHAR(30) NOT NULL,
+  `new_case_code` VARCHAR(30) NULL,
   `branch_no` TINYINT UNSIGNED NOT NULL,
   `jalali_ymd` CHAR(6) NOT NULL,
   `jalali_full_ymd` CHAR(8) NOT NULL,
@@ -171,9 +173,24 @@ CREATE TABLE IF NOT EXISTS `kelaseh_numbers` (
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`id`),
   UNIQUE KEY `uniq_kelaseh_numbers_code` (`owner_id`, `code`),
+  UNIQUE KEY `uniq_kelaseh_numbers_new_case_code` (`new_case_code`),
   KEY `idx_kelaseh_numbers_owner_date` (`owner_id`, `jalali_full_ymd`, `branch_no`, `seq_no`),
+  KEY `idx_kelaseh_numbers_owner_created` (`owner_id`, `created_at`),
   KEY `idx_kelaseh_numbers_created_at` (`created_at`),
-  KEY `idx_kelaseh_numbers_plaintiff` (`plaintiff_national_code`)
+  KEY `idx_kelaseh_numbers_plaintiff` (`plaintiff_national_code`),
+  KEY `idx_kelaseh_numbers_defendant` (`defendant_national_code`),
+  KEY `idx_kelaseh_numbers_new_case` (`new_case_code`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
+
+CREATE TABLE IF NOT EXISTS `login_attempts` (
+  `id` BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
+  `login_key` VARCHAR(120) NOT NULL,
+  `ip` VARCHAR(45) NOT NULL,
+  `attempted_at` DATETIME NOT NULL,
+  `success` TINYINT(1) NOT NULL DEFAULT 0,
+  PRIMARY KEY (`id`),
+  KEY `idx_login_attempts_login_time` (`login_key`, `attempted_at`),
+  KEY `idx_login_attempts_ip_time` (`ip`, `attempted_at`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_persian_ci;
 
 -- --------------------------------------------------------
@@ -186,6 +203,14 @@ CREATE TABLE IF NOT EXISTS `kelaseh_daily_counters_v2` (
   `seq_no` INT NOT NULL,
   `updated_at` DATETIME NOT NULL,
   PRIMARY KEY (`city_code`, `jalali_ymd`, `branch_no`)
+) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
+
+CREATE TABLE IF NOT EXISTS `kelaseh_yearly_counters` (
+  `city_code` VARCHAR(10) NOT NULL,
+  `yy` CHAR(2) NOT NULL,
+  `seq_no` INT UNSIGNED NOT NULL,
+  `updated_at` DATETIME NOT NULL,
+  PRIMARY KEY (`city_code`, `yy`)
 ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci;
 
 -- --------------------------------------------------------

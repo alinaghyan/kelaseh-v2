@@ -1035,6 +1035,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                           <input type="hidden" name="manual_day" id="manual_day" />
                           <div class="form-text small">در صورت خالی بودن، تاریخ امروز درج می‌شود. برای حذف تاریخ انتخاب‌شده دکمه «×» را بزنید.</div>
                         </div>
+                        <div class="col-12">
+                          <div class="form-check">
+                            <input class="form-check-input" type="checkbox" value="1" id="kelasehIsResolution" name="is_resolution">
+                            <label class="form-check-label" for="kelasehIsResolution">حل اختلاف</label>
+                          </div>
+                        </div>
 
                         <!-- Plaintiff Details -->
                         <div class="col-12 col-md-6">
@@ -1534,6 +1540,12 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
              <!-- کلاسه جدید: <strong id="editModalKelasehNewCode">---</strong> -->
             </div>
             <input type="hidden" name="code" value="" />
+            <div class="mb-3">
+              <div class="form-check">
+                <input class="form-check-input" type="checkbox" value="1" id="editKelasehIsResolution" name="is_resolution">
+                <label class="form-check-label" for="editKelasehIsResolution">حل اختلاف (در صورت عدم انتخاب: هیات تشخیص)</label>
+              </div>
+            </div>
             <div class="row g-3">
               <!-- Plaintiff Column -->
               <div class="col-12 col-md-6">
@@ -1710,7 +1722,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
           </div>
           <div class="modal-footer">
             <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">بستن</button>
-            <button type="submit" class="btn btn-primary">ذخیره تغییرات</button>
+            <button id="btnAdminEditUserSave" type="button" class="btn btn-primary">ذخیره تغییرات</button>
           </div>
         </form>
       </div>
