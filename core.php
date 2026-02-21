@@ -546,7 +546,12 @@ function ensure_kelaseh_numbers_supports_new_case_code(): void
     if ($done) return;
     $done = true;
     try {
-        db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN IF NOT EXISTS `new_case_code` VARCHAR(30) NULL DEFAULT NULL AFTER `code`');
+        $stmt = db()->prepare("SELECT COUNT(*) FROM INFORMATION_SCHEMA.COLUMNS WHERE TABLE_SCHEMA = DATABASE() AND TABLE_NAME = 'kelaseh_numbers' AND COLUMN_NAME = 'new_case_code'");
+        $stmt->execute();
+        $exists = (int)$stmt->fetchColumn() > 0;
+        if (!$exists) {
+            db()->exec('ALTER TABLE kelaseh_numbers ADD COLUMN `new_case_code` VARCHAR(30) NULL DEFAULT NULL AFTER `code`');
+        }
     } catch (Throwable $e) {}
 }
 
@@ -828,6 +833,7 @@ function action_logout(): void
 function action_session(): void
 {
     ensure_city_code_supports_variable_length();
+    ensure_kelaseh_numbers_supports_new_case_code();
     $user = null;
     try { $user = current_user(); } catch (Throwable $e) {}
     json_response(true, ['data' => ['csrf_token' => csrf_token(), 'user' => $user]]);
@@ -1113,9 +1119,16 @@ function action_heyat_tashkhis_save(array $data): void {
 
 function action_kelaseh_list(array $data): void {
     $user = auth_require_login();
+    ensure_kelaseh_numbers_supports_new_case_code();
     $page = max(1, (int)($data['page'] ?? 1));
     $limit = max(1, min(500, (int)($data['limit'] ?? 100)));
     $offset = ($page - 1) * $limit;
+    $toRaw = trim((string)($data['to'] ?? ''));
+    $toParsed = parse_jalali_full_ymd($toRaw !== '' ? $toRaw : null);
+    if ($toParsed === null && $toRaw === '') {
+        // Default "to date" to today when user leaves it empty.
+        $toParsed = date('Y-m-d');
+    }
 
     $filters = [
         'national_code' => $data['national_code'] ?? '',
@@ -1123,7 +1136,7 @@ function action_kelaseh_list(array $data): void {
         'owner_id' => $data['owner_id'] ?? 0,
         'city_code' => $data['city_code'] ?? null,
         'from' => parse_jalali_full_ymd($data['from'] ?? null),
-        'to' => parse_jalali_full_ymd($data['to'] ?? null),
+        'to' => $toParsed,
     ];
     
     $result = kelaseh_fetch_rows_paginated($user, $filters, $limit, $offset);
@@ -2757,11 +2770,10 @@ function kelaseh_fetch_rows_paginated(array $user, array $filters, int $limit, i
                 WHERE 1=1";
     $params = [];
 
-    $nationalExact = $national !== '' ? validate_national_code($national) : null;
-    $isGlobalSearch = ($nationalExact !== null) || (strlen($national) === 10 && preg_match('/^[0-9]{10}$/', $national));
     $hasSearchInput = ($national !== '' || $q !== '');
+    $allowCrossOfficeSearch = in_array($user['role'], ['office_admin', 'branch_admin'], true) && $hasSearchInput;
 
-    if (!$isGlobalSearch) {
+    if (!$allowCrossOfficeSearch) {
         if ($user['role'] === 'user') {
             $baseSql .= " AND k.owner_id = ?";
             $params[] = $user['id'];

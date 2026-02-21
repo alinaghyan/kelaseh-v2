@@ -62,6 +62,45 @@ function initDatePickers() {
       $('#manual_year, #manual_month, #manual_day').val('');
     });
   }
+
+  ensureKelasehDefaultToDate();
+}
+
+function getTodayJalaliYmd() {
+  try {
+    const fmt = new Intl.DateTimeFormat('en-US-u-ca-persian', {
+      year: 'numeric',
+      month: '2-digit',
+      day: '2-digit'
+    });
+    const parts = fmt.formatToParts(new Date());
+    const y = parts.find((p) => p.type === 'year')?.value || '';
+    const m = parts.find((p) => p.type === 'month')?.value || '';
+    const d = parts.find((p) => p.type === 'day')?.value || '';
+    if (y && m && d) {
+      return `${y}/${m}/${d}`;
+    }
+  } catch (e) {}
+
+  try {
+    if (window.persianDate) {
+      const pd = new persianDate();
+      return `${pd.year()}/${String(pd.month()).padStart(2, '0')}/${String(pd.date()).padStart(2, '0')}`;
+    }
+  } catch (e) {}
+
+  return '';
+}
+
+function ensureKelasehDefaultToDate() {
+  const $to = $('#kelasehTo');
+  if (!$to.length) return;
+  const current = String($to.val() || '').trim();
+  if (current !== '') return;
+  const todayJalali = getTodayJalaliYmd();
+  if (todayJalali) {
+    $to.val(todayJalali);
+  }
 }
 
 function toPersianDigits(str) {
@@ -874,6 +913,7 @@ function refreshKelasehToday() {
 }
 
 function refreshKelaseh(page = 1) {
+  ensureKelasehDefaultToDate();
   kelasehCurrentPage = page;
   const national_code = $('#kelasehNational').val() || '';
   const from = $('#kelasehFrom').val() || '';
@@ -1518,6 +1558,40 @@ $(document).on('click', '#btnKelasehExportPdf', function () {
     $('<input>', { type: 'hidden', name: 'to', value: to })
   );
   
+  $('body').append($form);
+  $form.submit().remove();
+});
+
+$(document).on('click', '#btnKelasehTodayExportCsv', function () {
+  const today = getTodayJalaliYmd();
+  const $form = $('<form>', {
+    action: 'core.php',
+    method: 'POST',
+    target: '_self'
+  }).append(
+    $('<input>', { type: 'hidden', name: 'action', value: 'kelaseh.export.csv' }),
+    $('<input>', { type: 'hidden', name: 'csrf_token', value: csrfToken }),
+    $('<input>', { type: 'hidden', name: 'national_code', value: '' }),
+    $('<input>', { type: 'hidden', name: 'from', value: today }),
+    $('<input>', { type: 'hidden', name: 'to', value: today })
+  );
+  $('body').append($form);
+  $form.submit().remove();
+});
+
+$(document).on('click', '#btnKelasehTodayExportPdf', function () {
+  const today = getTodayJalaliYmd();
+  const $form = $('<form>', {
+    action: 'core.php',
+    method: 'POST',
+    target: '_blank'
+  }).append(
+    $('<input>', { type: 'hidden', name: 'action', value: 'kelaseh.export.print' }),
+    $('<input>', { type: 'hidden', name: 'csrf_token', value: csrfToken }),
+    $('<input>', { type: 'hidden', name: 'national_code', value: '' }),
+    $('<input>', { type: 'hidden', name: 'from', value: today }),
+    $('<input>', { type: 'hidden', name: 'to', value: today })
+  );
   $('body').append($form);
   $form.submit().remove();
 });
@@ -2242,6 +2316,76 @@ $(document).on('click', '#btnKelasehTodayPrintVerdictNotice', function () {
   window.open(`core.php?action=kelaseh.notice2&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
 });
 
+$(document).on('click', '#btnKelasehTodayPrintMinutes', function () {
+  const codes = [];
+  let excludedCount = 0;
+  const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        try {
+          const payload = JSON.parse(decodeURIComponent(raw));
+          if (payload.status === 'active') {
+            if (payload.code) codes.push(payload.code);
+          } else {
+            excludedCount++;
+          }
+        } catch (e) {}
+      }
+  });
+
+  if (codes.length === 0) {
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
+    return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  window.open(`core.php?action=kelaseh.print.minutes&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
+});
+
+$(document).on('click', '#btnKelasehTodayPrintExecForm', function () {
+  const codes = [];
+  let excludedCount = 0;
+  const checked = $('#kelasehTodayTbody .kelaseh-label-check:checked');
+  const targets = checked.length > 0 ? checked : $('#kelasehTodayTbody tr');
+
+  targets.each(function () {
+      const tr = $(this).is('tr') ? $(this) : $(this).closest('tr');
+      const raw = tr.attr('data-json');
+      if (raw) {
+        try {
+          const payload = JSON.parse(decodeURIComponent(raw));
+          if (payload.status === 'active') {
+            if (payload.code) codes.push(payload.code);
+          } else {
+            excludedCount++;
+          }
+        } catch (e) {}
+      }
+  });
+
+  if (codes.length === 0) {
+    if (excludedCount > 0) {
+      showToast('تمامی پرونده‌های انتخاب شده ابطال شده یا غیرفعال هستند و امکان چاپ ندارند.', 'error');
+    } else {
+      showToast('پرونده‌ای برای چاپ وجود ندارد.', 'error');
+    }
+    return;
+  }
+  if (excludedCount > 0) {
+    showToast(`${toPersianDigits(excludedCount)} پرونده به دلیل وضعیت غیر فعال یا ابطال از لیست چاپ حذف شدند.`, 'info');
+  }
+  window.open(`core.php?action=kelaseh.exec_form&codes=${encodeURIComponent(codes.join(','))}`, '_blank');
+});
+
 $(document).on('click', '#btnKelasehTodaySelectAll', function () {
     const checks = $('#kelasehTodayTbody .kelaseh-label-check:not(:disabled)');
     const allChecked = checks.length > 0 && checks.length === checks.filter(':checked').length;
@@ -2316,7 +2460,7 @@ $(document).on('click', '#btnKelasehTodayPrintAllLabelsNew', function () {
   }
   window.open(`core.php?action=kelaseh.label.new&codes=${codes.join(',')}`, '_blank');
 });
-$(document).on('click', '#kelasehTbody .btn-kelaseh-sms', function () {
+$(document).on('click', '#kelasehTbody .btn-kelaseh-sms, #kelasehTodayTbody .btn-kelaseh-sms', function () {
   const tr = $(this).closest('tr');
   const raw = tr.attr('data-json');
   if (!raw) {
@@ -2747,6 +2891,8 @@ $(document).on('click', '#btnAdminLogsRefresh', function () {
 });
 
 $(document).on('click', '#btnAdminBackfillNewCaseCode', function () {
+  showToast('این عملیات غیرفعال شده است.', 'error');
+  return;
   if (!confirm('آیا از تولید کلاسه جدید برای پرونده‌های قدیمی مطمئن هستید؟ این عملیات ممکن است زمان‌بر باشد.')) {
     return;
   }

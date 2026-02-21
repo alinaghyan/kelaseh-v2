@@ -611,7 +611,7 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                     <div class="small text-danger">
                       دکمه زیر موقت است و فقط یک بار برای تولید «کلاسه جدید» برای پرونده‌های قدیمی استفاده شود.
                     </div>
-                    <button id="btnAdminBackfillNewCaseCode" class="btn btn-outline-danger btn-sm" type="button">تولید کلاسه جدید برای پرونده‌های قدیمی</button>
+                    <button id="btnAdminBackfillNewCaseCode" class="btn btn-outline-danger btn-sm" type="button" disabled>تولید کلاسه جدید برای پرونده‌های قدیمی</button>
                   </div>
                   <div class="row g-2 align-items-end mb-2">
                     <div class="col-6 col-md-4">
@@ -1132,14 +1132,18 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
                 </div>
 
                 <div class="card mt-3">
-                  <div class="card-header small py-1 bg-light d-flex justify-content-between align-items-center">
+                  <div class="card-header small py-1 bg-light d-flex flex-wrap justify-content-between align-items-center gap-2">
                     <span>ثبت‌های امروز شما</span>
-                    <div class="btn-group btn-group-sm">
-                      <button id="btnKelasehTodaySelectAll" class="btn btn-outline-primary" type="button">انتخاب همه</button>
-                      <!-- <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary" type="button" disabled>چاپ لیبل جدید</button>-->
-                      <button id="btnKelasehTodayPrintAllLabelsNew" class="btn btn-outline-secondary" type="button">چاپ لیبل</button>
-                      <button id="btnKelasehTodayPrintNotice" class="btn btn-outline-info" type="button">چاپ دعوت نامه</button>
-                      <button id="btnKelasehTodayPrintVerdictNotice" class="btn btn-outline-primary" type="button">چاپ ابلاغ</button>
+                    <div class="d-flex flex-wrap gap-2 align-items-center action-bar">
+                      <button id="btnKelasehTodayExportCsv" class="btn btn-outline-success btn-sm" type="button">خروجی اکسل</button>
+                      <button id="btnKelasehTodayExportPdf" class="btn btn-outline-dark btn-sm" type="button">خروجی پی‌دی‌اف</button>
+                      <button id="btnKelasehTodayPrintAllLabels" class="btn btn-outline-secondary btn-sm" type="button" disabled>چاپ لیبل جدید</button>
+                      <button id="btnKelasehTodayPrintAllLabelsNew" class="btn btn-outline-secondary btn-sm" type="button">چاپ لیبل</button>
+                      <button id="btnKelasehTodayPrintNotice" class="btn btn-outline-info btn-sm" type="button">چاپ دعوت نامه</button>
+                      <button id="btnKelasehTodayPrintVerdictNotice" class="btn btn-outline-primary btn-sm" type="button">چاپ ابلاغ رای</button>
+                      <button id="btnKelasehTodayPrintMinutes" class="btn btn-outline-warning btn-sm" type="button">چاپ رای</button>
+                      <button id="btnKelasehTodayPrintExecForm" class="btn btn-outline-dark btn-sm" type="button">فرم اجراییه</button>
+                      <button id="btnKelasehTodaySelectAll" class="btn btn-outline-primary btn-sm" type="button">انتخاب همه</button>
                     </div>
                   </div>
                   <div class="table-responsive">
@@ -1353,7 +1357,8 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       box-shadow: 0 12px 24px rgba(41, 79, 129, 0.32);
       filter: brightness(1.02);
     }
-    #kelasehListSection .action-bar .btn {
+    #kelasehListSection .action-bar .btn,
+    #kelasehCreateSection .action-bar .btn {
       border-radius: 12px;
       border: 1px solid #cdd8e7;
       background: #ffffff;
@@ -1365,36 +1370,50 @@ $appName = is_array($cfg) ? (string)($cfg['app']['name'] ?? 'کلاسه') : 'ک�
       opacity: 0;
       animation: kelasehBtnIn 360ms ease-out forwards;
     }
-    #kelasehListSection .action-bar .btn:hover {
+    #kelasehListSection .action-bar .btn:hover,
+    #kelasehCreateSection .action-bar .btn:hover {
       transform: translateY(-1px);
       border-color: #9eb3ce;
       background: #f7faff;
       box-shadow: 0 10px 22px rgba(15, 23, 42, 0.12);
     }
-    #kelasehListSection .action-bar .btn:active {
+    #kelasehListSection .action-bar .btn:active,
+    #kelasehCreateSection .action-bar .btn:active {
       transform: translateY(0);
       box-shadow: 0 4px 10px rgba(15, 23, 42, 0.1);
     }
-    #kelasehListSection .action-bar .btn:disabled {
+    #kelasehListSection .action-bar .btn:disabled,
+    #kelasehCreateSection .action-bar .btn:disabled {
       opacity: 0.65;
       transform: none;
       box-shadow: none;
       cursor: not-allowed;
     }
-    #kelasehListSection .action-bar .btn:focus-visible {
+    #kelasehListSection .action-bar .btn:focus-visible,
+    #kelasehCreateSection .action-bar .btn:focus-visible {
       outline: 2px solid rgba(37, 99, 235, 0.45);
       outline-offset: 2px;
     }
-    #kelasehListSection .action-bar .btn:nth-child(1) { animation-delay: 40ms; }
-    #kelasehListSection .action-bar .btn:nth-child(2) { animation-delay: 70ms; }
-    #kelasehListSection .action-bar .btn:nth-child(3) { animation-delay: 100ms; }
-    #kelasehListSection .action-bar .btn:nth-child(4) { animation-delay: 130ms; }
-    #kelasehListSection .action-bar .btn:nth-child(5) { animation-delay: 160ms; }
-    #kelasehListSection .action-bar .btn:nth-child(6) { animation-delay: 190ms; }
-    #kelasehListSection .action-bar .btn:nth-child(7) { animation-delay: 220ms; }
-    #kelasehListSection .action-bar .btn:nth-child(8) { animation-delay: 250ms; }
-    #kelasehListSection .action-bar .btn:nth-child(9) { animation-delay: 280ms; }
-    #kelasehListSection .action-bar .btn:nth-child(10) { animation-delay: 310ms; }
+    #kelasehListSection .action-bar .btn:nth-child(1),
+    #kelasehCreateSection .action-bar .btn:nth-child(1) { animation-delay: 40ms; }
+    #kelasehListSection .action-bar .btn:nth-child(2),
+    #kelasehCreateSection .action-bar .btn:nth-child(2) { animation-delay: 70ms; }
+    #kelasehListSection .action-bar .btn:nth-child(3),
+    #kelasehCreateSection .action-bar .btn:nth-child(3) { animation-delay: 100ms; }
+    #kelasehListSection .action-bar .btn:nth-child(4),
+    #kelasehCreateSection .action-bar .btn:nth-child(4) { animation-delay: 130ms; }
+    #kelasehListSection .action-bar .btn:nth-child(5),
+    #kelasehCreateSection .action-bar .btn:nth-child(5) { animation-delay: 160ms; }
+    #kelasehListSection .action-bar .btn:nth-child(6),
+    #kelasehCreateSection .action-bar .btn:nth-child(6) { animation-delay: 190ms; }
+    #kelasehListSection .action-bar .btn:nth-child(7),
+    #kelasehCreateSection .action-bar .btn:nth-child(7) { animation-delay: 220ms; }
+    #kelasehListSection .action-bar .btn:nth-child(8),
+    #kelasehCreateSection .action-bar .btn:nth-child(8) { animation-delay: 250ms; }
+    #kelasehListSection .action-bar .btn:nth-child(9),
+    #kelasehCreateSection .action-bar .btn:nth-child(9) { animation-delay: 280ms; }
+    #kelasehListSection .action-bar .btn:nth-child(10),
+    #kelasehCreateSection .action-bar .btn:nth-child(10) { animation-delay: 310ms; }
     @keyframes kelasehBtnIn {
       from { opacity: 0; transform: translateY(6px); }
       to { opacity: 1; transform: translateY(0); }
