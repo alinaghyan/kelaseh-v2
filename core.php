@@ -1,7 +1,7 @@
-﻿<?php
+<?php
 /**
- * Ù‡Ø³ØªÙ‡ Ø§ØµÙ„ÛŒ Ù¾Ø±Ø¯Ø§Ø²Ø´â€ŒÙ‡Ø§ÛŒ Ø¨Ø±Ù†Ø§Ù…Ù‡ (Backend)
- * Ø´Ø§Ù…Ù„ ØªÙˆØ§Ø¨Ø¹ Ú©Ù…Ú©ÛŒØŒ Ø§ØªØµØ§Ù„ Ø¨Ù‡ Ø¯ÛŒØªØ§Ø¨ÛŒØ³ØŒ Ù…Ø¯ÛŒØ±ÛŒØª Ù†Ø´Ø³Øªâ€ŒÙ‡Ø§ (Session) Ùˆ Ù¾Ø±Ø¯Ø§Ø²Ø´ Ø¯Ø±Ø®ÙˆØ§Ø³Øªâ€ŒÙ‡Ø§ÛŒ AJAX
+ * هسته اصلی پردازش‌های برنامه (Backend)
+ * شامل توابع کمکی، اتصال به دیتابیس، مدیریت نشست‌ها (Session) و پردازش درخواست‌های AJAX
  */
 $bootCfg = is_file(__DIR__ . DIRECTORY_SEPARATOR . 'config.php') ? require __DIR__ . DIRECTORY_SEPARATOR . 'config.php' : [];
 $isHttps = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') || (($_SERVER['SERVER_PORT'] ?? '') === '443');
@@ -35,7 +35,7 @@ function db(): PDO
         if (!is_array($db)) {
             header('Content-Type: application/json');
             http_response_code(500);
-            echo json_encode(['ok' => false, 'message' => 'ØªÙ†Ø¸ÛŒÙ…Ø§Øª Ø¯ÛŒØªØ§Ø¨ÛŒØ³ Ø¯Ø± config.php ÛŒØ§ÙØª Ù†Ø´Ø¯.']);
+            echo json_encode(['ok' => false, 'message' => 'تنظیمات دیتابیس در config.php یافت نشد.']);
             exit;
         }
 
@@ -47,7 +47,7 @@ function db(): PDO
         if ($host === '' || $name === '' || $user === '') {
             header('Content-Type: application/json');
             http_response_code(500);
-            echo json_encode(['ok' => false, 'message' => 'ØªÙ†Ø¸ÛŒÙ…Ø§Øª Ø¯ÛŒØªØ§Ø¨ÛŒØ³ Ø¯Ø± config.php Ù†Ø§Ù‚Øµ Ø§Ø³Øª.']);
+            echo json_encode(['ok' => false, 'message' => 'تنظیمات دیتابیس در config.php ناقص است.']);
             exit;
         }
 
@@ -59,7 +59,7 @@ function db(): PDO
         } catch (PDOException $e) {
             header('Content-Type: application/json');
             http_response_code(500);
-            echo json_encode(['ok' => false, 'message' => is_debug() ? ('Ø®Ø·Ø§ÛŒ Ø§ØªØµØ§Ù„ Ø¨Ù‡ Ø¯ÛŒØªØ§Ø¨ÛŒØ³: ' . $e->getMessage()) : 'Ø®Ø·Ø§ÛŒ Ø§ØªØµØ§Ù„ Ø¨Ù‡ Ø¯ÛŒØªØ§Ø¨ÛŒØ³']);
+            echo json_encode(['ok' => false, 'message' => is_debug() ? ('خطای اتصال به دیتابیس: ' . $e->getMessage()) : 'خطای اتصال به دیتابیس']);
             exit;
         }
     }
@@ -88,7 +88,7 @@ function tests_enabled(): bool
 function admin_test_require_enabled(): void
 {
     if (!tests_enabled()) {
-        json_response(false, ['message' => 'ØªØ³Øª Ø¯Ø± Ø§ÛŒÙ† Ù…Ø­ÛŒØ· ØºÛŒØ±ÙØ¹Ø§Ù„ Ø§Ø³Øª. Ø¨Ø±Ø§ÛŒ ÙØ¹Ø§Ù„â€ŒØ³Ø§Ø²ÛŒ `app.enable_tests=true` ÛŒØ§ `app.debug=true` Ø±Ø§ Ø¯Ø± config.php ØªÙ†Ø¸ÛŒÙ… Ú©Ù†ÛŒØ¯.'], 403);
+        json_response(false, ['message' => 'تست در این محیط غیرفعال است. برای فعال‌سازی `app.enable_tests=true` یا `app.debug=true` را در config.php تنظیم کنید.'], 403);
     }
 }
 
@@ -103,14 +103,14 @@ function json_response(bool $ok, array $data = [], int $status = 200): void
 function localize_error_message_fa(string $message): string
 {
     $m = trim($message);
-    if ($m === '') return 'Ø®Ø·Ø§ÛŒ Ø³ÛŒØ³ØªÙ…';
+    if ($m === '') return 'خطای سیستم';
 
-    if (str_contains($m, 'Unauthorized access')) return 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø².';
-    if (str_contains($m, 'No case selected')) return 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ Ø§Ù†ØªØ®Ø§Ø¨ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.';
-    if (str_contains($m, 'Missing table')) return 'Ø¬Ø¯ÙˆÙ„ Ù…ÙˆØ±Ø¯ Ù†ÛŒØ§Ø² Ø¯Ø± Ù¾Ø§ÛŒÚ¯Ø§Ù‡ Ø¯Ø§Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§ Ø§Ø³Ú©Ø±ÛŒÙ¾Øª Ù…Ù‡Ø§Ø¬Ø±Øª Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©Ù†ÛŒØ¯.';
-    if (str_contains($m, 'Missing column')) return 'Ø³ØªÙˆÙ† Ù…ÙˆØ±Ø¯ Ù†ÛŒØ§Ø² Ø¯Ø± Ù¾Ø§ÛŒÚ¯Ø§Ù‡ Ø¯Ø§Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§ Ø§Ø³Ú©Ø±ÛŒÙ¾Øª Ù…Ù‡Ø§Ø¬Ø±Øª Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©Ù†ÛŒØ¯.';
-    if (str_contains($m, 'Duplicate entry')) return 'Ø±Ú©ÙˆØ±Ø¯ ØªÚ©Ø±Ø§Ø±ÛŒ Ø§Ø³Øª.';
-    if (str_contains($m, 'SQLSTATE')) return 'Ø®Ø·Ø§ÛŒ Ù¾Ø§ÛŒÚ¯Ø§Ù‡ Ø¯Ø§Ø¯Ù‡ Ø±Ø® Ø¯Ø§Ø¯.';
+    if (str_contains($m, 'Unauthorized access')) return 'دسترسی غیرمجاز.';
+    if (str_contains($m, 'No case selected')) return 'پرونده‌ای انتخاب نشده است.';
+    if (str_contains($m, 'Missing table')) return 'جدول مورد نیاز در پایگاه داده یافت نشد. لطفا اسکریپت مهاجرت را اجرا کنید.';
+    if (str_contains($m, 'Missing column')) return 'ستون مورد نیاز در پایگاه داده یافت نشد. لطفا اسکریپت مهاجرت را اجرا کنید.';
+    if (str_contains($m, 'Duplicate entry')) return 'رکورد تکراری است.';
+    if (str_contains($m, 'SQLSTATE')) return 'خطای پایگاه داده رخ داد.';
 
     return $m;
 }
@@ -137,7 +137,7 @@ function csrf_require_valid(): void
 {
     $token = $_SERVER['HTTP_X_CSRF_TOKEN'] ?? $_POST['csrf_token'] ?? $_GET['csrf_token'] ?? '';
     if (!$token || $token !== csrf_token()) {
-        json_response(false, ['message' => 'Ù†Ø´Ø³Øª Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª (CSRF). ØµÙØ­Ù‡ Ø±Ø§ Ø±ÙØ±Ø´ Ú©Ù†ÛŒØ¯.'], 403);
+        json_response(false, ['message' => 'نشست نامعتبر است (CSRF). صفحه را رفرش کنید.'], 403);
     }
 }
 
@@ -292,29 +292,29 @@ function ensure_user_branches_table(): void
 function auth_require_login(): array
 {
     $user = current_user();
-    if (!$user) json_response(false, ['message' => 'Ù„Ø·ÙØ§Ù‹ ÙˆØ§Ø±Ø¯ Ø´ÙˆÛŒØ¯.'], 401);
+    if (!$user) json_response(false, ['message' => 'لطفاً وارد شوید.'], 401);
     if ((int)$user['is_active'] !== 1) {
         action_logout();
-        json_response(false, ['message' => 'Ø­Ø³Ø§Ø¨ Ø´Ù…Ø§ ØºÛŒØ±ÙØ¹Ø§Ù„ Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 403);
+        json_response(false, ['message' => 'حساب شما غیرفعال شده است.'], 403);
     }
     return $user;
 }
 
 function auth_require_admin(array $user): void
 {
-    if ($user['role'] !== 'admin') json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø² (ÙÙ‚Ø· Ù…Ø¯ÛŒØ± Ú©Ù„).'], 403);
+    if ($user['role'] !== 'admin') json_response(false, ['message' => 'دسترسی غیرمجاز (فقط مدیر کل).'], 403);
 }
 
 function auth_require_office_admin(array $user): void
 {
-    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø² (ÙÙ‚Ø· Ù…Ø¯ÛŒØ± Ø§Ø¯Ø§Ø±Ù‡).'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز (فقط مدیر اداره).'], 403);
 }
 
 function to_persian_digits($str): string
 {
     if ($str === null) return '';
     $eng = ['0','1','2','3','4','5','6','7','8','9'];
-    $per = ['Û°','Û±','Û²','Û³','Û´','Ûµ','Û¶','Û·','Û¸','Û¹'];
+    $per = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
     return str_replace($eng, $per, (string)$str);
 }
 
@@ -355,7 +355,7 @@ function parse_jalali_to_gregorian(string $jDate): ?string
 function to_english_digits($str): string
 {
     if ($str === null) return '';
-    $per = ['Û°','Û±','Û²','Û³','Û´','Ûµ','Û¶','Û·','Û¸','Û¹'];
+    $per = ['۰','۱','۲','۳','۴','۵','۶','۷','۸','۹'];
     $eng = ['0','1','2','3','4','5','6','7','8','9'];
     return str_replace($per, $eng, (string)$str);
 }
@@ -561,7 +561,7 @@ function kelaseh_numbers_insert_compat(array $row): void
     ];
     foreach ($required as $col) {
         if (!schema_column_exists('kelaseh_numbers', $col)) {
-            throw new RuntimeException("Ø³ØªÙˆÙ† `kelaseh_numbers`.`{$col}` ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§ Ø§Ø³Ú©Ø±ÛŒÙ¾Øª `php scripts/migrate_schema_once.php` Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©Ù†ÛŒØ¯.");
+            throw new RuntimeException("ستون `kelaseh_numbers`.`{$col}` یافت نشد. لطفا اسکریپت `php scripts/migrate_schema_once.php` را اجرا کنید.");
         }
     }
 
@@ -570,7 +570,7 @@ function kelaseh_numbers_insert_compat(array $row): void
         'plaintiff_name', 'plaintiff_national_code', 'plaintiff_mobile', 'plaintiff_address', 'plaintiff_postal_code',
         'defendant_name', 'defendant_national_code', 'defendant_mobile', 'defendant_address', 'defendant_postal_code', 'is_resolution',
         'dadnameh', 'representatives_govt', 'representatives_worker', 'representatives_employer',
-        'plaintiff_request', 'verdict_text', 'status', 'is_manual', 'is_manual_branch', 'is_resolution',
+        'plaintiff_request', 'verdict_text', 'status', 'is_manual', 'is_manual_branch',
         'created_at', 'updated_at'
     ];
 
@@ -585,7 +585,7 @@ function kelaseh_numbers_insert_compat(array $row): void
         $params[] = $row[$col];
     }
     if (empty($cols)) {
-        throw new RuntimeException('Ù‡ÛŒÚ† Ø³ØªÙˆÙ† Ù‚Ø§Ø¨Ù„â€ŒÙ†ÙˆØ´ØªÙ†ÛŒ Ø¨Ø±Ø§ÛŒ Ø¬Ø¯ÙˆÙ„ `kelaseh_numbers` ÛŒØ§ÙØª Ù†Ø´Ø¯.');
+        throw new RuntimeException('هیچ ستون قابل‌نوشتنی برای جدول `kelaseh_numbers` یافت نشد.');
     }
     $sql = "INSERT INTO kelaseh_numbers (" . implode(', ', $cols) . ") VALUES (" . implode(', ', $vals) . ")";
     db()->prepare($sql)->execute($params);
@@ -608,14 +608,14 @@ function login_rate_limit_require_ok(string $loginKey): void
     $stmt1 = db()->prepare("SELECT COUNT(*) FROM login_attempts WHERE login_key = ? AND attempted_at >= ? AND success = 0");
     $stmt1->execute([$loginKey, $since]);
     if ((int)$stmt1->fetchColumn() >= $maxByLogin) {
-        json_response(false, ['message' => 'ØªØ¹Ø¯Ø§Ø¯ ØªÙ„Ø§Ø´ ÙˆØ±ÙˆØ¯ Ø¨ÛŒØ´ Ø§Ø² Ø­Ø¯ Ù…Ø¬Ø§Ø² Ø§Ø³Øª. Û±Ûµ Ø¯Ù‚ÛŒÙ‚Ù‡ Ø¨Ø¹Ø¯ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.'], 429);
+        json_response(false, ['message' => 'تعداد تلاش ورود بیش از حد مجاز است. ۱۵ دقیقه بعد تلاش کنید.'], 429);
     }
 
     if ($ip !== '') {
         $stmt2 = db()->prepare("SELECT COUNT(*) FROM login_attempts WHERE ip = ? AND attempted_at >= ? AND success = 0");
         $stmt2->execute([$ip, $since]);
         if ((int)$stmt2->fetchColumn() >= $maxByIp) {
-            json_response(false, ['message' => 'ØªØ¹Ø¯Ø§Ø¯ ØªÙ„Ø§Ø´ ÙˆØ±ÙˆØ¯ Ø§Ø² Ø§ÛŒÙ† IP Ø¨ÛŒØ´ Ø§Ø² Ø­Ø¯ Ù…Ø¬Ø§Ø² Ø§Ø³Øª. Û±Ûµ Ø¯Ù‚ÛŒÙ‚Ù‡ Ø¨Ø¹Ø¯ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.'], 429);
+            json_response(false, ['message' => 'تعداد تلاش ورود از این IP بیش از حد مجاز است. ۱۵ دقیقه بعد تلاش کنید.'], 429);
         }
     }
 }
@@ -691,7 +691,7 @@ function finish_login(array $row): void
     $_SESSION['user_id'] = (int)$row['id'];
     db()->prepare('UPDATE users SET last_login_at = NOW() WHERE id = ?')->execute([(int)$row['id']]);
     audit_log((int)$row['id'], 'login', 'user', (int)$row['id'], (int)$row['id']);
-    json_response(true, ['message' => 'ÙˆØ±ÙˆØ¯ Ù…ÙˆÙÙ‚.', 'data' => ['csrf_token' => csrf_token(), 'user' => current_user()]]);
+    json_response(true, ['message' => 'ورود موفق.', 'data' => ['csrf_token' => csrf_token(), 'user' => current_user()]]);
 }
 
 function action_login(array $data): void
@@ -702,14 +702,14 @@ function action_login(array $data): void
         $lastAttempt = $_SESSION['last_login_attempt'] ?? 0;
         $diff = time() - $lastAttempt;
         if ($diff < $throttle) {
-            json_response(false, ['message' => "Ù„Ø·ÙØ§Ù‹ " . ($throttle - $diff) . " Ø«Ø§Ù†ÛŒÙ‡ ØµØ¨Ø± Ú©Ù†ÛŒØ¯."], 429);
+            json_response(false, ['message' => "لطفاً " . ($throttle - $diff) . " ثانیه صبر کنید."], 429);
         }
     }
     $_SESSION['last_login_attempt'] = time();
 
     $login = trim((string)($data['login'] ?? ''));
     $password = (string)($data['password'] ?? '');
-    if ($login === '' || $password === '') json_response(false, ['message' => 'Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±ÛŒ Ùˆ Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+    if ($login === '' || $password === '') json_response(false, ['message' => 'نام کاربری و رمز عبور الزامی است.'], 422);
     login_rate_limit_require_ok($login);
 
     $isEmail = filter_var($login, FILTER_VALIDATE_EMAIL);
@@ -723,10 +723,10 @@ function action_login(array $data): void
     $row = $stmt->fetch();
     if (!$row || !password_verify($password, (string)$row['password_hash'])) {
         login_attempt_record($login, false);
-        json_response(false, ['message' => 'Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±ÛŒ ÛŒØ§ Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø§Ø´ØªØ¨Ø§Ù‡ Ø§Ø³Øª.'], 401);
+        json_response(false, ['message' => 'نام کاربری یا رمز عبور اشتباه است.'], 401);
     }
     login_attempt_record($login, true);
-    if ((int)$row['is_active'] !== 1) json_response(false, ['message' => 'Ø­Ø³Ø§Ø¨ ØºÛŒØ±ÙØ¹Ø§Ù„ Ø§Ø³Øª.'], 403);
+    if ((int)$row['is_active'] !== 1) json_response(false, ['message' => 'حساب غیرفعال است.'], 403);
 
     $otpEnabled = (int)(setting_get('sms.otp.enabled', '0') ?? '0') === 1;
     $role = (string)($row['role'] ?? '');
@@ -734,9 +734,9 @@ function action_login(array $data): void
 
     if ($otpEnabled && $isManager) {
         $apiKey = trim((string)(setting_get('sms.api_key', '') ?? ''));
-        if ($apiKey === '') json_response(false, ['message' => 'Ø§Ø±Ø³Ø§Ù„ Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ ÙØ¹Ø§Ù„ Ø§Ø³Øª Ø§Ù…Ø§ Ú©Ù„ÛŒØ¯ API Ù¾ÛŒØ§Ù…Ú© ØªÙ†Ø¸ÛŒÙ… Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 422);
+        if ($apiKey === '') json_response(false, ['message' => 'ارسال کد تایید فعال است اما کلید API پیامک تنظیم نشده است.'], 422);
         $mobile = validate_ir_mobile($row['mobile'] ?? null);
-        if (!$mobile) json_response(false, ['message' => 'Ø§Ø±Ø³Ø§Ù„ Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ ÙØ¹Ø§Ù„ Ø§Ø³Øª Ø§Ù…Ø§ Ø´Ù…Ø§Ø±Ù‡ Ù…ÙˆØ¨Ø§ÛŒÙ„ Ú©Ø§Ø±Ø¨Ø± Ù†Ø§Ù…Ø¹ØªØ¨Ø±/Ø®Ø§Ù„ÛŒ Ø§Ø³Øª.'], 422);
+        if (!$mobile) json_response(false, ['message' => 'ارسال کد تایید فعال است اما شماره موبایل کاربر نامعتبر/خالی است.'], 422);
 
         $len = (int)(setting_get('sms.otp.len', '6') ?? '6');
         if ($len < 4) $len = 4;
@@ -759,9 +759,9 @@ function action_login(array $data): void
         ];
 
         $cfg = app_config();
-        $appName = (string)($cfg['app']['name'] ?? 'Ú©Ù„Ø§Ø³Ù‡');
+        $appName = (string)($cfg['app']['name'] ?? 'کلاسه');
         $tpl = (string)(setting_get('sms.otp.tpl', '') ?? '');
-        if ($tpl === '') $tpl = 'Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ ÙˆØ±ÙˆØ¯ {app_name}: {otp}';
+        if ($tpl === '') $tpl = 'کد تایید ورود {app_name}: {otp}';
         $msg = str_replace(['{otp}', '{app_name}'], [$otp, $appName], $tpl);
         $sent = sms_send_via_kavenegar($mobile, $msg);
         try {
@@ -776,7 +776,7 @@ function action_login(array $data): void
         if (strlen($masked) >= 7) {
             $masked = substr($masked, 0, 4) . '***' . substr($masked, -4);
         }
-        json_response(true, ['message' => 'Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ Ø§Ø±Ø³Ø§Ù„ Ø´Ø¯.', 'data' => ['csrf_token' => csrf_token(), 'otp_required' => 1, 'otp_expires_in' => $ttlMin * 60, 'mobile_hint' => $masked]]);
+        json_response(true, ['message' => 'کد تایید ارسال شد.', 'data' => ['csrf_token' => csrf_token(), 'otp_required' => 1, 'otp_expires_in' => $ttlMin * 60, 'mobile_hint' => $masked]]);
     }
 
     finish_login($row);
@@ -786,15 +786,15 @@ function action_login_otp_verify(array $data): void
 {
     csrf_require_valid();
     $otp = trim(to_english_digits((string)($data['otp'] ?? '')));
-    if ($otp === '' || !preg_match('/^[0-9]{4,8}$/', $otp)) json_response(false, ['message' => 'Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($otp === '' || !preg_match('/^[0-9]{4,8}$/', $otp)) json_response(false, ['message' => 'کد تایید نامعتبر است.'], 422);
 
     $pending = $_SESSION['otp_pending'] ?? null;
     if (!is_array($pending) || empty($pending['user_id']) || empty($pending['code']) || empty($pending['expires_at'])) {
-        json_response(false, ['message' => 'Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª.'], 409);
+        json_response(false, ['message' => 'درخواست کد تایید معتبر نیست.'], 409);
     }
     if (time() > (int)$pending['expires_at']) {
         unset($_SESSION['otp_pending']);
-        json_response(false, ['message' => 'Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ Ù…Ù†Ù‚Ø¶ÛŒ Ø´Ø¯Ù‡ Ø§Ø³Øª. Ø¯ÙˆØ¨Ø§Ø±Ù‡ ÙˆØ§Ø±Ø¯ Ø´ÙˆÛŒØ¯.'], 410);
+        json_response(false, ['message' => 'کد تایید منقضی شده است. دوباره وارد شوید.'], 410);
     }
     $tries = (int)($pending['tries'] ?? 0);
     $maxTries = (int)($pending['max_tries'] ?? 5);
@@ -802,12 +802,12 @@ function action_login_otp_verify(array $data): void
     if ($maxTries > 10) $maxTries = 10;
     if ($tries >= $maxTries) {
         unset($_SESSION['otp_pending']);
-        json_response(false, ['message' => 'ØªØ¹Ø¯Ø§Ø¯ ØªÙ„Ø§Ø´â€ŒÙ‡Ø§ Ø¨ÛŒØ´ Ø§Ø² Ø­Ø¯ Ù…Ø¬Ø§Ø² Ø§Ø³Øª. Ø¯ÙˆØ¨Ø§Ø±Ù‡ ÙˆØ§Ø±Ø¯ Ø´ÙˆÛŒØ¯.'], 429);
+        json_response(false, ['message' => 'تعداد تلاش‌ها بیش از حد مجاز است. دوباره وارد شوید.'], 429);
     }
 
     if (!password_verify($otp, (string)$pending['code'])) {
         $_SESSION['otp_pending']['tries'] = $tries + 1;
-        json_response(false, ['message' => 'Ú©Ø¯ ØªØ§ÛŒÛŒØ¯ Ø§Ø´ØªØ¨Ø§Ù‡ Ø§Ø³Øª.'], 401);
+        json_response(false, ['message' => 'کد تایید اشتباه است.'], 401);
     }
 
     $userId = (int)$pending['user_id'];
@@ -816,7 +816,7 @@ function action_login_otp_verify(array $data): void
     $stmt = db()->prepare('SELECT id, role FROM users WHERE id = ? LIMIT 1');
     $stmt->execute([$userId]);
     $row = $stmt->fetch();
-    if (!$row) json_response(false, ['message' => 'Ú©Ø§Ø±Ø¨Ø± ÛŒØ§ÙØª Ù†Ø´Ø¯.'], 404);
+    if (!$row) json_response(false, ['message' => 'کاربر یافت نشد.'], 404);
     
     finish_login($row);
 }
@@ -825,7 +825,7 @@ function action_logout(): void
 {
     $_SESSION = [];
     session_destroy();
-    json_response(true, ['message' => 'Ø®Ø±ÙˆØ¬ Ù…ÙˆÙÙ‚.']);
+    json_response(true, ['message' => 'خروج موفق.']);
 }
 
 function action_session(): void
@@ -857,7 +857,7 @@ function action_kelaseh_search_by_nc(array $data): void {
         $sql .= " AND owner_id = ?";
         $params[] = $user['id'];
     } elseif (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     }
     
     $sql .= " ORDER BY id DESC LIMIT 10";
@@ -872,7 +872,7 @@ function action_kelaseh_get_by_code(array $data): void {
     $user = auth_require_login();
     ensure_kelaseh_numbers_supports_resolution_flag();
     $code = trim((string)($data['code'] ?? ''));
-    if (!$code) json_response(false, ['message' => 'Ú©Ù„Ø§Ø³Ù‡ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª'], 422);
+    if (!$code) json_response(false, ['message' => 'کلاسه الزامی است'], 422);
     $sql = "SELECT k.*, u.city_code,
                 u.role AS owner_role,
                 u.username AS owner_username,
@@ -890,7 +890,7 @@ function action_kelaseh_get_by_code(array $data): void {
         $sql .= " AND (k.owner_id = ? OR u.city_code = ? OR LPAD(u.city_code, 4, '0') = ?)";
         array_push($params, $user['id'], $user['city_code'], $cityNorm);
     } elseif (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     }
 
     $stmt = db()->prepare($sql);
@@ -898,7 +898,7 @@ function action_kelaseh_get_by_code(array $data): void {
     $row = $stmt->fetch();
     
     if (!$row) {
-        json_response(false, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø¬Ø§Ø² Ù†ÛŒØ³Øª.'], 404);
+        json_response(false, ['message' => 'پرونده یافت نشد یا دسترسی مجاز نیست.'], 404);
         return;
     }
 
@@ -957,13 +957,13 @@ function action_kelaseh_get_by_code(array $data): void {
 function action_heyat_tashkhis_save(array $data): void {
     $user = auth_require_login();
     csrf_require_valid();
-    if (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
 
     ensure_kelaseh_numbers_supports_extended_fields();
     ensure_kelaseh_numbers_supports_new_case_code();
 
     $code = trim((string)($data['code'] ?? ''));
-    if (!$code || strlen($code) < 5) json_response(false, ['message' => 'Ú©Ù„Ø§Ø³Ù‡ Ù¾Ø±ÙˆÙ†Ø¯Ù‡ Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª (Ø­Ø¯Ø§Ù‚Ù„ Ûµ Ú©Ø§Ø±Ø§Ú©ØªØ±).'], 422);
+    if (!$code || strlen($code) < 5) json_response(false, ['message' => 'کلاسه پرونده معتبر نیست (حداقل ۵ کاراکتر).'], 422);
 
     // Common fields
     $noticeNum = trim((string)($data['notice_number'] ?? ''));
@@ -1081,7 +1081,7 @@ function action_heyat_tashkhis_save(array $data): void {
             if ($meetingTimeInput !== '') {
                 $meetingTimeNorm = to_english_digits($meetingTimeInput);
                 if (!preg_match('/^([01][0-9]|2[0-3]):([0-5][0-9])$/', $meetingTimeNorm)) {
-                    throw new HttpError(422, 'ÙØ±Ù…Øª Ø³Ø§Ø¹Øª Ø¬Ù„Ø³Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª. (Ù†Ù…ÙˆÙ†Ù‡ ØµØ­ÛŒØ­: 14:30)');
+                    throw new HttpError(422, 'فرمت ساعت جلسه نامعتبر است. (نمونه صحیح: 14:30)');
                 }
                 $meetingTime = $meetingTimeNorm;
             }
@@ -1090,7 +1090,7 @@ function action_heyat_tashkhis_save(array $data): void {
             if ($meetingRoomInput !== '') {
                 $meetingRoomNorm = to_english_digits($meetingRoomInput);
                 if (!preg_match('/^[0-9]{1,3}$/', $meetingRoomNorm)) {
-                    throw new HttpError(422, 'Ø´Ù…Ø§Ø±Ù‡ Ø§ØªØ§Ù‚ Ø¨Ø§ÛŒØ¯ Ø¹Ø¯Ø¯ÛŒ Ø¨ÛŒÙ† Û± ØªØ§ Û³ Ø±Ù‚Ù… Ø¨Ø§Ø´Ø¯.');
+                    throw new HttpError(422, 'شماره اتاق باید عددی بین ۱ تا ۳ رقم باشد.');
                 }
                 $meetingRoom = $meetingRoomNorm;
             }
@@ -1153,7 +1153,7 @@ function action_heyat_tashkhis_save(array $data): void {
         }
     }
     record_kelaseh_edit_log((int)$kelasehId, $user, 'heyat_tashkhis_save', $changedFields);
-    json_response(true, ['message' => 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ù¾Ø±ÙˆÙ†Ø¯Ù‡ Ùˆ Ø¬Ù„Ø³Ø§Øª Ø°Ø®ÛŒØ±Ù‡ Ø´Ø¯.']);
+    json_response(true, ['message' => 'اطلاعات پرونده و جلسات ذخیره شد.']);
 }
 
 function action_kelaseh_list(array $data): void {
@@ -1229,7 +1229,7 @@ class HttpError extends Exception
 function kelaseh_create_internal(array $user, array $data): array
 {
     if (!in_array($user['role'], ['branch_admin', 'user'], true)) {
-        throw new HttpError(403, 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²');
+        throw new HttpError(403, 'دسترسی غیرمجاز');
     }
 
     $branches = $user['branches'] ?? [];
@@ -1240,7 +1240,7 @@ function kelaseh_create_internal(array $user, array $data): array
     }
 
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
-    if (!$cityCode) throw new HttpError(422, 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ú©Ø§Ø±Ø¨Ø± ØªÙ†Ø¸ÛŒÙ… Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.');
+    if (!$cityCode) throw new HttpError(422, 'کد اداره کاربر تنظیم نشده است.');
     
     $requestedBranch = isset($data['branch_no']) ? (int)to_english_digits((string)$data['branch_no']) : 0;
     $isManualBranch = $requestedBranch > 0 ? 1 : 0;
@@ -1273,7 +1273,7 @@ function kelaseh_create_internal(array $user, array $data): array
         if ($manualY >= 1300 && $manualM >= 1 && $manualM <= 12 && $manualD >= 1 && $manualD <= 31) {
             try {
                 if (!\Morilog\Jalali\CalendarUtils::checkDate($manualY, $manualM, $manualD)) {
-                    throw new Exception("ØªØ§Ø±ÛŒØ® Ø´Ù…Ø³ÛŒ ÙˆØ§Ø±Ø¯ Ø´Ø¯Ù‡ Ø¯Ø± ØªÙ‚ÙˆÛŒÙ… ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø±Ø¯.");
+                    throw new Exception("تاریخ شمسی وارد شده در تقویم وجود ندارد.");
                 }
                 $jalalian = new Jalalian($manualY, $manualM, $manualD);
                 $gDate = $jalalian->toCarbon();
@@ -1288,12 +1288,12 @@ function kelaseh_create_internal(array $user, array $data): array
                     'jalali_ymd' => sprintf('%02d%02d%02d', $manualY % 100, $manualM, $manualD),
                     'jalali_full_ymd' => sprintf('%04d%02d%02d', $manualY, $manualM, $manualD)
                 ];
-                $notices[] = 'Ø«Ø¨Øª Ø¨Ø§ ØªØ§Ø±ÛŒØ® Ø¯Ø³ØªÛŒ: ' . sprintf('%04d/%02d/%02d', $manualY, $manualM, $manualD);
+                $notices[] = 'ثبت با تاریخ دستی: ' . sprintf('%04d/%02d/%02d', $manualY, $manualM, $manualD);
             } catch (Throwable $e) {
-                throw new HttpError(422, 'Ø®Ø·Ø§ Ø¯Ø± Ù¾Ø±Ø¯Ø§Ø²Ø´ ØªØ§Ø±ÛŒØ®: ' . $e->getMessage());
+                throw new HttpError(422, 'خطا در پردازش تاریخ: ' . $e->getMessage());
             }
         } else {
-            throw new HttpError(422, 'ÙØ±Ù…Øª ØªØ§Ø±ÛŒØ® Ø¯Ø³ØªÛŒ (Ø³Ø§Ù„ØŒ Ù…Ø§Ù‡ ÛŒØ§ Ø±ÙˆØ²) Ø§Ø´ØªØ¨Ø§Ù‡ Ø§Ø³Øª.');
+            throw new HttpError(422, 'فرمت تاریخ دستی (سال، ماه یا روز) اشتباه است.');
         }
     }
 
@@ -1322,9 +1322,9 @@ function kelaseh_create_internal(array $user, array $data): array
     $dNC = $dNCInput === '' ? '' : (validate_national_code($dNCInput) ?? null);
     $dMob = $dMobInput === '' ? '' : (validate_ir_mobile($dMobInput) ?? null);
 
-    if (!$pNC || !$pMob) throw new HttpError(422, 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ø®ÙˆØ§Ù‡Ø§Ù† Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.');
-    if ($dNC === null) throw new HttpError(422, 'Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù†Ø¯Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.');
-    if ($dMob === null) throw new HttpError(422, 'Ù…ÙˆØ¨Ø§ÛŒÙ„ Ø®ÙˆØ§Ù†Ø¯Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.');
+    if (!$pNC || !$pMob) throw new HttpError(422, 'اطلاعات خواهان نامعتبر است.');
+    if ($dNC === null) throw new HttpError(422, 'کد ملی خوانده نامعتبر است.');
+    if ($dMob === null) throw new HttpError(422, 'موبایل خوانده نامعتبر است.');
 
     $counterTable = kelaseh_daily_counters_table();
     $jalaliYmd = $j['jalali_ymd'];
@@ -1379,7 +1379,7 @@ function kelaseh_create_internal(array $user, array $data): array
             if (!$ignoreCapacity && $seqNo > $cap) {
                 db()->rollBack();
                 if ($requestedBranch > 0 && (int)$b === $requestedBranch) {
-                    $notices[] = 'Ø¸Ø±ÙÛŒØª Ø´Ø¹Ø¨Ù‡ ' . sprintf('%02d', $b) . ' ØªÚ©Ù…ÛŒÙ„ Ø¨ÙˆØ¯ Ùˆ Ø³ÛŒØ³ØªÙ… Ø¨Ù‡ Ø¯Ù†Ø¨Ø§Ù„ Ø´Ø¹Ø¨Ù‡ Ø¬Ø§ÛŒÚ¯Ø²ÛŒÙ† Ú¯Ø´Øª.';
+                    $notices[] = 'ظرفیت شعبه ' . sprintf('%02d', $b) . ' تکمیل بود و سیستم به دنبال شعبه جایگزین گشت.';
                 }
                 $lastFullBranch = (int)$b;
                 continue;
@@ -1423,7 +1423,7 @@ function kelaseh_create_internal(array $user, array $data): array
 
                 if ($yearSeq > 9999) {
                     db()->rollBack();
-                    throw new HttpError(429, 'Ø³Ù‚Ù Ú©Ù„Ø§Ø³Ù‡ Ø¬Ø¯ÛŒØ¯ Ø¯Ø± Ø§ÛŒÙ† Ø³Ø§Ù„ ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯Ù‡ Ø§Ø³Øª.');
+                    throw new HttpError(429, 'سقف کلاسه جدید در این سال تکمیل شده است.');
                 }
 
                 db()->prepare("INSERT INTO kelaseh_yearly_counters (city_code, yy, seq_no, updated_at)
@@ -1472,15 +1472,15 @@ function kelaseh_create_internal(array $user, array $data): array
             $finalSeq = $seqNo;
 
             if ($ignoreCapacity && $finalSeq > $cap) {
-                $notices[] = 'ØªØ§Ø±ÛŒØ® Ø¯Ø³ØªÛŒ Ø«Ø¨Øª Ø´Ø¯Ø› Ù…Ø­Ø¯ÙˆØ¯ÛŒØª Ø¸Ø±ÙÛŒØª Ø±ÙˆØ²Ø§Ù†Ù‡ Ø¨Ø±Ø§ÛŒ Ø§ÛŒÙ† Ø«Ø¨Øª Ø§Ø¹Ù…Ø§Ù„ Ù†Ø´Ø¯.';
+                $notices[] = 'تاریخ دستی ثبت شد؛ محدودیت ظرفیت روزانه برای این ثبت اعمال نشد.';
             }
 
             if ($requestedBranch > 0 && $finalBranch === $requestedBranch) {
-                $notices[] = 'Ø«Ø¨Øª Ø¯Ø± Ø´Ø¹Ø¨Ù‡ Ø§Ù†ØªØ®Ø§Ø¨ÛŒ ' . sprintf('%02d', $finalBranch);
+                $notices[] = 'ثبت در شعبه انتخابی ' . sprintf('%02d', $finalBranch);
             } elseif ($lastFullBranch !== null) {
-                $notices[] = 'Ø¸Ø±ÙÛŒØª Ø´Ø¹Ø¨Ù‡ ' . sprintf('%02d', $lastFullBranch) . ' ØªÙ…Ø§Ù… Ø´Ø¯ Ùˆ Ø¨Ù‡ Ø´Ø¹Ø¨Ù‡ ' . $branchNo2 . ' Ø§Ù†ØªÙ‚Ø§Ù„ Ø¯Ø§Ø¯.';
+                $notices[] = 'ظرفیت شعبه ' . sprintf('%02d', $lastFullBranch) . ' تمام شد و به شعبه ' . $branchNo2 . ' انتقال داد.';
             } else {
-                $notices[] = 'Ø¯Ø± Ø­Ø§Ù„ Ø«Ø¨Øª Ùˆ Ø°Ø®ÛŒØ±Ù‡ Ø¯Ø± Ø´Ø¹Ø¨Ù‡ ' . $branchNo2;
+                $notices[] = 'در حال ثبت و ذخیره در شعبه ' . $branchNo2;
             }
 
             return ['code' => $finalCode, 'branch_no' => $finalBranch, 'seq_no' => $finalSeq, 'notices' => $notices];
@@ -1491,7 +1491,7 @@ function kelaseh_create_internal(array $user, array $data): array
         }
     }
 
-    throw new HttpError(429, 'Ø¸Ø±ÙÛŒØª ØªÙ…Ø§Ù…ÛŒ Ø´Ø¹Ø¨ Ù…Ø¬Ø§Ø² Ø´Ù…Ø§ ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯Ù‡ Ø§Ø³Øª.');
+    throw new HttpError(429, 'ظرفیت تمامی شعب مجاز شما تکمیل شده است.');
 }
 
 function action_kelaseh_create(array $data): void {
@@ -1501,7 +1501,7 @@ function action_kelaseh_create(array $data): void {
     try {
         $res = kelaseh_create_internal($user, $data);
         audit_log((int)$user['id'], 'kelaseh_create', 'kelaseh', null, null);
-        json_response(true, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ Ø§ÛŒØ¬Ø§Ø¯ Ø´Ø¯.', 'data' => $res]);
+        json_response(true, ['message' => 'پرونده ایجاد شد.', 'data' => $res]);
     } catch (HttpError $e) {
         json_response(false, ['message' => $e->getMessage()], $e->status);
     } catch (Throwable $e) {
@@ -1509,20 +1509,20 @@ function action_kelaseh_create(array $data): void {
         if ($e instanceof PDOException && (string)$e->getCode() === '23000') {
             $msg = (string)$e->getMessage();
             if (str_contains($msg, 'uniq_kelaseh_plaintiff_date')) {
-                json_response(false, ['message' => 'Ø¨Ø±Ø§ÛŒ Ø§ÛŒÙ† Ø®ÙˆØ§Ù‡Ø§Ù† Ø¯Ø± ØªØ§Ø±ÛŒØ® Ø§Ù†ØªØ®Ø§Ø¨â€ŒØ´Ø¯Ù‡ Ù‚Ø¨Ù„Ø§Ù‹ Ú©Ù„Ø§Ø³Ù‡ Ø«Ø¨Øª Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 409);
+                json_response(false, ['message' => 'برای این خواهان در تاریخ انتخاب‌شده قبلاً کلاسه ثبت شده است.'], 409);
             }
             if (str_contains($msg, 'uniq_kelaseh_numbers_code')) {
-                json_response(false, ['message' => 'Ú©Ø¯ Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ØªÚ©Ø±Ø§Ø±ÛŒ ØªÙˆÙ„ÛŒØ¯ Ø´Ø¯. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.'], 409);
+                json_response(false, ['message' => 'کد پرونده تکراری تولید شد. لطفاً دوباره تلاش کنید.'], 409);
             }
             if (str_contains($msg, 'uniq_kelaseh_numbers_new_case_code')) {
-                json_response(false, ['message' => 'Ú©Ø¯ Ø¬Ø¯ÛŒØ¯ Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ØªÚ©Ø±Ø§Ø±ÛŒ Ø´Ø¯. Ù„Ø·ÙØ§Ù‹ Ø¯ÙˆØ¨Ø§Ø±Ù‡ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯.'], 409);
+                json_response(false, ['message' => 'کد جدید پرونده تکراری شد. لطفاً دوباره تلاش کنید.'], 409);
             }
         }
         $msg = is_debug()
-            ? ('Ø®Ø·Ø§ Ø¯Ø± Ø§ÛŒØ¬Ø§Ø¯ Ú©Ù„Ø§Ø³Ù‡: ' . localize_error_message_fa((string)$e->getMessage()))
+            ? ('خطا در ایجاد کلاسه: ' . localize_error_message_fa((string)$e->getMessage()))
             : localize_error_message_fa((string)$e->getMessage());
         if (!$msg || $msg === (string)$e->getMessage()) {
-            $msg = 'Ø®Ø·Ø§ Ø¯Ø± Ø§ÛŒØ¬Ø§Ø¯ Ú©Ù„Ø§Ø³Ù‡. Ù„Ø·ÙØ§ Ù…Ø¬Ø¯Ø¯ ØªÙ„Ø§Ø´ Ú©Ù†ÛŒØ¯ Ùˆ Ø¯Ø± ØµÙˆØ±Øª ØªÚ©Ø±Ø§Ø± Ø¨Ù‡ Ù¾Ø´ØªÛŒØ¨Ø§Ù†ÛŒ Ø§Ø·Ù„Ø§Ø¹ Ø¯Ù‡ÛŒØ¯.';
+            $msg = 'خطا در ایجاد کلاسه. لطفا مجدد تلاش کنید و در صورت تکرار به پشتیبانی اطلاع دهید.';
         }
         json_response(false, ['message' => $msg], 500);
     }
@@ -1532,7 +1532,7 @@ function action_kelaseh_history_check(array $data): void {
     $user = auth_require_login();
     $rawNC = to_english_digits($data['national_code'] ?? '');
     $nc = validate_national_code($rawNC) ?? (preg_match('/^[0-9]{10}$/', $rawNC) ? $rawNC : null);
-    if (!$nc) json_response(false, ['message' => 'Ú©Ø¯ Ù…Ù„ÛŒ ÙˆØ§Ø±Ø¯ Ø´Ø¯Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.']);
+    if (!$nc) json_response(false, ['message' => 'کد ملی وارد شده نامعتبر است.']);
 
     $filters = ['national_code' => $nc];
     $rows = kelaseh_fetch_rows($user, $filters, 10);
@@ -1549,13 +1549,13 @@ function action_kelaseh_history_check(array $data): void {
 
 function action_office_capacities_get(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
 
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
     if ($user['role'] === 'admin') {
         $cityCode = normalize_city_code($data['city_code'] ?? null) ?? $cityCode;
     }
-    if ($cityCode === '') json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ ØªÙ†Ø¸ÛŒÙ… Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 422);
+    if ($cityCode === '') json_response(false, ['message' => 'کد اداره تنظیم نشده است.'], 422);
     $stmt = db()->prepare('SELECT branch_no, capacity FROM office_branch_capacities WHERE city_code = ?');
     $stmt->execute([$cityCode]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
@@ -1584,7 +1584,7 @@ function action_kelaseh_label(array $data): void {
     }
     
     if (empty($codes)) {
-        echo "Ú©Ø¯ÛŒ Ø§Ø±Ø§Ø¦Ù‡ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.";
+        echo "کدی ارائه نشده است.";
         exit;
     }
     
@@ -1661,7 +1661,7 @@ function action_kelaseh_label(array $data): void {
     }
     
     if (empty($rows)) {
-        echo "Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø­Ø¯ÙˆØ¯ Ø§Ø³Øª.";
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
         exit;
     }
     
@@ -1747,7 +1747,7 @@ function action_kelaseh_label_new(array $data): void {
         $codes = [trim((string)$inputCode)];
     }
     if (empty($codes)) {
-        echo "Ú©Ø¯ÛŒ Ø§Ø±Ø§Ø¦Ù‡ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.";
+        echo "کدی ارائه نشده است.";
         exit;
     }
     $placeholders = implode(',', array_fill(0, count($codes), '?'));
@@ -1789,7 +1789,7 @@ function action_kelaseh_label_new(array $data): void {
         $fetchedRows = $orderedRows;
     }
     if (empty($fetchedRows)) {
-        echo "Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø­Ø¯ÙˆØ¯ Ø§Ø³Øª.";
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
         exit;
     }
     try {
@@ -1871,7 +1871,7 @@ function action_kelaseh_notice(array $data): void {
         }
 
         if (empty($codes)) {
-            echo "Ú©Ø¯ÛŒ Ø§Ø±Ø§Ø¦Ù‡ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.";
+            echo "کدی ارائه نشده است.";
             exit;
         }
 
@@ -1949,12 +1949,12 @@ function action_kelaseh_notice(array $data): void {
                 $rowForPrint['meeting_date_jalali'] = !empty($sessionData['meeting_date']) ? (string)$sessionData['meeting_date'] : '';
                 $sKey = $sessionData['session_key'] ?? '';
                 $sMap = [
-                    'session1' => 'Ø§ÙˆÙ„',
-                    'session2' => 'Ø¯ÙˆÙ…',
-                    'session3' => 'Ø³ÙˆÙ…',
-                    'session4' => 'Ú†Ù‡Ø§Ø±Ù…',
-                    'session5' => 'Ù¾Ù†Ø¬Ù…',
-                    'resolution' => 'Ø­Ù„ Ø§Ø®ØªÙ„Ø§Ù'
+                    'session1' => 'اول',
+                    'session2' => 'دوم',
+                    'session3' => 'سوم',
+                    'session4' => 'چهارم',
+                    'session5' => 'پنجم',
+                    'resolution' => 'حل اختلاف'
                 ];
                 $rowForPrint['session_name'] = $sMap[$sKey] ?? '';
                 $rowsMap[] = $rowForPrint;
@@ -1964,24 +1964,24 @@ function action_kelaseh_notice(array $data): void {
         $rows = $rowsMap;
 
         if (empty($rows)) {
-            echo "Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø­Ø¯ÙˆØ¯ Ø§Ø³Øª.";
+            echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
             exit;
         }
 
         $htmlPath = __DIR__ . DIRECTORY_SEPARATOR . 'print_minutes.html';
         if (!is_file($htmlPath) || !is_readable($htmlPath)) {
-            echo "Ù‚Ø§Ù„Ø¨ Ú†Ø§Ù¾ (print_minutes.html) ÛŒØ§ÙØª Ù†Ø´Ø¯.";
+            echo "قالب چاپ (print_minutes.html) یافت نشد.";
             exit;
         }
         $html = file_get_contents($htmlPath);
         if ($html === false) {
-            echo "Ø®Ø·Ø§ Ø¯Ø± Ø®ÙˆØ§Ù†Ø¯Ù† Ù‚Ø§Ù„Ø¨ Ú†Ø§Ù¾.";
+            echo "خطا در خواندن قالب چاپ.";
             exit;
         }
 
         $jsonData = json_encode($rows, JSON_UNESCAPED_UNICODE);
         if ($jsonData === false) {
-            echo "Ø®Ø·Ø§ Ø¯Ø± Ø¢Ù…Ø§Ø¯Ù‡â€ŒØ³Ø§Ø²ÛŒ Ø¯Ø§Ø¯Ù‡ Ø¨Ø±Ø§ÛŒ Ú†Ø§Ù¾.";
+            echo "خطا در آماده‌سازی داده برای چاپ.";
             exit;
         }
         $script = '<script>(function(){ var data = ' . $jsonData . '; try { localStorage.setItem("print_queue", JSON.stringify(data)); } catch(e) {} })();</script>';
@@ -1990,7 +1990,7 @@ function action_kelaseh_notice(array $data): void {
         exit;
     } catch (Throwable $e) {
         header('Content-Type: text/html; charset=utf-8');
-        echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>Ø®Ø·Ø§</title></head><body><p>Ø®Ø·Ø§ Ø¯Ø± Ú†Ø§Ù¾ Ø±Ø§ÛŒ: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</p></body></html>';
+        echo '<!DOCTYPE html><html lang="fa" dir="rtl"><head><meta charset="UTF-8"><title>خطا</title></head><body><p>خطا در چاپ رای: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES, 'UTF-8') . '</p></body></html>';
         exit;
     }
 }
@@ -2011,7 +2011,7 @@ function action_kelaseh_print_minutes(array $data): void {
     }
     
     if (empty($codes)) {
-        echo "Ú©Ø¯ÛŒ Ø§Ø±Ø§Ø¦Ù‡ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.";
+        echo "کدی ارائه نشده است.";
         exit;
     }
     
@@ -2093,13 +2093,13 @@ function action_kelaseh_print_minutes(array $data): void {
     }
     
     if (empty($rows)) {
-        echo "Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø­Ø¯ÙˆØ¯ Ø§Ø³Øª.";
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
         exit;
     }
 
     $html = file_get_contents(__DIR__ . '/print_notice.html');
     if ($html === false) {
-        echo "Ù‚Ø§Ù„Ø¨ Ú†Ø§Ù¾ ÛŒØ§ÙØª Ù†Ø´Ø¯.";
+        echo "قالب چاپ یافت نشد.";
         exit;
     }
     $jsonData = json_encode($rows);
@@ -2125,7 +2125,7 @@ function action_kelaseh_notice2(array $data): void {
     }
 
     if (empty($codes)) {
-        echo "Ú©Ø¯ÛŒ Ø§Ø±Ø§Ø¦Ù‡ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.";
+        echo "کدی ارائه نشده است.";
         exit;
     }
 
@@ -2176,13 +2176,13 @@ function action_kelaseh_notice2(array $data): void {
     }
 
     if (empty($rows)) {
-        echo "Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø­Ø¯ÙˆØ¯ Ø§Ø³Øª.";
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
         exit;
     }
 
     $html = file_get_contents(__DIR__ . '/print_notice2.html');
     if ($html === false) {
-        echo "Ù‚Ø§Ù„Ø¨ Ú†Ø§Ù¾ ÛŒØ§ÙØª Ù†Ø´Ø¯.";
+        echo "قالب چاپ یافت نشد.";
         exit;
     }
     $jsonData = json_encode($rows);
@@ -2203,20 +2203,20 @@ function action_kelaseh_print(array $data): void {
 
 function action_office_capacities_update(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     csrf_require_valid();
     
     $branch = isset($data['branch_no']) ? (int)$data['branch_no'] : 0;
     $cap = isset($data['capacity']) ? (int)$data['capacity'] : 0;
     
-    if ($branch < 1 || $branch > 15 || $cap < 0) json_response(false, ['message' => 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ù†Ø§Ù…Ø¹ØªØ¨Ø±'], 422);
+    if ($branch < 1 || $branch > 15 || $cap < 0) json_response(false, ['message' => 'اطلاعات نامعتبر'], 422);
     
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
     if ($user['role'] === 'admin') {
         $cityCode = normalize_city_code($data['city_code'] ?? null) ?? $cityCode;
-        if (!$cityCode) json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+        if (!$cityCode) json_response(false, ['message' => 'کد اداره الزامی است.'], 422);
     }
-    if ($cityCode === '') json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ ØªÙ†Ø¸ÛŒÙ… Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 422);
+    if ($cityCode === '') json_response(false, ['message' => 'کد اداره تنظیم نشده است.'], 422);
     $stmt = db()->prepare('SELECT id FROM office_branch_capacities WHERE city_code = ? AND branch_no = ?');
     $stmt->execute([$cityCode, $branch]);
     if ($stmt->fetch()) {
@@ -2224,16 +2224,16 @@ function action_office_capacities_update(array $data): void {
     } else {
         db()->prepare('INSERT INTO office_branch_capacities (city_code, branch_no, capacity) VALUES (?, ?, ?)')->execute([$cityCode, $branch, $cap]);
     }
-    json_response(true, ['message' => 'Ø¸Ø±ÙÛŒØª Ø°Ø®ÛŒØ±Ù‡ Ø´Ø¯.']);
+    json_response(true, ['message' => 'ظرفیت ذخیره شد.']);
 }
 
 function action_office_stats(): void
 {
     $user = auth_require_login();
-    if ($user['role'] !== 'office_admin') json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if ($user['role'] !== 'office_admin') json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
 
     $cityCode = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
-    if ($cityCode === '') json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ ØªÙ†Ø¸ÛŒÙ… Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 422);
+    if ($cityCode === '') json_response(false, ['message' => 'کد اداره تنظیم نشده است.'], 422);
 
     $sqlTotals = "SELECT
         COUNT(*) as total,
@@ -2298,7 +2298,7 @@ function action_kelaseh_update(array $data): void
     csrf_require_valid();
 
     $code = trim((string)($data['code'] ?? ''));
-    if ($code === '') json_response(false, ['message' => 'Ú©Ù„Ø§Ø³Ù‡ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+    if ($code === '') json_response(false, ['message' => 'کلاسه الزامی است.'], 422);
 
     $pName = trim((string)($data['plaintiff_name'] ?? ''));
     $pNCRaw = trim((string)($data['plaintiff_national_code'] ?? ''));
@@ -2321,8 +2321,8 @@ function action_kelaseh_update(array $data): void
     $dNC = $dNCRaw;
     $dMob = $dMobRaw;
 
-    if ($pNCRaw !== '' && $pNC === '') json_response(false, ['message' => 'Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù‡Ø§Ù† Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
-    if ($pMobRaw !== '' && $pMob === '') json_response(false, ['message' => 'Ø´Ù…Ø§Ø±Ù‡ ØªÙ…Ø§Ø³ Ø®ÙˆØ§Ù‡Ø§Ù† Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($pNCRaw !== '' && $pNC === '') json_response(false, ['message' => 'کد ملی خواهان نامعتبر است.'], 422);
+    if ($pMobRaw !== '' && $pMob === '') json_response(false, ['message' => 'شماره تماس خواهان نامعتبر است.'], 422);
 
     $params = [
         $pName,
@@ -2346,7 +2346,7 @@ function action_kelaseh_update(array $data): void
         $where .= ' AND owner_id = ?';
         $whereParams[] = $user['id'];
     } elseif (!in_array($user['role'], ['admin', 'office_admin', 'branch_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     }
 
     $sql = "UPDATE kelaseh_numbers SET plaintiff_name = ?, defendant_name = ?, plaintiff_national_code = ?, defendant_national_code = ?, plaintiff_mobile = ?, defendant_mobile = ?, plaintiff_address = ?, plaintiff_postal_code = ?, defendant_address = ?, defendant_postal_code = ?, is_resolution = ?, updated_at = ? WHERE $where";
@@ -2362,7 +2362,7 @@ function action_kelaseh_update(array $data): void
     }
 
     if ($stmt->rowCount() < 1 && !$existingRow) {
-        json_response(false, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù†Ø¯Ø§Ø±ÛŒØ¯.'], 404);
+        json_response(false, ['message' => 'پرونده یافت نشد یا دسترسی ندارید.'], 404);
     }
 
     record_kelaseh_edit_log($kelasehId, $user, 'kelaseh_update', [
@@ -2371,7 +2371,7 @@ function action_kelaseh_update(array $data): void
         'defendant_address', 'defendant_postal_code', 'is_resolution'
     ]);
     audit_log($user['id'], 'kelaseh_update', 'kelaseh', null, null);
-    json_response(true, ['message' => 'ÙˆÛŒØ±Ø§ÛŒØ´ Ø´Ø¯']);
+    json_response(true, ['message' => 'ویرایش شد']);
 }
 
 function action_kelaseh_set_authority_bulk(array $data): void
@@ -2389,7 +2389,7 @@ function action_kelaseh_set_authority_bulk(array $data): void
     }
     $codes = array_values(array_unique(array_filter($codes, fn($x) => $x !== '')));
     if (empty($codes)) {
-        json_response(false, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ Ø§Ù†ØªØ®Ø§Ø¨ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 422);
+        json_response(false, ['message' => 'پرونده‌ای انتخاب نشده است.'], 422);
     }
     if (count($codes) > 500) {
         $codes = array_slice($codes, 0, 500);
@@ -2411,7 +2411,7 @@ function action_kelaseh_set_authority_bulk(array $data): void
         $params[] = $cityCode;
         $params[] = $normCity;
     } elseif (!in_array($user['role'], ['admin', 'branch_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø².'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز.'], 403);
     }
 
     $stmt = db()->prepare($sql);
@@ -2419,7 +2419,7 @@ function action_kelaseh_set_authority_bulk(array $data): void
     $updated = (int)$stmt->rowCount();
 
     json_response(true, [
-        'message' => $updated > 0 ? 'Ù†ÙˆØ¹ Ù…Ø±Ø¬Ø¹ Ø±Ø³ÛŒØ¯Ú¯ÛŒ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø¨Ù‡â€ŒØ±ÙˆØ²Ø±Ø³Ø§Ù†ÛŒ Ø´Ø¯.' : 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ Ù…Ø¬Ø§Ø²ÛŒ Ø¨Ø±Ø§ÛŒ Ø¨Ù‡â€ŒØ±ÙˆØ²Ø±Ø³Ø§Ù†ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯.',
+        'message' => $updated > 0 ? 'نوع مرجع رسیدگی با موفقیت به‌روزرسانی شد.' : 'پرونده مجازی برای به‌روزرسانی یافت نشد.',
         'data' => ['updated' => $updated],
     ]);
 }
@@ -2463,14 +2463,14 @@ function city_optional_select_clause(): string
 function schema_assert_table(string $table): void
 {
     if (schema_table_exists($table)) return;
-    throw new RuntimeException("Ø¬Ø¯ÙˆÙ„ `{$table}` ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§ Ø§Ø³Ú©Ø±ÛŒÙ¾Øª `php scripts/migrate_schema_once.php` Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©Ù†ÛŒØ¯.");
+    throw new RuntimeException("جدول `{$table}` یافت نشد. لطفا اسکریپت `php scripts/migrate_schema_once.php` را اجرا کنید.");
 }
 
 function schema_assert_columns(string $table, array $columns): void
 {
     foreach ($columns as $col) {
         if (!schema_column_exists($table, (string)$col)) {
-            throw new RuntimeException("Ø³ØªÙˆÙ† `{$table}`.`{$col}` ÛŒØ§ÙØª Ù†Ø´Ø¯. Ù„Ø·ÙØ§ Ø§Ø³Ú©Ø±ÛŒÙ¾Øª `php scripts/migrate_schema_once.php` Ø±Ø§ Ø§Ø¬Ø±Ø§ Ú©Ù†ÛŒØ¯.");
+            throw new RuntimeException("ستون `{$table}`.`{$col}` یافت نشد. لطفا اسکریپت `php scripts/migrate_schema_once.php` را اجرا کنید.");
         }
     }
 }
@@ -2501,7 +2501,7 @@ function action_kelaseh_exec_form(array $data): void {
     }
 
     if (empty($codes)) {
-        echo "Ú©Ø¯ÛŒ Ø§Ø±Ø§Ø¦Ù‡ Ù†Ø´Ø¯Ù‡ Ø§Ø³Øª.";
+        echo "کدی ارائه نشده است.";
         exit;
     }
 
@@ -2550,13 +2550,13 @@ function action_kelaseh_exec_form(array $data): void {
     }
 
     if (empty($rows)) {
-        echo "Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒØ§ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù…Ø­Ø¯ÙˆØ¯ Ø§Ø³Øª.";
+        echo "پرونده‌ای یافت نشد یا دسترسی محدود است.";
         exit;
     }
 
     $html = file_get_contents(__DIR__ . '/print_exec_form.html');
     if ($html === false) {
-        echo "Ù‚Ø§Ù„Ø¨ Ú†Ø§Ù¾ ÛŒØ§ÙØª Ù†Ø´Ø¯.";
+        echo "قالب چاپ یافت نشد.";
         exit;
     }
     $jsonData = json_encode($rows, JSON_UNESCAPED_UNICODE);
@@ -2571,7 +2571,7 @@ function action_manager_message_send(array $data): void
 {
     $user = auth_require_login();
     if (!in_array($user['role'], ['admin', 'office_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     }
     csrf_require_valid();
 
@@ -2579,14 +2579,14 @@ function action_manager_message_send(array $data): void
     $title = trim((string)($data['title'] ?? ''));
     $content = trim((string)($data['content'] ?? ''));
     if ($title === '' || $content === '') {
-        json_response(false, ['message' => 'Ø¹Ù†ÙˆØ§Ù† Ùˆ Ù…ØªÙ† Ù¾ÛŒØ§Ù… Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+        json_response(false, ['message' => 'عنوان و متن پیام الزامی است.'], 422);
     }
 
     $targetRole = $user['role'] === 'admin'
         ? (string)($data['target_role'] ?? 'office_admin')
         : 'branch_admin';
     if (!in_array($targetRole, ['office_admin', 'branch_admin', 'both'], true)) {
-        json_response(false, ['message' => 'Ù†ÙˆØ¹ Ù…Ø¯ÛŒØ± Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+        json_response(false, ['message' => 'نوع مدیر نامعتبر است.'], 422);
     }
     $targetCity = null;
     $targetUserId = (int)($data['target_user_id'] ?? 0);
@@ -2596,7 +2596,7 @@ function action_manager_message_send(array $data): void
         if ($rawCity !== '' && $rawCity !== 'all') {
             $resolved = resolve_city_code_fk($rawCity) ?? normalize_city_code($rawCity);
             if (!$resolved) {
-                json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+                json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
             }
             $targetCity = $resolved;
         }
@@ -2608,15 +2608,15 @@ function action_manager_message_send(array $data): void
         $stmtU = db()->prepare("SELECT id, role, city_code FROM users WHERE id = ? LIMIT 1");
         $stmtU->execute([$targetUserId]);
         $uRow = $stmtU->fetch(PDO::FETCH_ASSOC);
-        if (!$uRow) json_response(false, ['message' => 'Ú¯ÛŒØ±Ù†Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯.'], 404);
+        if (!$uRow) json_response(false, ['message' => 'گیرنده یافت نشد.'], 404);
         if ($targetRole !== 'both' && ($uRow['role'] ?? '') !== $targetRole) {
-            json_response(false, ['message' => 'Ú¯ÛŒØ±Ù†Ø¯Ù‡ Ø¨Ø§ Ù†ÙˆØ¹ Ù…Ø¯ÛŒØ± Ø§Ù†ØªØ®Ø§Ø¨ÛŒ Ø³Ø§Ø²Ú¯Ø§Ø± Ù†ÛŒØ³Øª.'], 422);
+            json_response(false, ['message' => 'گیرنده با نوع مدیر انتخابی سازگار نیست.'], 422);
         }
         if ($targetRole === 'both' && !in_array(($uRow['role'] ?? ''), ['office_admin', 'branch_admin'], true)) {
-            json_response(false, ['message' => 'Ú¯ÛŒØ±Ù†Ø¯Ù‡ Ø¨Ø§ Ù†ÙˆØ¹ Ù…Ø¯ÛŒØ± Ø§Ù†ØªØ®Ø§Ø¨ÛŒ Ø³Ø§Ø²Ú¯Ø§Ø± Ù†ÛŒØ³Øª.'], 422);
+            json_response(false, ['message' => 'گیرنده با نوع مدیر انتخابی سازگار نیست.'], 422);
         }
         if ($targetCity !== null && $targetCity !== '' && ($uRow['city_code'] ?? '') !== $targetCity) {
-            json_response(false, ['message' => 'Ú¯ÛŒØ±Ù†Ø¯Ù‡ Ù…ØªØ¹Ù„Ù‚ Ø¨Ù‡ Ø§ÛŒÙ† Ø§Ø¯Ø§Ø±Ù‡ Ù†ÛŒØ³Øª.'], 422);
+            json_response(false, ['message' => 'گیرنده متعلق به این اداره نیست.'], 422);
         }
     } else {
         $targetUserId = null;
@@ -2637,7 +2637,7 @@ function action_manager_message_send(array $data): void
             ]);
     }
 
-    json_response(true, ['message' => 'Ù¾ÛŒØ§Ù… Ø§Ø±Ø³Ø§Ù„ Ø´Ø¯.']);
+    json_response(true, ['message' => 'پیام ارسال شد.']);
 }
 
 function action_manager_messages_unread(array $data): void
@@ -2674,32 +2674,32 @@ function action_manager_message_read(array $data): void
 {
     $user = auth_require_login();
     if (!in_array($user['role'], ['office_admin', 'branch_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     }
     csrf_require_valid();
 
     ensure_manager_messages_tables();
     $id = (int)($data['id'] ?? 0);
-    if ($id < 1) json_response(false, ['message' => 'Ø´Ù†Ø§Ø³Ù‡ Ù¾ÛŒØ§Ù… Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
 
     $role = (string)$user['role'];
     $city = resolve_city_code_fk($user['city_code'] ?? null) ?? (string)($user['city_code'] ?? '');
     $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND deleted_at IS NULL AND target_role = ? AND (target_city_code IS NULL OR target_city_code = ?) AND (target_user_id IS NULL OR target_user_id = ?) LIMIT 1");
     $stmt->execute([$id, $role, $city, (int)($user['id'] ?? 0)]);
     $exists = $stmt->fetchColumn();
-    if (!$exists) json_response(false, ['message' => 'Ù¾ÛŒØ§Ù… ÛŒØ§ÙØª Ù†Ø´Ø¯.'], 404);
+    if (!$exists) json_response(false, ['message' => 'پیام یافت نشد.'], 404);
 
     db()->prepare("INSERT IGNORE INTO manager_message_reads (message_id, user_id, read_at) VALUES (?, ?, ?)")
         ->execute([$id, (int)($user['id'] ?? 0), now_mysql()]);
 
-    json_response(true, ['message' => 'Ø«Ø¨Øª Ø´Ø¯.']);
+    json_response(true, ['message' => 'ثبت شد.']);
 }
 
 function action_manager_messages_read_batch(array $data): void
 {
     $user = auth_require_login();
     if (!in_array($user['role'], ['office_admin', 'branch_admin'], true)) {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø².'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز.'], 403);
     }
     csrf_require_valid();
     ensure_manager_messages_tables();
@@ -2713,7 +2713,7 @@ function action_manager_messages_read_batch(array $data): void
     }
     $ids = array_values(array_unique(array_filter($ids, fn($x) => $x > 0)));
     if (empty($ids)) {
-        json_response(true, ['message' => 'Ø§Ù†Ø¬Ø§Ù… Ø´Ø¯.', 'data' => ['updated' => 0]]);
+        json_response(true, ['message' => 'انجام شد.', 'data' => ['updated' => 0]]);
     }
     if (count($ids) > 200) {
         $ids = array_slice($ids, 0, 200);
@@ -2780,17 +2780,17 @@ function action_manager_message_delete(array $data): void
     ensure_manager_messages_tables();
 
     $id = (int)($data['id'] ?? 0);
-    if ($id < 1) json_response(false, ['message' => 'Ø´Ù†Ø§Ø³Ù‡ Ù¾ÛŒØ§Ù… Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
 
     $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND sender_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->execute([$id, (int)($user['id'] ?? 0)]);
     if (!$stmt->fetchColumn()) {
-        json_response(false, ['message' => 'Ù¾ÛŒØ§Ù… ÛŒØ§ÙØª Ù†Ø´Ø¯.'], 404);
+        json_response(false, ['message' => 'پیام یافت نشد.'], 404);
     }
 
     db()->prepare("UPDATE manager_messages SET deleted_at = ?, updated_at = ? WHERE id = ? AND sender_id = ? AND deleted_at IS NULL")
         ->execute([now_mysql(), now_mysql(), $id, (int)($user['id'] ?? 0)]);
-    json_response(true, ['message' => 'Ø­Ø°Ù Ø´Ø¯.']);
+    json_response(true, ['message' => 'حذف شد.']);
 }
 
 function action_manager_message_update(array $data): void
@@ -2801,24 +2801,24 @@ function action_manager_message_update(array $data): void
     ensure_manager_messages_tables();
 
     $id = (int)($data['id'] ?? 0);
-    if ($id < 1) json_response(false, ['message' => 'Ø´Ù†Ø§Ø³Ù‡ Ù¾ÛŒØ§Ù… Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($id < 1) json_response(false, ['message' => 'شناسه پیام نامعتبر است.'], 422);
 
     $title = trim((string)($data['title'] ?? ''));
     $content = trim((string)($data['content'] ?? ''));
     if ($title === '' || $content === '') {
-        json_response(false, ['message' => 'Ø¹Ù†ÙˆØ§Ù† Ùˆ Ù…ØªÙ† Ù¾ÛŒØ§Ù… Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+        json_response(false, ['message' => 'عنوان و متن پیام الزامی است.'], 422);
     }
 
     $stmt = db()->prepare("SELECT id FROM manager_messages WHERE id = ? AND sender_id = ? AND deleted_at IS NULL LIMIT 1");
     $stmt->execute([$id, (int)($user['id'] ?? 0)]);
     if (!$stmt->fetchColumn()) {
-        json_response(false, ['message' => 'Ù¾ÛŒØ§Ù… ÛŒØ§ÙØª Ù†Ø´Ø¯.'], 404);
+        json_response(false, ['message' => 'پیام یافت نشد.'], 404);
     }
 
     db()->prepare("UPDATE manager_messages SET title = ?, content = ?, updated_at = ? WHERE id = ? AND sender_id = ? AND deleted_at IS NULL")
         ->execute([$title, $content, now_mysql(), $id, (int)($user['id'] ?? 0)]);
 
-    json_response(true, ['message' => 'ÙˆÛŒØ±Ø§ÛŒØ´ Ø´Ø¯.']);
+    json_response(true, ['message' => 'ویرایش شد.']);
 }
 
 function action_kelaseh_set_status(array $data): void
@@ -2828,7 +2828,7 @@ function action_kelaseh_set_status(array $data): void
     $code = trim((string)($data['code'] ?? ''));
     $status = (string)($data['status'] ?? '');
     if ($code === '' || !in_array($status, ['active', 'inactive', 'voided'], true)) {
-        json_response(false, ['message' => 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ù†Ø§Ù…Ø¹ØªØ¨Ø±'], 422);
+        json_response(false, ['message' => 'اطلاعات نامعتبر'], 422);
     }
 
     $params = [$status, now_mysql()];
@@ -2843,14 +2843,14 @@ function action_kelaseh_set_status(array $data): void
         $params[] = $user['city_code'];
         $params[] = normalize_city_code($user['city_code']) ?? $user['city_code'];
     } elseif ($user['role'] !== 'admin') {
-        json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+        json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     }
 
     $stmt = db()->prepare("UPDATE kelaseh_numbers SET status = ?, updated_at = ? WHERE $where");
     $stmt->execute($params);
-    if ($stmt->rowCount() < 1) json_response(false, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø¯Ø³ØªØ±Ø³ÛŒ Ù†Ø¯Ø§Ø±ÛŒØ¯.'], 404);
+    if ($stmt->rowCount() < 1) json_response(false, ['message' => 'پرونده یافت نشد یا دسترسی ندارید.'], 404);
     audit_log($user['id'], 'kelaseh_set_status', 'kelaseh', null, null);
-    json_response(true, ['message' => 'ÙˆØ¶Ø¹ÛŒØª Ø°Ø®ÛŒØ±Ù‡ Ø´Ø¯']);
+    json_response(true, ['message' => 'وضعیت ذخیره شد']);
 }
 
 function action_kelaseh_sms_send(array $data): void
@@ -2861,7 +2861,7 @@ function action_kelaseh_sms_send(array $data): void
     $code = trim((string)($data['code'] ?? ''));
     $toPlaintiff = (int)($data['to_plaintiff'] ?? 0) === 1;
     $toDefendant = (int)($data['to_defendant'] ?? 0) === 1;
-    if ($code === '' || (!$toPlaintiff && !$toDefendant)) json_response(false, ['message' => 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ù†Ø§Ù…Ø¹ØªØ¨Ø±'], 422);
+    if ($code === '' || (!$toPlaintiff && !$toDefendant)) json_response(false, ['message' => 'اطلاعات نامعتبر'], 422);
 
     $row = null;
     $sql = "SELECT k.*, u.city_code, c.name as city_name
@@ -2884,10 +2884,10 @@ function action_kelaseh_sms_send(array $data): void
     $stmt = db()->prepare($sql);
     $stmt->execute($params);
     $row = $stmt->fetch();
-    if (!$row) json_response(false, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯.'], 404);
+    if (!$row) json_response(false, ['message' => 'پرونده یافت نشد.'], 404);
 
     $enabled = (int)(setting_get('sms.enabled', '0') ?? '0');
-    if ($enabled !== 1) json_response(false, ['message' => 'Ø§Ø±Ø³Ø§Ù„ Ù¾ÛŒØ§Ù…Ú© ØºÛŒØ±ÙØ¹Ø§Ù„ Ø§Ø³Øª.'], 422);
+    if ($enabled !== 1) json_response(false, ['message' => 'ارسال پیامک غیرفعال است.'], 422);
 
     $rawCode = (string)($row['code'] ?? '');
     $fullCode = str_contains($rawCode, '-') ? $rawCode : (($row['city_code'] ?? '') ? ((string)$row['city_code'] . '-') : '') . $rawCode;
@@ -2917,20 +2917,20 @@ function action_kelaseh_sms_send(array $data): void
     $now = now_mysql();
     if ($toPlaintiff && !empty($row['plaintiff_mobile'])) {
         $tpl = (string)(setting_get('sms.tpl_plaintiff', '') ?? '');
-        if ($tpl === '') $tpl = 'Ø§Ø·Ù„Ø§Ø¹â€ŒØ±Ø³Ø§Ù†ÛŒ Ù¾Ø±ÙˆÙ†Ø¯Ù‡ {full_code}';
+        if ($tpl === '') $tpl = 'اطلاع‌رسانی پرونده {full_code}';
         $message = $render($tpl);
         db()->prepare('INSERT INTO sms_logs (recipient_mobile, message, type, status, created_at) VALUES (?, ?, ?, ?, ?)')
             ->execute([$row['plaintiff_mobile'], $message, 'plaintiff', 'sent', $now]);
     }
     if ($toDefendant && !empty($row['defendant_mobile'])) {
         $tpl = (string)(setting_get('sms.tpl_defendant', '') ?? '');
-        if ($tpl === '') $tpl = 'Ø§Ø·Ù„Ø§Ø¹â€ŒØ±Ø³Ø§Ù†ÛŒ Ù¾Ø±ÙˆÙ†Ø¯Ù‡ {full_code}';
+        if ($tpl === '') $tpl = 'اطلاع‌رسانی پرونده {full_code}';
         $message = $render($tpl);
         db()->prepare('INSERT INTO sms_logs (recipient_mobile, message, type, status, created_at) VALUES (?, ?, ?, ?, ?)')
             ->execute([$row['defendant_mobile'], $message, 'defendant', 'sent', $now]);
     }
     audit_log($user['id'], 'sms_send', 'kelaseh', null, null);
-    json_response(true, ['message' => 'Ø¯Ø± ØµÙ Ø§Ø±Ø³Ø§Ù„ Ø«Ø¨Øª Ø´Ø¯.']);
+    json_response(true, ['message' => 'در صف ارسال ثبت شد.']);
 }
 
 function action_kelaseh_export_csv(array $data): void
@@ -2952,10 +2952,10 @@ function action_kelaseh_export_csv(array $data): void
     header('Content-Disposition: attachment; filename="kelaseh_export.csv"');
     $out = fopen('php://output', 'w');
     fwrite($out, "\xEF\xBB\xBF");
-    fputcsv($out, ['Ú©Ù„Ø§Ø³Ù‡', 'Ø§Ø¯Ø§Ø±Ù‡', 'Ú©Ø§Ø±Ø¨Ø±', 'Ø´Ø¹Ø¨Ù‡', 'Ø±Ø¯ÛŒÙ', 'Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù‡Ø§Ù†', 'Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù†Ø¯Ù‡', 'Ù†Ø§Ù… Ø®ÙˆØ§Ù‡Ø§Ù†', 'Ù†Ø§Ù… Ø®ÙˆØ§Ù†Ø¯Ù‡', 'ÙˆØ¶Ø¹ÛŒØª', 'ØªØ§Ø±ÛŒØ® Ø«Ø¨Øª']);
+    fputcsv($out, ['کلاسه', 'اداره', 'کاربر', 'شعبه', 'ردیف', 'کد ملی خواهان', 'کد ملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
     foreach ($rows as $r) {
         $status = (string)($r['status'] ?? '');
-        $statusFa = $status === 'voided' ? 'Ø§Ø¨Ø·Ø§Ù„' : ($status === 'inactive' ? 'ØºÛŒØ±ÙØ¹Ø§Ù„' : 'ÙØ¹Ø§Ù„');
+        $statusFa = $status === 'voided' ? 'ابطال' : ($status === 'inactive' ? 'غیرفعال' : 'فعال');
         fputcsv($out, [
             $r['full_code'] ?? ($r['code'] ?? ''),
             $r['city_name'] ?? ($r['city_code'] ?? ''),
@@ -2990,10 +2990,10 @@ function action_kelaseh_export_print(array $data): void
     $rows = kelaseh_fetch_rows($user, $filters, 2000);
 
     header('Content-Type: text/html; charset=utf-8');
-    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Ù„ÛŒØ³Øª Ù¾Ø±ÙˆÙ†Ø¯Ù‡â€ŒÙ‡Ø§</title>';
+    echo '<!doctype html><html lang="fa" dir="rtl"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>لیست پرونده‌ها</title>';
     echo '<style>body{font-family:Tahoma,Arial,sans-serif;font-size:12px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #999;padding:6px}th{background:#f3f3f3}</style>';
     echo '</head><body>';
-    echo '<table><thead><tr><th>Ú©Ù„Ø§Ø³Ù‡</th><th>Ø§Ø¯Ø§Ø±Ù‡</th><th>Ú©Ø§Ø±Ø¨Ø±</th><th>Ø´Ø¹Ø¨Ù‡</th><th>Ø®ÙˆØ§Ù‡Ø§Ù†</th><th>Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù‡Ø§Ù†</th><th>Ø®ÙˆØ§Ù†Ø¯Ù‡</th><th>ØªØ§Ø±ÛŒØ®</th><th>ÙˆØ¶Ø¹ÛŒØª</th></tr></thead><tbody>';
+    echo '<table><thead><tr><th>کلاسه</th><th>اداره</th><th>کاربر</th><th>شعبه</th><th>خواهان</th><th>کد ملی خواهان</th><th>خوانده</th><th>تاریخ</th><th>وضعیت</th></tr></thead><tbody>';
     foreach ($rows as $r) {
         $fullCode = htmlspecialchars((string)($r['full_code'] ?? $r['code'] ?? ''), ENT_QUOTES, 'UTF-8');
         $city = htmlspecialchars((string)($r['city_name'] ?? $r['city_code'] ?? ''), ENT_QUOTES, 'UTF-8');
@@ -3006,11 +3006,11 @@ function action_kelaseh_export_print(array $data): void
         
         $manualText = '';
         if (($r['is_manual'] ?? 0) && ($r['is_manual_branch'] ?? 0)) {
-            $manualText = ' - Ø´Ø¹Ø¨Ù‡ Ùˆ ØªØ§Ø±ÛŒØ® Ø¯Ø³ØªÛŒ';
+            $manualText = ' - شعبه و تاریخ دستی';
         } elseif ($r['is_manual'] ?? 0) {
-            $manualText = ' - ØªØ§Ø±ÛŒØ® Ø¯Ø³ØªÛŒ';
+            $manualText = ' - تاریخ دستی';
         } elseif ($r['is_manual_branch'] ?? 0) {
-            $manualText = ' - Ø´Ø¹Ø¨Ù‡ Ø¯Ø³ØªÛŒ';
+            $manualText = ' - شعبه دستی';
         }
         $dt .= $manualText;
 
@@ -3181,10 +3181,10 @@ function action_admin_items_delete(array $data): void
     auth_require_admin(auth_require_login());
     csrf_require_valid();
     $id = (int)($data['id'] ?? 0);
-    if ($id < 1) json_response(false, ['message' => 'Ú©Ù„Ø§Ø³Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø±'], 422);
+    if ($id < 1) json_response(false, ['message' => 'کلاسه نامعتبر'], 422);
     db()->prepare('DELETE FROM items WHERE id = ?')->execute([$id]);
     audit_log((int)$_SESSION['user_id'], 'delete', 'item', $id, null);
-    json_response(true, ['message' => 'Ø­Ø°Ù Ø´Ø¯']);
+    json_response(true, ['message' => 'حذف شد']);
 }
 
 function action_admin_sms_settings_get(): void
@@ -3246,7 +3246,7 @@ function action_admin_sms_settings_set(array $data): void
     setting_set('sms.tpl_defendant', $tplD);
     if ($apiKey !== '') setting_set('sms.api_key', $apiKey);
     audit_log((int)$_SESSION['user_id'], 'sms_settings_update', 'app_settings', null, null);
-    json_response(true, ['message' => 'ØªÙ†Ø¸ÛŒÙ…Ø§Øª Ø°Ø®ÛŒØ±Ù‡ Ø´Ø¯']);
+    json_response(true, ['message' => 'تنظیمات ذخیره شد']);
 }
 
 function action_admin_kelaseh_stats(array $data): void
@@ -3358,7 +3358,7 @@ function action_admin_kelaseh_backfill_new_case_code(): void
     try {
         db()->exec("UPDATE kelaseh_numbers SET new_case_code = NULL");
     } catch (Throwable $e) {
-        json_response(false, ['message' => 'Ø®Ø·Ø§ Ø¯Ø± Ù¾Ø§Ú©Ø³Ø§Ø²ÛŒ Ú©Ù„Ø§Ø³Ù‡â€ŒÙ‡Ø§ÛŒ Ø¬Ø¯ÛŒØ¯.'], 500);
+        json_response(false, ['message' => 'خطا در پاکسازی کلاسه‌های جدید.'], 500);
     }
 
     $sql = "SELECT k.id, k.jalali_full_ymd, k.branch_no, u.city_code, k.created_at
@@ -3370,7 +3370,7 @@ function action_admin_kelaseh_backfill_new_case_code(): void
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
 
     if (!$rows) {
-        json_response(true, ['message' => 'Ø±Ú©ÙˆØ±Ø¯ÛŒ Ø¨Ø±Ø§ÛŒ Ø¨Ù‡â€ŒØ±ÙˆØ²Ø±Ø³Ø§Ù†ÛŒ ÛŒØ§ÙØª Ù†Ø´Ø¯.']);
+        json_response(true, ['message' => 'رکوردی برای به‌روزرسانی یافت نشد.']);
     }
 
     $updateStmt = db()->prepare("UPDATE kelaseh_numbers SET new_case_code = ? WHERE id = ?");
@@ -3408,7 +3408,7 @@ function action_admin_kelaseh_backfill_new_case_code(): void
         $yearCounters[$yearKey]++;
         $seq = (int)$yearCounters[$yearKey];
         if ($seq > 9999) {
-            json_response(false, ['message' => 'Ø³Ù‚Ù Û¹Û¹Û¹Û¹ Ø¨Ø±Ø§ÛŒ Ø´Ù…Ø§Ø±Ù†Ø¯Ù‡ Ú©Ù„Ø§Ø³Ù‡ Ø¬Ø¯ÛŒØ¯ Ø¯Ø± Ø³Ø§Ù„ ' . $yy2 . ' Ùˆ Ø§Ø¯Ø§Ø±Ù‡ ' . $cityPart . ' ØªÚ©Ù…ÛŒÙ„ Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 422);
+            json_response(false, ['message' => 'سقف ۹۹۹۹ برای شمارنده کلاسه جدید در سال ' . $yy2 . ' و اداره ' . $cityPart . ' تکمیل شده است.'], 422);
         }
 
         $newCaseCode = $prefix . sprintf('%04d', $seq);
@@ -3416,14 +3416,14 @@ function action_admin_kelaseh_backfill_new_case_code(): void
         $updateStmt->execute([$newCaseCode, (int)$r['id']]);
     }
 
-    json_response(true, ['message' => 'Ú©Ù„Ø§Ø³Ù‡â€ŒÙ‡Ø§ÛŒ Ø¬Ø¯ÛŒØ¯ Ù¾Ø§Ú©Ø³Ø§Ø²ÛŒ Ùˆ Ù…Ø¬Ø¯Ø¯Ø§Ù‹ Ø¨Ø§ Ø§Ù„Ú¯ÙˆÛŒ Ø¬Ø¯ÛŒØ¯ Ø³Ø§Ø®ØªÙ‡ Ø´Ø¯.']);
+    json_response(true, ['message' => 'کلاسه‌های جدید پاکسازی و مجدداً با الگوی جدید ساخته شد.']);
 }
 
 // ADMIN ACTIONS RESTORED
 
 function action_admin_users_list(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     
     $q = trim((string)($data['q'] ?? ''));
     $params = [];
@@ -3478,26 +3478,26 @@ function action_admin_users_create(array $data): void {
     $user = auth_require_login();
     $isOfficeAdmin = $user['role'] === 'office_admin';
     if (!$isOfficeAdmin) auth_require_admin($user);
-    if ($isOfficeAdmin && ($data['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'Ù…Ø¬Ø§Ø² Ù†ÛŒØ³ØªÛŒØ¯'], 403);
+    if ($isOfficeAdmin && ($data['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'مجاز نیستید'], 403);
     csrf_require_valid();
     if (isset($data['id']) && (int)$data['id'] > 0) {
-        json_response(false, ['message' => 'Ø¯Ø±Ø®ÙˆØ§Ø³Øª Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª. Ø¨Ø±Ø§ÛŒ ÙˆÛŒØ±Ø§ÛŒØ´ Ø§Ø² Ø¹Ù…Ù„ÛŒØ§Øª ÙˆÛŒØ±Ø§ÛŒØ´ Ø§Ø³ØªÙØ§Ø¯Ù‡ Ú©Ù†ÛŒØ¯.'], 422);
+        json_response(false, ['message' => 'درخواست نامعتبر است. برای ویرایش از عملیات ویرایش استفاده کنید.'], 422);
     }
 
     $cfg = app_config();
     $minLen = (int)($cfg['security']['password_min_length'] ?? 8);
     $password = (string)($data['password'] ?? '');
     if (strlen($password) < $minLen) {
-        json_response(false, ['message' => "Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø¨Ø§ÛŒØ¯ Ø­Ø¯Ø§Ù‚Ù„ $minLen Ú©Ø§Ø±Ø§Ú©ØªØ± Ø¨Ø§Ø´Ø¯."], 422);
+        json_response(false, ['message' => "رمز عبور باید حداقل $minLen کاراکتر باشد."], 422);
     }
     
     $username = validate_username($data['username'] ?? '');
-    if (!$username) json_response(false, ['message' => 'Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±ÛŒ Ù†Ø§Ù…Ø¹ØªØ¨Ø±'], 422);
+    if (!$username) json_response(false, ['message' => 'نام کاربری نامعتبر'], 422);
     
     // Check duplicate username
     $stmt = db()->prepare('SELECT id FROM users WHERE username = ?');
     $stmt->execute([$username]);
-    if ($stmt->fetch()) json_response(false, ['message' => 'Ù†Ø§Ù… Ú©Ø§Ø±Ø¨Ø±ÛŒ ØªÚ©Ø±Ø§Ø±ÛŒ Ø§Ø³Øª'], 409);
+    if ($stmt->fetch()) json_response(false, ['message' => 'نام کاربری تکراری است'], 409);
     
     $passHash = password_hash($data['password'], PASSWORD_DEFAULT);
     $role = $isOfficeAdmin ? 'branch_admin' : ($data['role'] ?? 'user');
@@ -3505,7 +3505,7 @@ function action_admin_users_create(array $data): void {
     $cityCode = null;
     if ($isOfficeAdmin) {
         $cityCode = resolve_city_code_fk($user['city_code'] ?? null);
-        if (!$cityCode) json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù…Ø¯ÛŒØ± Ø§Ø¯Ø§Ø±Ù‡ Ù…Ø¹ØªØ¨Ø± Ù†ÛŒØ³Øª.'], 422);
+        if (!$cityCode) json_response(false, ['message' => 'کد اداره مدیر اداره معتبر نیست.'], 422);
     } else {
         $cityCode = resolve_city_code_fk($data['city_code'] ?? null);
     }
@@ -3529,26 +3529,26 @@ function action_admin_users_create(array $data): void {
         }
     }
     
-    json_response(true, ['message' => 'Ú©Ø§Ø±Ø¨Ø± Ø§ÛŒØ¬Ø§Ø¯ Ø´Ø¯']);
+    json_response(true, ['message' => 'کاربر ایجاد شد']);
 }
 
 function action_admin_users_update(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     csrf_require_valid();
     
     $id = (int)($data['id'] ?? 0);
-    if ($id < 1) json_response(false, ['message' => 'Ø´Ù†Ø§Ø³Ù‡ Ú©Ø§Ø±Ø¨Ø± Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($id < 1) json_response(false, ['message' => 'شناسه کاربر نامعتبر است.'], 422);
     $target = db()->prepare("SELECT * FROM users WHERE id = ?");
     $target->execute([$id]);
     $u = $target->fetch();
-    if (!$u) json_response(false, ['message' => 'Ú©Ø§Ø±Ø¨Ø± ÛŒØ§ÙØª Ù†Ø´Ø¯'], 404);
+    if (!$u) json_response(false, ['message' => 'کاربر یافت نشد'], 404);
     
     if ($user['role'] === 'office_admin') {
         $officeCity = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
         $targetCity = resolve_city_code_fk($u['city_code'] ?? null) ?? ($u['city_code'] ?? '');
-        if ($officeCity === '' || $targetCity === '' || $officeCity !== $targetCity) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ Ù†Ø¯Ø§Ø±ÛŒØ¯'], 403);
-        if (($u['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'Ù…Ø¬Ø§Ø² Ù†ÛŒØ³ØªÛŒØ¯'], 403);
+        if ($officeCity === '' || $targetCity === '' || $officeCity !== $targetCity) json_response(false, ['message' => 'دسترسی ندارید'], 403);
+        if (($u['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'مجاز نیستید'], 403);
     }
     
     $updates = []; $params = [];
@@ -3559,7 +3559,7 @@ function action_admin_users_update(array $data): void {
         $cfg = app_config();
         $minLen = (int)($cfg['security']['password_min_length'] ?? 8);
         if (strlen((string)$data['password']) < $minLen) {
-            json_response(false, ['message' => "Ø±Ù…Ø² Ø¹Ø¨ÙˆØ± Ø¨Ø§ÛŒØ¯ Ø­Ø¯Ø§Ù‚Ù„ $minLen Ú©Ø§Ø±Ø§Ú©ØªØ± Ø¨Ø§Ø´Ø¯."], 422);
+            json_response(false, ['message' => "رمز عبور باید حداقل $minLen کاراکتر باشد."], 422);
         }
         $updates[] = "password_hash=?"; 
         $params[] = password_hash($data['password'], PASSWORD_DEFAULT); 
@@ -3590,7 +3590,7 @@ function action_admin_users_update(array $data): void {
         }
     }
     
-    json_response(true, ['message' => 'ÙˆÛŒØ±Ø§ÛŒØ´ Ø´Ø¯']);
+    json_response(true, ['message' => 'ویرایش شد']);
 }
 
 function action_kelaseh_edit(array $data): void {
@@ -3599,7 +3599,7 @@ function action_kelaseh_edit(array $data): void {
     ensure_kelaseh_numbers_supports_resolution_flag();
     
     $code = (string)($data['code'] ?? '');
-    if (!$code) json_response(false, ['message' => 'Ú©Ø¯ Ù¾Ø±ÙˆÙ†Ø¯Ù‡ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.']);
+    if (!$code) json_response(false, ['message' => 'کد پرونده الزامی است.']);
     
     $pName = trim((string)($data['plaintiff_name'] ?? ''));
     $dName = trim((string)($data['defendant_name'] ?? ''));
@@ -3620,7 +3620,7 @@ function action_kelaseh_edit(array $data): void {
     $isResolutionRaw = $data['is_resolution'] ?? 0;
     $isResolution = in_array(strtolower(trim((string)$isResolutionRaw)), ['1', 'on', 'true', 'yes'], true) ? 1 : 0;
     
-    if (!$dNC || !$dMob) json_response(false, ['message' => 'Ø§Ø·Ù„Ø§Ø¹Ø§Øª Ø®ÙˆØ§Ù†Ø¯Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.']);
+    if (!$dNC || !$dMob) json_response(false, ['message' => 'اطلاعات خوانده نامعتبر است.']);
     
     $sql = "UPDATE kelaseh_numbers SET 
             plaintiff_name = ?, 
@@ -3655,7 +3655,7 @@ function action_kelaseh_edit(array $data): void {
     $stmt->execute($params);
     
     if ($stmt->rowCount() === 0) {
-        json_response(false, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ ÛŒØ§ÙØª Ù†Ø´Ø¯ ÛŒØ§ Ø´Ù…Ø§ Ø§Ø¬Ø§Ø²Ù‡ ÙˆÛŒØ±Ø§ÛŒØ´ Ù†Ø¯Ø§Ø±ÛŒØ¯.']);
+        json_response(false, ['message' => 'پرونده یافت نشد یا شما اجازه ویرایش ندارید.']);
     }
     $stmtId = db()->prepare("SELECT id FROM kelaseh_numbers WHERE code = ? LIMIT 1");
     $stmtId->execute([$code]);
@@ -3667,27 +3667,27 @@ function action_kelaseh_edit(array $data): void {
         'representatives_worker', 'representatives_employer', 'plaintiff_request', 'verdict_text', 'is_resolution'
     ]);
     
-    json_response(true, ['message' => 'Ù¾Ø±ÙˆÙ†Ø¯Ù‡ Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª ÙˆÛŒØ±Ø§ÛŒØ´ Ø´Ø¯.']);
+    json_response(true, ['message' => 'پرونده با موفقیت ویرایش شد.']);
 }
 
 function action_admin_users_delete(array $data): void {
     $user = auth_require_login();
-    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ ØºÛŒØ±Ù…Ø¬Ø§Ø²'], 403);
+    if (!in_array($user['role'], ['admin', 'office_admin'], true)) json_response(false, ['message' => 'دسترسی غیرمجاز'], 403);
     csrf_require_valid();
     $id = (int)$data['id'];
-    if ($id == $user['id']) json_response(false, ['message' => 'Ø­Ø°Ù Ø®ÙˆØ¯ Ù…Ù…Ú©Ù† Ù†ÛŒØ³Øª'], 422);
+    if ($id == $user['id']) json_response(false, ['message' => 'حذف خود ممکن نیست'], 422);
     if ($user['role'] === 'office_admin') {
         $target = db()->prepare('SELECT id, role, city_code FROM users WHERE id = ?');
         $target->execute([$id]);
         $u = $target->fetch();
-        if (!$u) json_response(false, ['message' => 'Ú©Ø§Ø±Ø¨Ø± ÛŒØ§ÙØª Ù†Ø´Ø¯'], 404);
+        if (!$u) json_response(false, ['message' => 'کاربر یافت نشد'], 404);
         $officeCity = resolve_city_code_fk($user['city_code'] ?? null) ?? ($user['city_code'] ?? '');
         $targetCity = resolve_city_code_fk($u['city_code'] ?? null) ?? ($u['city_code'] ?? '');
-        if ($officeCity === '' || $targetCity === '' || $officeCity !== $targetCity) json_response(false, ['message' => 'Ø¯Ø³ØªØ±Ø³ÛŒ Ù†Ø¯Ø§Ø±ÛŒØ¯'], 403);
-        if (($u['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'Ù…Ø¬Ø§Ø² Ù†ÛŒØ³ØªÛŒØ¯'], 403);
+        if ($officeCity === '' || $targetCity === '' || $officeCity !== $targetCity) json_response(false, ['message' => 'دسترسی ندارید'], 403);
+        if (($u['role'] ?? '') !== 'branch_admin') json_response(false, ['message' => 'مجاز نیستید'], 403);
     }
     db()->prepare("DELETE FROM users WHERE id=?")->execute([$id]);
-    json_response(true, ['message' => 'Ø­Ø°Ù Ø´Ø¯']);
+    json_response(true, ['message' => 'حذف شد']);
 }
 
 function action_admin_test_branch_admin_flow_run(array $data): void
@@ -3700,7 +3700,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
     ensure_user_branches_table();
 
     $cityCode = null;
-    $cityName = 'Ø§Ø¯Ø§Ø±Ù‡ ØªØ³Øª';
+    $cityName = 'اداره تست';
     for ($i = 0; $i < 200; $i++) {
         $candidate = sprintf('%02d', random_int(10, 99));
         $stmt = db()->prepare('SELECT code FROM isfahan_cities WHERE code = ? LIMIT 1');
@@ -3710,7 +3710,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
             break;
         }
     }
-    if (!$cityCode) json_response(false, ['message' => 'Ø§Ù…Ú©Ø§Ù† Ø³Ø§Ø®Øª Ø§Ø¯Ø§Ø±Ù‡ ØªØ³Øª ÙˆØ¬ÙˆØ¯ Ù†Ø¯Ø§Ø±Ø¯.'], 500);
+    if (!$cityCode) json_response(false, ['message' => 'امکان ساخت اداره تست وجود ندارد.'], 500);
 
     $username = 'test_branch_' . random_int(10000, 99999);
     $passwordPlain = 'TestPass_' . random_int(10000, 99999);
@@ -3754,7 +3754,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         $hash = password_hash($passwordPlain, PASSWORD_DEFAULT);
         db()->prepare("INSERT INTO users (username, password_hash, first_name, last_name, mobile, role, city_code, is_active, branch_count, branch_start_no, created_at)
             VALUES (?, ?, ?, ?, ?, 'branch_admin', ?, 1, 1, 1, ?)")
-            ->execute([$username, $hash, 'ØªØ³Øª', 'Ù…Ø¯ÛŒØ± Ø´Ø¹Ø¨Ù‡', '0912' . random_int(1000000, 9999999), $cityCode, now_mysql()]);
+            ->execute([$username, $hash, 'تست', 'مدیر شعبه', '0912' . random_int(1000000, 9999999), $cityCode, now_mysql()]);
         $userId = (int)db()->lastInsertId();
 
         $step = 'set_user_branches';
@@ -3774,7 +3774,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         $step = 'create_30';
         for ($i = 1; $i <= 30; $i++) {
             $payload = [
-                'plaintiff_name' => 'Ø®ÙˆØ§Ù‡Ø§Ù† ØªØ³Øª ' . $i,
+                'plaintiff_name' => 'خواهان تست ' . $i,
                 'plaintiff_national_code' => $generateNc(),
                 'plaintiff_mobile' => '09' . random_int(100000000, 999999999),
                 'defendant_name' => '',
@@ -3798,10 +3798,10 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         $rows = kelaseh_fetch_rows($testUser, ['national_code' => '', 'from' => null, 'to' => null, 'q' => '', 'owner_id' => 0, 'city_code' => null], 2000);
         $fp = fopen('php://temp', 'w+');
         fwrite($fp, "\xEF\xBB\xBF");
-        fputcsv($fp, ['Ú©Ù„Ø§Ø³Ù‡', 'Ø§Ø¯Ø§Ø±Ù‡', 'Ø´Ø¹Ø¨Ù‡', 'Ø±Ø¯ÛŒÙ', 'Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù‡Ø§Ù†', 'Ú©Ø¯ Ù…Ù„ÛŒ Ø®ÙˆØ§Ù†Ø¯Ù‡', 'Ù†Ø§Ù… Ø®ÙˆØ§Ù‡Ø§Ù†', 'Ù†Ø§Ù… Ø®ÙˆØ§Ù†Ø¯Ù‡', 'ÙˆØ¶Ø¹ÛŒØª', 'ØªØ§Ø±ÛŒØ® Ø«Ø¨Øª']);
+        fputcsv($fp, ['کلاسه', 'اداره', 'شعبه', 'ردیف', 'کد ملی خواهان', 'کد ملی خوانده', 'نام خواهان', 'نام خوانده', 'وضعیت', 'تاریخ ثبت']);
         foreach ($rows as $r) {
             $status = (string)($r['status'] ?? '');
-            $statusFa = $status === 'voided' ? 'Ø§Ø¨Ø·Ø§Ù„' : ($status === 'inactive' ? 'ØºÛŒØ±ÙØ¹Ø§Ù„' : 'ÙØ¹Ø§Ù„');
+            $statusFa = $status === 'voided' ? 'ابطال' : ($status === 'inactive' ? 'غیرفعال' : 'فعال');
             fputcsv($fp, [
                 $r['full_code'] ?? ($r['code'] ?? ''),
                 $r['city_name'] ?? ($r['city_code'] ?? ''),
@@ -3818,7 +3818,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         rewind($fp);
         $body = stream_get_contents($fp);
         fclose($fp);
-        if (!is_string($body) || !str_contains($body, 'Ú©Ù„Ø§Ø³Ù‡')) throw new RuntimeException('export.csv missing header');
+        if (!is_string($body) || !str_contains($body, 'کلاسه')) throw new RuntimeException('export.csv missing header');
         foreach (array_slice($codes, 0, 5) as $sample) {
             if (!str_contains($body, $sample)) throw new RuntimeException('export.csv missing sample');
         }
@@ -3834,7 +3834,7 @@ function action_admin_test_branch_admin_flow_run(array $data): void
         $_SESSION['test_exports'][$exportToken] = ['path' => $exportPath, 'name' => $name, 'expires_at' => time() + 600];
 
         json_response(true, [
-            'message' => 'ØªØ³Øª Ø¨Ø§ Ù…ÙˆÙÙ‚ÛŒØª Ø§Ù†Ø¬Ø§Ù… Ø´Ø¯ Ùˆ Ø¯Ø§Ø¯Ù‡â€ŒÙ‡Ø§ Ù¾Ø§Ú©Ø³Ø§Ø²ÛŒ Ø´Ø¯Ù†Ø¯.',
+            'message' => 'تست با موفقیت انجام شد و داده‌ها پاکسازی شدند.',
             'data' => [
                 'download_url' => 'core.php?action=admin.test.download&token=' . $exportToken . '&csrf_token=' . csrf_token(),
                 'branch_counts' => $branchCounts,
@@ -3842,9 +3842,9 @@ function action_admin_test_branch_admin_flow_run(array $data): void
             ],
         ]);
     } catch (Throwable $e) {
-        $msg = 'Ø®Ø·Ø§ Ø¯Ø± Ø§Ø¬Ø±Ø§ÛŒ ØªØ³Øª.';
+        $msg = 'خطا در اجرای تست.';
         if (tests_enabled() || is_debug()) {
-            $msg = 'Ø®Ø·Ø§ÛŒ ØªØ³Øª' . (isset($step) ? (' (Ù…Ø±Ø­Ù„Ù‡: ' . $step . ')') : '') . ': ' . $e->getMessage();
+            $msg = 'خطای تست' . (isset($step) ? (' (مرحله: ' . $step . ')') : '') . ': ' . $e->getMessage();
         }
         json_response(false, ['message' => $msg], 500);
     } finally {
@@ -3933,26 +3933,26 @@ function action_admin_cities_create(array $data): void {
     $code = trim(to_english_digits((string)($data['code'] ?? '')));
     $resolved = resolve_city_code_fk($code);
     if ($resolved !== null) {
-        json_response(false, ['message' => 'Ø§ÛŒÙ† Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù‚Ø¨Ù„Ø§Ù‹ Ø«Ø¨Øª Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 409);
+        json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
     }
-    if (!preg_match('/^[0-9]{1,10}$/', $code)) json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if (!preg_match('/^[0-9]{1,10}$/', $code)) json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
     $name = trim((string)($data['name'] ?? ''));
-    if ($name === '') json_response(false, ['message' => 'Ù†Ø§Ù… Ø§Ø¯Ø§Ø±Ù‡ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+    if ($name === '') json_response(false, ['message' => 'نام اداره الزامی است.'], 422);
     $address = trim((string)($data['address'] ?? ''));
     $postal = trim((string)($data['postal_code'] ?? ''));
     
     $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
     $stmt->execute([$code]);
     if ($stmt->fetch()) {
-         json_response(false, ['message' => 'Ø§ÛŒÙ† Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù‚Ø¨Ù„Ø§Ù‹ Ø«Ø¨Øª Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 409);
+         json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
     }
     
     try {
         db()->prepare("INSERT INTO isfahan_cities (code, name, address, postal_code) VALUES (?, ?, ?, ?)")->execute([$code, $name, $address, $postal]);
     } catch (Throwable $e) {
-        json_response(false, ['message' => 'Ø®Ø·Ø§ Ø¯Ø± Ø«Ø¨Øª Ø§Ø¯Ø§Ø±Ù‡: ' . $e->getMessage()], 500);
+        json_response(false, ['message' => 'خطا در ثبت اداره: ' . $e->getMessage()], 500);
     }
-    json_response(true, ['message' => 'Ø§Ø¯Ø§Ø±Ù‡ Ø§ÛŒØ¬Ø§Ø¯ Ø´Ø¯']);
+    json_response(true, ['message' => 'اداره ایجاد شد']);
 }
 
 function action_admin_cities_update(array $data): void {
@@ -3961,9 +3961,9 @@ function action_admin_cities_update(array $data): void {
 
     $oldCodeRaw = $data['code'] ?? null;
     $newCode = trim(to_english_digits((string)($data['new_code'] ?? '')));
-    if (!preg_match('/^[0-9]{1,10}$/', $newCode)) json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if (!preg_match('/^[0-9]{1,10}$/', $newCode)) json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
     $name = trim((string)($data['name'] ?? ''));
-    if ($name === '') json_response(false, ['message' => 'Ù†Ø§Ù… Ø§Ø¯Ø§Ø±Ù‡ Ø§Ù„Ø²Ø§Ù…ÛŒ Ø§Ø³Øª.'], 422);
+    if ($name === '') json_response(false, ['message' => 'نام اداره الزامی است.'], 422);
     $address = trim((string)($data['address'] ?? ''));
     $postal = trim((string)($data['postal_code'] ?? ''));
     
@@ -3972,9 +3972,9 @@ function action_admin_cities_update(array $data): void {
     if ($oldNormalized !== $newCode) {
         $stmt = db()->prepare("SELECT code FROM isfahan_cities WHERE code = ?");
         $stmt->execute([$newCode]);
-        if ($stmt->fetch()) json_response(false, ['message' => 'Ø§ÛŒÙ† Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù‚Ø¨Ù„Ø§Ù‹ Ø«Ø¨Øª Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 409);
+        if ($stmt->fetch()) json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
         $resolved = resolve_city_code_fk($newCode);
-        if ($resolved !== null) json_response(false, ['message' => 'Ø§ÛŒÙ† Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù‚Ø¨Ù„Ø§Ù‹ Ø«Ø¨Øª Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 409);
+        if ($resolved !== null) json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
     }
 
     try {
@@ -3988,27 +3988,27 @@ function action_admin_cities_update(array $data): void {
         }
     } catch (Throwable $e) {
         if ($e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'Duplicate entry'))) {
-            json_response(false, ['message' => 'Ø§ÛŒÙ† Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù‚Ø¨Ù„Ø§Ù‹ Ø«Ø¨Øª Ø´Ø¯Ù‡ Ø§Ø³Øª.'], 409);
+            json_response(false, ['message' => 'این کد اداره قبلاً ثبت شده است.'], 409);
         }
-        json_response(false, ['message' => 'Ø®Ø·Ø§ÛŒ Ø³ÛŒØ³ØªÙ…: ' . $e->getMessage()], 500);
+        json_response(false, ['message' => 'خطای سیستم: ' . $e->getMessage()], 500);
     }
-    json_response(true, ['message' => 'Ø§Ø¯Ø§Ø±Ù‡ ÙˆÛŒØ±Ø§ÛŒØ´ Ø´Ø¯']);
+    json_response(true, ['message' => 'اداره ویرایش شد']);
 }
 
 function action_admin_cities_delete(array $data): void {
     auth_require_admin(auth_require_login());
     csrf_require_valid();
     $code = normalize_city_code($data['code'] ?? null) ?? (string)($data['code'] ?? '');
-    if ($code === '') json_response(false, ['message' => 'Ú©Ø¯ Ø§Ø¯Ø§Ø±Ù‡ Ù†Ø§Ù…Ø¹ØªØ¨Ø± Ø§Ø³Øª.'], 422);
+    if ($code === '') json_response(false, ['message' => 'کد اداره نامعتبر است.'], 422);
     try {
         db()->prepare("DELETE FROM isfahan_cities WHERE code=?")->execute([$code]);
     } catch (Throwable $e) {
         if ($e instanceof PDOException && ($e->getCode() === '23000' || str_contains($e->getMessage(), 'foreign key constraint'))) {
-            json_response(false, ['message' => 'Ø§ÛŒÙ† Ø§Ø¯Ø§Ø±Ù‡ Ø¯Ø§Ø±Ø§ÛŒ ÙˆØ§Ø¨Ø³ØªÚ¯ÛŒ (Ú©Ø§Ø±Ø¨Ø±/Ø¯Ø§Ø¯Ù‡) Ø§Ø³Øª Ùˆ Ù‚Ø§Ø¨Ù„ Ø­Ø°Ù Ù†ÛŒØ³Øª.'], 409);
+            json_response(false, ['message' => 'این اداره دارای وابستگی (کاربر/داده) است و قابل حذف نیست.'], 409);
         }
-        json_response(false, ['message' => is_debug() ? ('Ø®Ø·Ø§ÛŒ Ø³ÛŒØ³ØªÙ…: ' . $e->getMessage()) : 'Ø®Ø·Ø§ÛŒ Ø³ÛŒØ³ØªÙ…'], 500);
+        json_response(false, ['message' => is_debug() ? ('خطای سیستم: ' . $e->getMessage()) : 'خطای سیستم'], 500);
     }
-    json_response(true, ['message' => 'Ø§Ø¯Ø§Ø±Ù‡ Ø­Ø°Ù Ø´Ø¯']);
+    json_response(true, ['message' => 'اداره حذف شد']);
 }
 
 function action_admin_audit_list(): void {
@@ -4125,13 +4125,13 @@ function handle_request(): void
             case 'admin.kelaseh.search': action_admin_kelaseh_search($data); break;
 
             default:
-                json_response(false, ['message' => 'Ø§Ú©Ø´Ù† Ù†Ø§Ù…Ø¹ØªØ¨Ø± ÛŒØ§ Ù¾ÛŒØ§Ø¯Ù‡â€ŒØ³Ø§Ø²ÛŒ Ù†Ø´Ø¯Ù‡.'], 404);
+                json_response(false, ['message' => 'اکشن نامعتبر یا پیاده‌سازی نشده.'], 404);
         }
     } catch (Throwable $e) {
         header('Content-Type: application/json');
         http_response_code(500);
         $localized = localize_error_message_fa((string)$e->getMessage());
-        echo json_encode(['ok' => false, 'message' => is_debug() ? ('Ø®Ø·Ø§ÛŒ Ø³ÛŒØ³ØªÙ…: ' . $localized) : $localized]);
+        echo json_encode(['ok' => false, 'message' => is_debug() ? ('خطای سیستم: ' . $localized) : $localized]);
     }
 }
 
