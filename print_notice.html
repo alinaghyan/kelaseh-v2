@@ -285,10 +285,10 @@
                             <td class="label-cell">زمان جلسه</td>
                             <td class="content-cell" colspan="2" style="padding: 10px;">
                                 <div style="display: flex; justify-content: space-around;">
-                                    <span>ساعت: ...........................</span>
-                                    <span>تاریخ: ...........................</span>
-                                    <span>اتاق: ...........................</span>
-									<span>شعبه: <strong>${toPersianDigits(row.branch_no || '')}</span>
+                                    <span>ساعت: <strong dir="ltr">${toPersianDigits(row.meeting_time || '.............')}</strong></span>
+                                    <span>تاریخ: <strong>${toPersianDigits(row.meeting_date_jalali || '.............')}</strong></span>
+                                    <span>اتاق: <strong>${toPersianDigits(row.meeting_room || '..........')}</strong></span>
+									<span>شعبه: <strong>${toPersianDigits(row.branch_no || '')}</strong></span>
                                 </div>
                             </td>
                         </tr>

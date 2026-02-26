@@ -17,6 +17,17 @@ let kelasehStickyInit = false;
 let managerMsgReadBusy = false;
 let adminManagerMsgCache = {};
 let adminManagerMsgEditingId = 0;
+let managerMsgReadBatchQueue = [];
+let managerMsgReadBatchTimer = null;
+
+function debounce(fn, waitMs) {
+  let timer = null;
+  return function debounced(...args) {
+    const ctx = this;
+    if (timer) clearTimeout(timer);
+    timer = setTimeout(() => fn.apply(ctx, args), waitMs);
+  };
+}
 
 function updateKelasehStickyOffset() {
   const section = document.getElementById('kelasehListSection');
@@ -168,7 +179,7 @@ function showNextManagerMessage() {
     const key = `managerMsgShown:${uid}:${candidate.id}`;
     const shownCount = Number(localStorage.getItem(key) || 0);
     if (shownCount >= 2) {
-      api('manager.message.read', { id: candidate.id });
+      queueManagerMessagesRead([candidate.id]);
       continue;
     }
     localStorage.setItem(key, String(shownCount + 1));
@@ -225,6 +236,32 @@ function markActiveManagerMessageRead() {
       }
       showToast('خطا در ثبت خواندن پیام.', 'error');
     });
+}
+
+function flushManagerMessagesReadBatch() {
+  if (!managerMsgReadBatchQueue.length) return;
+  const uniqueIds = Array.from(
+    new Set(
+      managerMsgReadBatchQueue
+        .map((x) => Number(x))
+        .filter((x) => Number.isFinite(x) && x > 0)
+    )
+  );
+  managerMsgReadBatchQueue = [];
+  if (!uniqueIds.length) return;
+  api('manager.messages.read.batch', { ids: uniqueIds.join(',') }).fail(() => {});
+}
+
+function queueManagerMessagesRead(ids) {
+  if (!Array.isArray(ids) || !ids.length) return;
+  managerMsgReadBatchQueue = managerMsgReadBatchQueue.concat(ids);
+  if (managerMsgReadBatchTimer) {
+    clearTimeout(managerMsgReadBatchTimer);
+  }
+  managerMsgReadBatchTimer = setTimeout(() => {
+    managerMsgReadBatchTimer = null;
+    flushManagerMessagesReadBatch();
+  }, 400);
 }
 
 function refreshAdminManagerMessagesSent() {
@@ -354,6 +391,9 @@ function api(action, data) {
 function loadBranchManagers() {
   const isAdmin = currentUser && currentUser.role === 'admin';
   const isOfficeAdmin = currentUser && currentUser.role === 'office_admin';
+
+  // Bulk authority conversion actions are admin-only.
+  $('.admin-only-bulk-authority').toggleClass('d-none', !isAdmin);
   
   if (!isAdmin && !isOfficeAdmin) {
     $('#kelasehOwnerFilterWrap').addClass('d-none');
@@ -588,6 +628,51 @@ function startHeaderClock() {
   headerClockTimer = setInterval(refreshHeaderDateTime, 60000);
 }
 
+function scheduleTasksWithThrottle(tasks, spacingMs = 220) {
+  const safeTasks = Array.isArray(tasks) ? tasks.filter((t) => typeof t === 'function') : [];
+  safeTasks.forEach((task, idx) => {
+    setTimeout(() => {
+      try {
+        task();
+      } catch (e) {}
+    }, idx * spacingMs);
+  });
+}
+
+function runPostLoginRefreshes(opts = {}) {
+  const includeAdminManagerMessages = !!opts.includeAdminManagerMessages;
+  const tasks = [
+    () => startHeaderClock(),
+    () => refreshKelaseh(),
+    () => refreshKelasehToday()
+  ];
+  if (currentUser && currentUser.role === 'admin') {
+    tasks.push(
+      () => loadAdminCities(),
+      () => refreshAdminUsers(),
+      () => refreshAdminCities(),
+      () => refreshAdminItems(),
+      () => refreshAdminLogs(),
+      () => refreshAdminStats(),
+      () => refreshAdminSmsSettings()
+    );
+    if (includeAdminManagerMessages) {
+      tasks.push(() => refreshAdminManagerMessagesSent());
+    }
+  } else if (currentUser && currentUser.role === 'office_admin') {
+    tasks.push(
+      () => refreshOfficeUsers(),
+      () => refreshOfficeKelasehSearch(),
+      () => refreshOfficeCapacities()
+    );
+  }
+  tasks.push(
+    () => fetchManagerMessages(),
+    () => startManagerMsgPolling()
+  );
+  scheduleTasksWithThrottle(tasks, 220);
+}
+
 function getPageFromHash() {
   const raw = (window.location.hash || '').replace('#', '').trim();
   if (raw === 'profile' || raw === 'create' || raw === 'dashboard' || raw === 'admin' || raw === 'admin-kelaseh-search' || raw === 'heyat' || raw === 'office-management') {
@@ -799,7 +884,8 @@ function generateKelasehRows(rows, offset = 0, total = 0) {
         representatives_worker: r.representatives_worker || '',
         representatives_employer: r.representatives_employer || '',
         plaintiff_request: r.plaintiff_request || '',
-        verdict_text: r.verdict_text || ''
+        verdict_text: r.verdict_text || '',
+        is_resolution: Number(r.is_resolution || 0)
       })
     );
 
@@ -920,8 +1006,9 @@ function refreshKelaseh(page = 1) {
   const to = $('#kelasehTo').val() || '';
   const owner_id = $('#kelasehOwnerFilter').val() || 0;
   const city_code = (currentUser && currentUser.role === 'admin') ? $('#adminKelasehCityFilterMain').val() : null;
+  const authority_type = $('#kelasehAuthorityFilter').val() || '';
 
-  return api('kelaseh.list', { national_code, from, to, page, limit: kelasehPageSize, owner_id, city_code })
+  return api('kelaseh.list', { national_code, from, to, page, limit: kelasehPageSize, owner_id, city_code, authority_type })
     .done((res) => {
       renderKelaseh(res);
     })
@@ -1206,25 +1293,7 @@ function boot() {
           window.location.hash = '#dashboard';
         }
         renderPage(getPageFromHash());
-        startHeaderClock();
-        refreshKelaseh();
-        refreshKelasehToday();
-        if (currentUser.role === 'admin') {
-          loadAdminCities();
-          refreshAdminUsers();
-          refreshAdminCities();
-          refreshAdminItems();
-          refreshAdminLogs();
-          refreshAdminStats();
-          refreshAdminSmsSettings();
-          refreshAdminManagerMessagesSent();
-        } else if (currentUser.role === 'office_admin') {
-          refreshOfficeUsers();
-          refreshOfficeKelasehSearch();
-          refreshOfficeCapacities();
-        }
-        fetchManagerMessages();
-        startManagerMsgPolling();
+        runPostLoginRefreshes({ includeAdminManagerMessages: true });
       }
     })
     .fail((xhr) => {
@@ -1268,24 +1337,7 @@ $(document).on('submit', '#formLogin', function (e) {
         window.location.hash = '#dashboard';
       }
       renderPage(getPageFromHash());
-      startHeaderClock();
-      refreshKelaseh();
-      refreshKelasehToday();
-      if (currentUser && currentUser.role === 'admin') {
-        loadAdminCities();
-        refreshAdminUsers();
-        refreshAdminCities();
-        refreshAdminItems();
-        refreshAdminLogs();
-        refreshAdminStats();
-        refreshAdminSmsSettings();
-      } else if (currentUser && currentUser.role === 'office_admin') {
-        refreshOfficeUsers();
-        refreshOfficeKelasehSearch();
-        refreshOfficeCapacities();
-      }
-      fetchManagerMessages();
-      startManagerMsgPolling();
+      runPostLoginRefreshes({ includeAdminManagerMessages: false });
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'ورود ناموفق بود.';
@@ -1321,24 +1373,7 @@ $(document).on('click', '#btnLoginOtpVerify', function () {
         window.location.hash = '#dashboard';
       }
       renderPage(getPageFromHash());
-      startHeaderClock();
-      refreshKelaseh();
-      refreshKelasehToday();
-      if (currentUser && currentUser.role === 'admin') {
-        loadAdminCities();
-        refreshAdminUsers();
-        refreshAdminCities();
-        refreshAdminItems();
-        refreshAdminLogs();
-        refreshAdminStats();
-        refreshAdminSmsSettings();
-      } else if (currentUser && currentUser.role === 'office_admin') {
-        refreshOfficeUsers();
-        refreshOfficeKelasehSearch();
-        refreshOfficeCapacities();
-      }
-      fetchManagerMessages();
-      startManagerMsgPolling();
+      runPostLoginRefreshes({ includeAdminManagerMessages: false });
     })
     .fail((xhr) => {
       const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تأیید کد ناموفق بود.';
@@ -1376,12 +1411,16 @@ $(document).on('click', '#btnKelasehSearch', function () {
   refreshKelaseh();
 });
 
+const debouncedKelasehInputSearch = debounce(function () {
+  refreshKelaseh(1);
+}, 350);
+
 $(document).on('input', '#kelasehNational', function () {
   const from = $('#kelasehFrom').val() || '';
   const to = $('#kelasehTo').val() || '';
   // If date filters are empty, search immediately
   if (from === '' && to === '') {
-    refreshKelaseh();
+    debouncedKelasehInputSearch();
   }
 });
 
@@ -1766,12 +1805,14 @@ $(document).on('click', '.btn-kelaseh-view', function (e) {
                     var key = sessionKeys[k];
                     if (sessions[key]) {
                         var s = sessions[key];
-                        var hasContent = !!(s.meeting_date || s.plaintiff_request || s.verdict_text || s.reps_govt || s.reps_worker || s.reps_employer);
+                        var hasContent = !!(s.meeting_date || s.meeting_time || s.meeting_room || s.plaintiff_request || s.verdict_text || s.reps_govt || s.reps_worker || s.reps_employer);
                         if (!hasContent) continue;
                         sessionsHtml += '<div class="border rounded p-3 bg-white mb-3">';
                         sessionsHtml += '<h6 class="fw-bold text-primary mb-3 border-bottom pb-2">' + escapeHtml(sessionNames[key] || key) + '</h6>';
                         sessionsHtml += '<div class="row g-3">';
                         sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">تاریخ جلسه:</div><div class="fw-bold">' + toPersianDigits(s.meeting_date || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">ساعت جلسه:</div><div class="fw-bold" dir="ltr">' + toPersianDigits(s.meeting_time || '-') + '</div></div>';
+                        sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">شماره اتاق:</div><div class="fw-bold">' + toPersianDigits(s.meeting_room || '-') + '</div></div>';
                         sessionsHtml += '<div class="col-12"><div class="small text-secondary">خواسته خواهان:</div><div class="fw-bold text-break" style="white-space: pre-wrap;">' + toPersianDigits(s.plaintiff_request || '-') + '</div></div>';
                         sessionsHtml += '<div class="col-12"><div class="small text-secondary">متن رای:</div><div class="fw-bold text-break" style="white-space: pre-wrap;">' + toPersianDigits(s.verdict_text || '-') + '</div></div>';
                         sessionsHtml += '<div class="col-md-4"><div class="small text-secondary">نمایندگان دولت:</div><div class="fw-bold small text-break">' + toPersianDigits(s.reps_govt || '-') + '</div></div>';
@@ -2053,8 +2094,73 @@ $(document).on('change', '#kelasehOwnerFilter', function() {
     refreshKelaseh(1);
 });
 
+$(document).on('change', '#kelasehAuthorityFilter', function() {
+    refreshKelaseh(1);
+});
+
 $(document).on('change', '#kelasehTbody .kelaseh-label-check', function () {
     // Just toggle check, do nothing immediate
+});
+
+function collectSelectedActiveCodes($scope) {
+  const out = { codes: [], excludedCount: 0 };
+  $scope.find('.kelaseh-label-check:checked').each(function () {
+    const tr = $(this).closest('tr');
+    const raw = tr.attr('data-json');
+    if (!raw) return;
+    try {
+      const payload = JSON.parse(decodeURIComponent(raw));
+      if (payload.status === 'active' && payload.code) {
+        out.codes.push(payload.code);
+      } else {
+        out.excludedCount++;
+      }
+    } catch (e) {}
+  });
+  out.codes = Array.from(new Set(out.codes));
+  return out;
+}
+
+function bulkSetAuthorityBySelection(tableBodySelector, isResolution) {
+  const $scope = $(tableBodySelector);
+  const picked = collectSelectedActiveCodes($scope);
+  if (!picked.codes.length) {
+    if (picked.excludedCount > 0) {
+      showToast('پرونده فعال برای تغییر وضعیت مرجع انتخاب نشده است.', 'error');
+    } else {
+      showToast('حداقل یک پرونده را انتخاب کنید.', 'error');
+    }
+    return;
+  }
+  api('kelaseh.set_authority.bulk', {
+    codes: picked.codes.join(','),
+    is_resolution: isResolution ? 1 : 0
+  })
+    .done((res) => {
+      showToast(res.message || 'مرجع پرونده‌ها به‌روزرسانی شد.', 'success');
+      refreshKelaseh();
+      refreshKelasehToday();
+    })
+    .fail((xhr) => {
+      const msg = (xhr.responseJSON && xhr.responseJSON.message) || 'تغییر مرجع پرونده‌ها ناموفق بود.';
+      showToast(msg, 'error');
+    });
+}
+
+$(document).on('click', '#btnKelasehMarkResolution, #btnKelasehMarkResolutionBottom', function () {
+  bulkSetAuthorityBySelection('#kelasehTbody', true);
+});
+
+$(document).on('click', '#btnKelasehMarkTashkhis, #btnKelasehMarkTashkhisBottom', function () {
+  bulkSetAuthorityBySelection('#kelasehTbody', false);
+});
+
+$(document).on('click', '#btnKelasehTodayMarkResolution', function () {
+  bulkSetAuthorityBySelection('#kelasehTodayTbody', true);
+});
+
+$(document).on('click', '#btnKelasehTodayMarkTashkhis', function () {
+  bulkSetAuthorityBySelection('#kelasehTodayTbody', false);
 });
 
 $(document).on('click', '#btnKelasehPrintLabels, #btnKelasehPrintLabelsBottom', function () {
@@ -3562,6 +3668,47 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
         });
   });
 
+  // Replace immediate search handler with debounced+abort-safe version
+  $(document).off('input', '#heyatCodeInput');
+  let heyatSearchXhr = null;
+  const debouncedHeyatSearch = debounce(function() {
+      const normalizeCodeInput = (v) => String(v || '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
+      const suffix = normalizeCodeInput($('#heyatCodeInput').val());
+      const suggestions = $('#heyatCodeSuggestions');
+      if (suffix.length < 4) {
+          suggestions.hide().empty();
+          if (heyatSearchXhr && typeof heyatSearchXhr.abort === 'function') {
+              heyatSearchXhr.abort();
+              heyatSearchXhr = null;
+          }
+          return;
+      }
+      if (heyatSearchXhr && typeof heyatSearchXhr.abort === 'function') {
+          heyatSearchXhr.abort();
+      }
+      heyatSearchXhr = api('kelaseh.list', { q: suffix, limit: 10 })
+        .done(res => {
+            const list = (res.data && res.data.kelaseh) || [];
+            if (!list.length) {
+                suggestions.html('<div class="dropdown-item disabled small text-muted">موردی یافت نشد</div>').show();
+                return;
+            }
+            const items = list.map(item => {
+                const code = item.full_code || item.code;
+                const txt = `${toPersianDigits(code)} - ${toPersianDigits(item.plaintiff_name || '')} / ${toPersianDigits(item.defendant_name || '')}`;
+                const json = encodeURIComponent(JSON.stringify(item));
+                return `<li><a class="dropdown-item small heyat-search-item" href="#" data-json="${json}">${txt}</a></li>`;
+            }).join('');
+            suggestions.html(items).show();
+        })
+        .always(() => {
+            heyatSearchXhr = null;
+        });
+  }, 350);
+  $(document).on('input', '#heyatCodeInput', function() {
+      debouncedHeyatSearch();
+  });
+
   // Hide suggestions on blur
   $(document).on('blur', '#heyatCodeInput', function() {
       setTimeout(() => $('#heyatCodeSuggestions').hide(), 200);
@@ -3633,6 +3780,8 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
                     if (sessionIndex > -1) {
                         const hasAnyValue = !!(
                             (s.meeting_date && String(s.meeting_date).trim() !== '') ||
+                            (s.meeting_time && String(s.meeting_time).trim() !== '') ||
+                            (s.meeting_room && String(s.meeting_room).trim() !== '') ||
                             (s.plaintiff_request && String(s.plaintiff_request).trim() !== '') ||
                             (s.verdict_text && String(s.verdict_text).trim() !== '') ||
                             (s.reps_govt && String(s.reps_govt).trim() !== '') ||
@@ -3644,6 +3793,8 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
                         }
                     }
                     f.find(`[name="sessions[${key}][date]"]`).val(s.meeting_date || '');
+                    f.find(`[name="sessions[${key}][time]"]`).val(s.meeting_time || '');
+                    f.find(`[name="sessions[${key}][room]"]`).val(s.meeting_room || '');
                     f.find(`[name="sessions[${key}][plaintiff_request]"]`).val(s.plaintiff_request || '');
                     f.find(`[name="sessions[${key}][verdict_text]"]`).val(s.verdict_text || '');
                     f.find(`[name="sessions[${key}][reps_govt]"]`).val(s.reps_govt || '');
@@ -3673,9 +3824,45 @@ $(document).on('click', '#btnAdminKelasehSearch', function () {
       }
   });
 
+  // Session room number: keep only up to 3 digits.
+  $(document).on('input', 'input[name^="sessions["][name$="[room]"]', function() {
+      const normalized = String($(this).val() || '')
+          .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+          .replace(/\D+/g, '')
+          .slice(0, 3);
+      $(this).val(normalized);
+  });
+
+  // Session time: enforce 24h HH:MM format only.
+  $(document).on('input', 'input[name^="sessions["][name$="[time]"]', function() {
+      let v = String($(this).val() || '')
+          .replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d)))
+          .replace(/[^\d:]/g, '');
+      if (!v.includes(':') && v.length > 2) {
+          v = v.slice(0, 2) + ':' + v.slice(2);
+      }
+      v = v.slice(0, 5);
+      $(this).val(v);
+  });
+
   // Save Heyat Form
   $(document).on('submit', '#formHeyatTashkhis', function(e) {
       e.preventDefault();
+      const timeRe = /^([01][0-9]|2[0-3]):([0-5][0-9])$/;
+      let badTime = null;
+      $(this).find('input[name^="sessions["][name$="[time]"]').each(function() {
+          const t = String($(this).val() || '').trim();
+          if (!t) return;
+          if (!timeRe.test(t)) {
+              badTime = t;
+              return false;
+          }
+      });
+      if (badTime !== null) {
+          showToast('فرمت ساعت جلسه نامعتبر است. فقط قالب ۲۴ساعته مثل 16:20 مجاز است.', 'error');
+          return;
+      }
+
       const normalizeCodeInput = (v) => String(v || '').replace(/[۰-۹]/g, (d) => String('۰۱۲۳۴۵۶۷۸۹'.indexOf(d))).trim();
       const suffix = normalizeCodeInput($('#heyatCodeInput').val());
       const prefixRaw = String($('#heyatCityCodePrefix').data('raw') || ((currentUser && currentUser.city_code) ? currentUser.city_code : '')).trim();
